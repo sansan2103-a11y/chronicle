@@ -1428,7 +1428,7 @@
 | 393 | fixGHOST1 | `v292DfixGHOST1-legacy-slot-ghost.js` | home：fix889 の直後（index では読まない。GHOST1・GitHub `98cf4bc`） | `cf49f461` | 20261111-ghost1 | シナリオ・ホーム | `v292DfixGHOST1Off`（kill。既定 ON） |
 | 394 | fixKEY1 | `v292DfixKEY1-story-key.js` | index・home（KEY1・GitHub `e4d982e`） | `499b6c97` | 20261112-key1 | 保存・同期 | `v292DfixKEY1Off`（kill。既定 ON） |
 | 395 | fixSOL1 | `v292DfixSOL1-story-open-lock.js` | index（KEY1 の直前。SOL1・`e4d982e`） | `4617f25e` | 20261112-store1b | 保存・同期 | `v292DfixSOL1Off`（kill。既定 ON） |
-| 396 | fixSTORE1b | `v292DfixSTORE1b-device-free.js` | home：DL2 の直後（index では読まない。STORE1b・`a46c2f1`〜`72ab286`） | `fd26ac6b` | 20261117-zt1b6 | 削除・墓標 | `v292DfixSTORE1Off` `v292DfixFREE2Off` `v292DfixSTUCK1On` `v292DfixZT1On` `v292DfixZT1DirtyOn`（既定 OFF） `v292DfixEXTRA1Off` `v292DfixDISCARD1Off` `v292DfixDISCARD2Off` `v292DfixAUTOCLEAN1On`（既定 OFF） `v292DfixAUTOCLEAN1Pace`（既定 OFF） `v292DfixAUTOCLEAN1Days`（r6 から効かない） `v292DfixVCLEAN1On`（既定 OFF） |
+| 396 | fixSTORE1b | `v292DfixSTORE1b-device-free.js` | home：DL2 の直後（index では読まない。STORE1b・`a46c2f1`〜`72ab286`） | `f9859a73` | 20261117-vguard2 | 削除・墓標 | `v292DfixSTORE1Off` `v292DfixFREE2Off` `v292DfixSTUCK1On` `v292DfixZT1On` `v292DfixZT1DirtyOn`（既定 OFF） `v292DfixEXTRA1Off` `v292DfixDISCARD1Off` `v292DfixDISCARD2Off` `v292DfixAUTOCLEAN1On`（既定 OFF） `v292DfixAUTOCLEAN1Pace`（既定 OFF） `v292DfixAUTOCLEAN1Days`（r6 から効かない） `v292DfixVCLEAN1On`（既定 OFF） |
 | 397 | fixACTOR1 | `v292DfixACTOR1-input-actor.js` | index：HEROVOICE1 の直後（ACTOR1・`5b8a837`） | `1bb474f0` | 20261114-hv1 | 文章品質・プロンプト | `v292DfixACTOR1Off` `v292DfixACTOR1aOff` `v292DfixACTOR1bOn`（既定 OFF） |
 | 398 | fixLAT1 | `v292DfixLAT1-press-feedback.js` | index（LAT1・`f2b6d56`） | `43ec809d` | 20261112-lat1 | UI・画面 | `v292DfixLAT1Off` |
 | 399 | fixUI3 | `v292DfixUI3-polish.js` | index（UI3・`f2b6d56`） | `17bf53cc` | 20261112-ui3a | UI・画面 | `v292DfixUI3Off` |
@@ -1984,8 +1984,9 @@
 - `v292DfixALIAS1On` / `v292DfixALIAS1Off` / `v292DfixALIAS1_v1` — （撤去・コードは読まない。ALIAS1 は実験 CLOSED・撤去（GPT #127-VJ 1）。端末に残る `v292DfixALIAS1_v1` の記録は読む部品が無い孤児の鍵。消す処理は入れていない）
 - `v292DfixPACE1aOn` / `v292DfixPACE1bOn` / `v292DfixPACE1Off` — （撤去・コードは読まない。PACE1a/b は不採用・撤去（GPT #127-VB 1））
 - `v292DfixTMPICON1On` / `v292DfixTMPICON1Off` — av2-portrait（TMPICON1・既定 OFF。絵が無い未登録の話者に、費用 0 の仮アイコン〔顔の無い胸像・呼び名から決まる色・頭の 1 字・「仮」の印〕を表示だけで付ける。生成・Worker への要求・保存なし。外見や性別を設定へ書かない。正式な絵ができたら自動で置き換わる。GPT #127-VH 2）
+- `v292DfixITEM2On` / `v292DfixITEM2Off` — fix307（ITEM2 shadow・既定 OFF。名簿の抽出に「物」〔名・持ち主・場所・受け渡しの状態・根拠の T〕の欄を足して数えるだけ。名簿・保存・sys・絵・状態には反映しない。記録は件数と種類だけ。GPT #127-VN 3）
 - `v292DfixVDEL1Off` — fixDL2（VDEL1・既定 ON の修正の kill。GPT #127-VB 6 の先に塞げる部分: 一般の削除シートは、Vault v2 を解錠中でも v2 で隠した物語を SD1 の getstory より前で断る〔vault2status の hiddenIds をシートを開くときと送る直前に読む・分からなければ断る〕。'1' で従来の動き）
-- `v292DfixVAULTGUARD1Off` — fixSTORE1b（VAULTGUARD1。既定 ON の修正の kill。'1' で、Vault v2 解錠中の隠した物語を通常の getstory 照合から外す守りを止める）
+- `v292DfixVAULTGUARD1Off` — fixSTORE1b（VAULTGUARD1。既定 ON の修正の kill。'1' で、Vault v2 解錠中の隠した物語を通常の getstory 照合から外す守りを止める。VGUARD2〔GPT #127-VN 2〕: kill の端末でも、Vault v2 なしと確かめられなければ〔施錠中・解錠中・状態不明〕FREE2・AUTOCLEAN1・DISCARD1/2・GEN1c・STUCK1・PURGE1 の照合を `vaultguard-off-vault2` で休み、getstory もしない）
 - `v292DfixMXALIAS1On` / `v292DfixMXALIAS1Off` — fixMIDICON, fix145（AUTOICON1 r2・MXALIAS1。既定 OFF・Owner PC 限定。総称名（例「老人」）と記述名を、出たターンが重なるときだけ同じ控えの絵で表示する。保存はしない。Off が優先）
 - `v292DfixPROMOICON1On` / `v292DfixPROMOICON1Off` — fixSTARTICON, fixMIDICON（AUTOICON1 r2・PROMOICON1。既定 OFF・Owner PC 限定。NPC に昇格したとき、既存の控えの絵があれば写し、無ければ作る。控えの有無が不明なら作らない。推測の外見は確定設定に登録しない。アカウントの LIM1 より緩くならない。Off が優先）
 - `v292DfixVCLEAN1On` / `v292DfixVCLEAN1Off` — fixSTORE1b（VCLEAN1。既定 OFF・Owner PC 限定。AUTOCLEAN1 の On と、HOME の Vault（v2）の解錠が要る。Off が優先）

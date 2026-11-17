@@ -174,7 +174,7 @@
     var key=getKey(); if(!key){ cb(null); return; }
     var user=buildUserPrompt(transcript);   // ★fix408強化: 総文字数上限+改行1行化(buildExistingLines)
     var _m=MODEL(); if(!_m){ cb(null); return; }   /* v292Dsmrc1: fail-closed */
-    var _b={ model:_m, temperature:0.2, max_tokens:1200, messages:[{role:'system',content:SYS},{role:'user',content:user}] };
+    var _b={ model:_m, temperature:0.2, max_tokens:1200, messages:[{role:'system',content:I2.sys()},{role:'user',content:user}] };   /* ★ITEM2: OFF（既定）は SYS のまま＝土台とバイト同じ */
     /* ★v292Dsmrc2b: MODEL-SPECIFIC REQUEST POLICY（effective model = _m = registry.primary()）。
        registry の applyRequestPolicy() を 1 回呼ぶだけ。registry 不在なら従来 body（fail-open）。 */
     try { var _R=window.__CHR_MODEL_REGISTRY; if(_R&&_R.applyRequestPolicy) _R.applyRequestPolicy(_b,_m); }catch(e){}
@@ -292,6 +292,84 @@
     return existing;
   }
 
+
+  /* ============ ★ITEM2 shadow（laneITEM2・2026-11-17・GPT #127-VN 3。既定 OFF: localStorage v292DfixITEM2On='1'・kill v292DfixITEM2Off='1'。毎回評価） ============
+     ON の回だけ、SYS の末に 1 文を足し、配列の最後に任意の要素 {"物":[…]} を 1 つ答えさせる（最大 5 件）。
+     各件: "名"(物品名・12 字まで)・"持ち主"(人物の呼称か場所・12 字まで)・"場所"(12 字まで)・"受け渡し"("完了"|"未完了"|"不明")・"根拠"(本文の T 番号・最大 3)。
+     数えるだけ: 名簿（mergeRoster）には「物」の要素を除いた写しを渡す＝保存・表示・MIDICON・状態には何も入らない。OFF・kill の送る本文・名簿・保存は土台とバイト同じ。
+     既存の抽出を壊さない: ON の回で JSON が読めない・既存の欄が欠けた → その回は土台と同じ扱い・このページでは以後「物」の欄を省く（ALIAS1 と同じ守り）。
+     記録: localStorage 'v292DfixITEM2_v1' は物語のハッシュごとの件数・状態の種類・誤りと矛盾の種類だけ（ASCII）。名前つきの明細はこのページのメモリだけ（mem()）。
+     矛盾の種類は、メモリの明細（前回の抽出）との比較だけで数える。 */
+  var I2 = (function(){
+    var LK='v292DfixITEM2_v1';
+    var ADD='配列の最後に任意で {"物":[…]} という要素を1つだけ足してよい(人物の要素とは別)。物語の今の場面で人物の手元や場所にある、筋に関わる物だけを最大5件。'+
+      '各件は {"名":物品名(12字以内),"持ち主":今持っている人物の呼称か、置かれている場所(12字以内・分からなければ"不明"),"場所":物がある場所(12字以内・分からなければ"不明"),"受け渡し":"完了"(本文で手渡し・受け取りが書かれた)|"未完了"(差し出しただけ・約束・途中)|"不明","根拠":[本文のT番号(最大3)]}。'+
+      '本文に書かれていない物・推測・台詞の中だけの物は入れない。無ければこの要素を付けない。';
+    var omit=false, lastOn=false, MEM={}, PREV={}, APM={};
+    function lsG(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+    function on(){ return lsG('v292DfixITEM2Off')!=='1' && lsG('v292DfixITEM2On')==='1'; }
+    function sys(){ lastOn = on() && !omit; return lastOn ? (SYS+ADD) : SYS; }
+    function hs(s){ var x=2166136261; s=String(s); for(var i=0;i<s.length;i++){ x^=s.charCodeAt(i); x=(x*16777619)>>>0; } return 'i'+x.toString(36); }
+    function rd(){ try{ var r=JSON.parse(lsG(LK)||'null'); return (r&&r.v===1&&r.st&&typeof r.st==='object')?r:{v:1,st:{}}; }catch(e){ return {v:1,st:{}}; } }
+    function bump(sfx, fn){ try{ var r=rd(), k=hs('s'+sfx), c=r.st[k]||{calls:0,withItems:0,items:0,state:{},owner:{},err:{},contra:{},trunc:0,parseFail:0,fieldMiss:0,omitted:0,ms:0,msMax:0,at:0}; fn(c); c.at=Date.now(); r.st[k]=c; var ks=Object.keys(r.st); if(ks.length>30){ ks.sort(function(a,b){ return (r.st[a].at||0)-(r.st[b].at||0); }); delete r.st[ks[0]]; } localStorage.setItem(LK, JSON.stringify(r)); }catch(e){} }
+    function inc(o, k){ o[k]=(o[k]||0)+1; }
+    function isItemEl(it){ return !!(it && typeof it==='object' && !Array.isArray(it) && Object.prototype.hasOwnProperty.call(it,'物')); }
+    function stripped(arr){ return arr.filter(function(it){ return !isItemEl(it); }); }
+    function norm(s, n){ return String(s==null?'':s).replace(/[\s「」『』]/g,'').slice(0, n||12); }
+    function apprStat(arr){ var n=0, f=0, ch=0; (arr||[]).forEach(function(it){ if(!it||typeof it!=='object'||isItemEl(it)) return; n++; var a=String(it['外見']!=null?it['外見']:'').trim(); if(a){ f++; ch+=a.length; } }); return { people:n, apprFilled:f, apprChars:ch }; }
+    function apprNote(arr, sfx, onCall, ms){ var k=(onCall?'on:':'off:')+sfx, m=APM[k]=APM[k]||{ calls:0, people:0, apprFilled:0, apprChars:0, ms:0, msMax:0 }, a=apprStat(arr); m.calls++; m.people+=a.people; m.apprFilled+=a.apprFilled; m.apprChars+=a.apprChars; if(typeof ms==='number'){ m.ms+=ms; if(ms>m.msMax) m.msMax=ms; } }
+    /* 窓の本文（地の文と台詞）。fix307 が AI に渡すのと同じ窓 */
+    function win(){ var s=getS(); if(!s||!Array.isArray(s.turns)) return { text:'', plain:'', n:0, ct:-1 }; var sl=s.turns.slice(-WINDOW), t=sl.map(function(x){ return ((x&&x.narrative)||'')+((x&&x.playerText)?(' '+x.playerText):''); }).join('\n');
+      return { text: t, plain: t.replace(/「[^「」]*」|『[^『』]*』/g,'　'), n: sl.length, ct: s.turns.length-1 }; }
+    function onFail(out, sfx, ms){ try{ apprNote([], sfx, lastOn, ms); }catch(e){} if(!lastOn) return; omit=true; var tr=(typeof out==='string' && out.indexOf('[')>=0); bump(sfx, function(c){ c.calls++; if(tr) c.trunc++; else c.parseFail++; c.omitted++; if(typeof ms==='number'){ c.ms+=ms; if(ms>c.msMax) c.msMax=ms; } }); }
+    function observe(arr, sfx, ms){
+      try{ apprNote(arr, sfx, lastOn, ms); }catch(eP){}
+      if(!lastOn) return arr;
+      var REQ=['呼称','種別','重要度','外見'], els=arr.filter(isItemEl), people=arr.filter(function(it){ return !isItemEl(it); });
+      var miss=people.some(function(it){ return !it || typeof it!=='object' || REQ.some(function(k){ return !Object.prototype.hasOwnProperty.call(it,k); }); }) || els.length>1 || (els.length===1 && !isItemEl(arr[arr.length-1]));
+      if(miss){ omit=true; bump(sfx, function(c){ c.calls++; c.fieldMiss++; c.omitted++; if(typeof ms==='number'){ c.ms+=ms; if(ms>c.msMax) c.msMax=ms; } }); return stripped(arr); }
+      var W=win(), cast=castNames(), names=people.map(function(it){ return String(it['呼称']||'').trim(); }).concat(loadRosterRaw().map(function(r){ return r&&r.handle; })).concat(cast).filter(Boolean);
+      var raw=els.length?els[0]['物']:null, rows=[], errs=[], contra=[];
+      bump(sfx, function(c){
+        c.calls++; if(typeof ms==='number'){ c.ms+=ms; if(ms>c.msMax) c.msMax=ms; }
+        if(raw==null) return;
+        if(!Array.isArray(raw)){ inc(c.err,'BAD_FORM'); return; }
+        c.withItems++; if(raw.length>5) inc(c.err,'TOO_MANY');
+        raw.slice(0,5).forEach(function(x){
+          if(!x || typeof x!=='object'){ inc(c.err,'BAD_FORM'); return; }
+          var nm=norm(x['名']), ow=norm(x['持ち主']), pl=norm(x['場所']), st=String(x['受け渡し']==null?'':x['受け渡し']).trim(), ev=Array.isArray(x['根拠'])?x['根拠'].slice(0,3):[];
+          if(!nm){ inc(c.err,'BAD_FORM'); return; }
+          c.items++;
+          inc(c.state, st==='完了'?'done':st==='未完了'?'pending':st==='不明'?'unknown':'other');
+          var e=[];
+          var owKind = (!ow || ow==='不明') ? 'unknown' : (names.some(function(n){ return n===ow || (n.length>=2 && ow.indexOf(n)===0); }) ? 'person' : (W.text.indexOf(ow)>=0 ? 'placeOrOther' : 'notInText'));
+          inc(c.owner, owKind); if(owKind==='notInText') e.push('OWNER_NOT_IN_TEXT');
+          if(W.text.indexOf(nm)<0) e.push('ITEM_NOT_IN_TEXT'); else if(W.plain.indexOf(nm)<0) e.push('ITEM_ONLY_IN_QUOTE');
+          var evT=[]; ev.forEach(function(v){ var k=parseInt(String(v).replace(/^T/i,''),10); if(!(k>=1 && k<=W.n)) e.push('BAD_TURN'); else evT.push(W.ct-W.n+k); }); if(!ev.length) e.push('NO_TURN');
+          e.filter(function(v,i,a){ return a.indexOf(v)===i; }).forEach(function(k){ inc(c.err,k); });
+          rows.push({ name: nm, owner: ow, place: pl, state: st.slice(0,4), turns: evT, err: e });
+        });
+        /* 矛盾の種類（メモリの明細どうし） */
+        var by={}; rows.forEach(function(r){ (by[r.name]=by[r.name]||[]).push(r); });
+        Object.keys(by).forEach(function(k){ var os=by[k].map(function(r){ return r.owner; }).filter(function(o){ return o && o!=='不明'; }).filter(function(v,i,a){ return a.indexOf(v)===i; }); if(os.length>1){ inc(c.contra,'SAME_ITEM_TWO_OWNERS'); contra.push({ kind:'SAME_ITEM_TWO_OWNERS', name:k, owners:os }); } });
+        var nb={}; rows.forEach(function(r){ if(!nb[r.name]) nb[r.name]=r; });   /* 同じ物は最初の 1 件で前回と比べる（2 件目は SAME_ITEM_TWO_OWNERS で数え済み） */
+        var prev=PREV[sfx]||null;
+        if(prev){ Object.keys(nb).forEach(function(k0){ var r=nb[k0], p=prev.by[r.name]; if(!p) return;
+          if(p.owner && r.owner && p.owner!=='不明' && r.owner!=='不明' && p.owner!==r.owner){ if(r.state==='完了'){ inc(c.contra,'OWNER_CHANGED_DONE'); contra.push({ kind:'OWNER_CHANGED_DONE', name:r.name, from:p.owner, to:r.owner }); } else { inc(c.contra,'OWNER_CHANGED_NOT_DONE'); contra.push({ kind:'OWNER_CHANGED_NOT_DONE', name:r.name, from:p.owner, to:r.owner, state:r.state }); } }
+          if(p.state==='完了' && r.state==='未完了'){ inc(c.contra,'DONE_TO_PENDING'); contra.push({ kind:'DONE_TO_PENDING', name:r.name }); } });
+          Object.keys(prev.by).forEach(function(k){ if(!by[k]){ inc(c.contra,'DROPPED'); contra.push({ kind:'DROPPED', name:k }); } }); }
+        PREV[sfx]={ by: nb, ct: W.ct };
+      });
+      var mem=MEM[sfx]=MEM[sfx]||[]; mem.push({ ct: W.ct, ms: ms, items: rows, contra: contra }); if(mem.length>20) mem.splice(0, mem.length-20);
+      return stripped(arr);
+    }
+    function curSfx(){ var s=slotSfx(); return s===null?'':s; }
+    function metrics(sfx){ sfx=(sfx==null)?curSfx():String(sfx); var c=rd().st[hs('s'+sfx)]||null; return { rec: c, apprOn: APM['on:'+sfx]||null, apprOff: APM['off:'+sfx]||null }; }
+    function status(){ return { on: on(), omit: omit, lastOn: lastOn, slot: curSfx() }; }
+    return { on: on, sys: sys, onFail: onFail, observe: observe, metrics: metrics, status: status, ADD: ADD, mem: function(sfx){ sfx=(sfx==null)?curSfx():String(sfx); return JSON.parse(JSON.stringify(MEM[sfx]||[])); } };
+  })();
+  window.__v292DfixITEM2 = { on: I2.on, status: I2.status, metrics: I2.metrics, mem: I2.mem };   /* ★ITEM2: 見るだけ（名前つきの明細はこのページのメモリだけ） */
+
   var _inflight=false, _failAt=0;   /* ★mx3-g: 失敗したら cursor を戻し 60 秒後に再試行／同時実行は 1 本 */
   function run(){
     if(off()) return;
@@ -330,14 +408,17 @@
     function runLLM(){
     var prevLast=last;
     function giveUp(){ _inflight=false; _failAt=Date.now(); try{ saveLastK(lastK, prevLast); }catch(e){} }   /* 失敗: cursor を予約前へ戻す(同じ saveLastK) */
+    var t0I2=Date.now();   /* ★ITEM2: 抽出の所要時間（数えるだけ） */
     callLLM(tr, function(out){
+      var msI2=Date.now()-t0I2;
       // ★再確認: LLM(最大90s)中にスロット切替/物語差替が起きていたら、このスロットには書かない。
       var s2=getS();
       if(!s2 || !s2.scene || (s2.scene.loc||null)!==curLoc){ _inflight=false; return; } // 物語が差し替わった（何も書かない・cursor も触らない）
       if(slotSfx()!==sfx){ _inflight=false; return; }                  // アクティブスロットが変わった（何も書かない）
       var arr=parseArr(out);
-      if(!arr){ giveUp(); return; }          // 失敗: cursor を戻して 60 秒後に再試行
+      if(!arr){ try{ I2.onFail(out, sfx, msI2); }catch(eI){} giveUp(); return; }          // 失敗: cursor を戻して 60 秒後に再試行（★ITEM2: ON の回なら、このページでは「物」の欄を省く）
       if(staleSc1()){ try{ console.log(TAG,'SC1: 抽出中に本文の履歴が変わったので、この結果は書かない'); }catch(e){} giveUp(); return; }
+      try{ arr=I2.observe(arr, sfx, msI2); }catch(eI){}   /* ★ITEM2 shadow: 数えるだけ。名簿には「物」の要素を除いた写しを渡す（OFF の回は同じ配列のまま） */
       /* ★fix748(C5): roster 書込は Class C transaction。network(callLLM) は **この外**で終わっている。 */
       f748RunC('FIX307_ROSTER', function(){
         if(staleSc1()) return { merged: [], w: { skip:true, sc1:'STALE_ASYNC' } };   /* ★v292DfixSC1: lock 待ちの間の取消も見る */

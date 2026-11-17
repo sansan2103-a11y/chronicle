@@ -571,6 +571,7 @@
   }
   function globalBlock(env) {
     if (!env.key1) return 'key1-unavailable';
+    if (env.vgKill && env.vgKill.state !== 'none') return 'vaultguard-off-vault2';   /* ★VGUARD2（GPT #127-VN 2・案 b）: VAULTGUARD1 を kill した端末で Vault v2 がある・状態が分からない → 通常の getstory 照合を全部休む */
     if (env.vg && env.vg.state === 'unknown') return 'vault2-ids-unknown';   /* ★VAULTGUARD1: 解錠中なのに Vault v2 の隠した id が分からない → 全部止める（getstory をしない） */
     /* R2: Vault の状態が読めない・揃わない → 全部止める（値は読まない） */
     var F = env.vault;
@@ -1749,6 +1750,7 @@
     var c2 = {}; for (var k2 in ctx) if (Object.prototype.hasOwnProperty.call(ctx, k2)) c2[k2] = ctx[k2];
     c2.getStory = function (id) { if (e2.vcSynth && Object.prototype.hasOwnProperty.call(e2.vcSynth, String(id))) return Promise.resolve(JSON.parse(JSON.stringify(e2.vcSynth[String(id)]))); res.queries++; return ctx.getStory(id); };   /* ★VCLEAN1: 確かめた id は通信しない */
     if (vcOnGet(function (kk) { return g(env, kk); })) { e2.vc = true; e2.vcAllow = {}; e2.vcSynth = {}; try { e2.vcUnlocked = typeof env.vcUnlocked === 'function' && env.vcUnlocked() === true; } catch (eU) { e2.vcUnlocked = false; } e2.vcV2 = {}; }   /* ★VCLEAN1 */
+    if (e2.vgKill && e2.vgKill.state !== 'none') { res.failed = 1; res.failedCode = 'vaultguard-off-vault2'; res.code = 'stopped'; e2.vc = false; }   /* ★VGUARD2: 何も調べない・何も取り寄せない（VCLEAN1 の一覧の読み取りも休む） */
     if (e2.vg && e2.vg.state === 'unknown') { res.failed = 1; res.failedCode = 'vault2-ids-unknown'; res.code = 'stopped'; }   /* ★VAULTGUARD1: 解錠中なのに隠した id が分からない → 何も調べない（getstory 0） */
     return vcPrep(e2, env, res).then(function () { return acWalk(e2, c2, res); }).then(function () {   /* ★VCLEAN1: 鍵が無ければ何もしない */
       if (!res.code) res.code = res.failed ? 'stopped' : 'done';
@@ -1986,6 +1988,11 @@
      解錠中なのに隠した id が分からない（応答の欠け・hiddenComplete=false・読めない）→ その回は全部止める（globalBlock＝vault2-ids-unknown・getstory は 1 本もしない）。
      施錠中・Vault v2 が無い → 何も変えない（施錠中は Worker が隠した物語の getstory を 404 にする）。最後の守り: getstory の直前にもう一度確かめる。
      隠した id はメモリの中だけ（記録・ログには書かない。数だけ status().vaultGuard に出す）。VCLEAN1 の本文なしの照合（vcAllow）はこれより先に通る */
+  /* ★VGUARD2（GPT #127-VN 2・案 b）: kill（v292DfixVAULTGUARD1Off='1'）は「Vault v2 の隠した id を照合から外す守り」を止めるだけで、
+     従来の「解錠中は隠した削除済み物語の本文を getstory で取り寄せうる」動きには戻さない。kill の端末では、入口ごとに読む vault2status
+     （EXTRA1 r4 の exvSnap・本文なし）が Vault v2 なし（none）と確かめられたときだけ今までどおり動き、それ以外（locked・unlocked・unknown・古い）は
+     globalBlock＝'vaultguard-off-vault2' で FREE2・AUTOCLEAN1（GEN1c・VCLEAN1 を含む）・DISCARD1/2・STUCK1・PURGE1 の照合を休む。
+     最後の守り: kill の端末でも getstory の直前に vault2status を読み直し、none でなければ取り寄せない（status().vaultGuard.killBlocked）。kill なしは何も変えない。 */
   var VG_OFF = 'v292DfixVAULTGUARD1Off', VG_TTL_MS = 15000, VG = { state: 'none', ids: null, n: 0, at: 0, ui: null }, vgInflight = null;
   function vgOn() { return lsg(VG_OFF) !== '1'; }
   function vgUi() { try { var U = root.__v292Dvault2Ui, s = (U && typeof U.status === 'function') ? U.status() : null; return s ? { hasVault: s.hasVault === true, unlocked: s.unlocked === true, count: (typeof s.hiddenCount === 'number') ? s.hiddenCount : null } : null; } catch (e) { return null; } }
@@ -2030,7 +2037,7 @@
   function benv() {
     var K = null; try { K = root.__v292DfixKEY1; K = (K && typeof K.enabled === 'function' && K.enabled()) ? K : null; } catch (e) { K = null; }
     var pOn = lsg(PURGE_ON) === '1' && lsg(PURGE_OFF) !== '1';
-    return { ls: root.localStorage, ss: root.sessionStorage, now: function () { return Date.now(); }, key1: K, multi: lsg(MULTI) === '1', vg: vgSnap(),   /* ★VAULTGUARD1 */
+    return { ls: root.localStorage, ss: root.sessionStorage, now: function () { return Date.now(); }, key1: K, multi: lsg(MULTI) === '1', vg: vgSnap(), vgKill: vgOn() ? undefined : { state: exvSnap().state },   /* ★VAULTGUARD1 ／ ★VGUARD2: kill のときだけ */
              purge: pOn, purgeVault: pOn && lsg(PURGE_VAULT) === '1',
              stuck1: lsg(STUCK_ON) === '1' && lsg(STUCK_OFF) !== '1', dirtyProof: dirtyProofB, otherTab: otherTabSeq,   /* ★STUCK1 r2: 既定 OFF */
              zt1: lsg(ZT_ON) === '1' && lsg(ZT_OFF) !== '1',   /* ★ZT1: 既定 OFF */
@@ -2100,7 +2107,7 @@
             return r.ok ? r.json() : null; }, function () { srvClock = null; return null; })
           .then(function (j) { return (j && j.ok === true && j.accountId) ? String(j.accountId) : null; }, function () { return null; });
       },
-      getStory: function (id) { return (vgOn() ? vgFetch() : Promise.resolve(null)).then(function (G) {   /* ★VAULTGUARD1: 最後の守り（本文を取り寄せる前）。r2: 使い回さず毎回読み直す */
+      getStory: function (id) { return vgFetch().then(function (G) { if (!vgOn() && (!G || G.state !== 'none')) { st.vgKillBlocked = (st.vgKillBlocked || 0) + 1; return null; }   /* ★VGUARD2: kill の端末でも、Vault v2 なしと確かめられなければ取り寄せない */   /* ★VAULTGUARD1: 最後の守り（本文を取り寄せる前）。r2: 使い回さず毎回読み直す */
         if (G && G.state === 'unknown') { st.vgBlocked = (st.vgBlocked || 0) + 1; return null; }
         if (G && G.state === 'unlocked' && G.ids && G.ids[String(id)] === 1) { st.vgBlocked = (st.vgBlocked || 0) + 1; return { status: 404, j: { ok: false } }; }
         return new Promise(function (res) { var W = root.__v292Dfix697; if (!W || typeof W.getStoryV2Once !== 'function') return res(null);
@@ -2347,7 +2354,7 @@
         var ro = { force: opt.force === true }; if (opt.qaDays !== undefined) ro.qaDays = opt.qaDays; if (opt.ack !== undefined) ro.ack = opt.ack;   /* ★r6: QA 操作はその 1 回の引数だけ */
         return acRunOnce(benv(), bctx(), ro).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0, manual: true, gens: r.gens || 0, genChars: r.genChars || 0 }; return r; }); }
       var ds = acDaysGet(lsg); return { days: AC_DAYS, daysKey: ds.key, on: acOnGet(lsg), defaultOn: AC_DEFAULT_ON, last: st.autoclean, log: J(lsg(AC_LOGK) || 'null', null) }; },
-    status: function () { return JSON.parse(JSON.stringify({ version: VERSION, vaultGuard: { on: vgOn(), state: VG.state, hidden: VG.n, blocked: st.vgBlocked || 0 }, stuck1: { v: SVERSION, on: benv().stuck1 === true }, ready: ready(), opened: st.opened, surveys: st.surveys, freed: st.freed, last: st.last, lastSurvey: st.lastSurvey, dry: st.dry, memLog: memLog })); }
+    status: function () { return JSON.parse(JSON.stringify({ version: VERSION, vaultGuard: { on: vgOn(), state: VG.state, hidden: VG.n, blocked: st.vgBlocked || 0, killBlocked: st.vgKillBlocked || 0 }, stuck1: { v: SVERSION, on: benv().stuck1 === true }, ready: ready(), opened: st.opened, surveys: st.surveys, freed: st.freed, last: st.last, lastSurvey: st.lastSurvey, dry: st.dry, memLog: memLog })); }
   };
   (function () {   /* ★VAULTGUARD1: 判定と実行の入口は、先に Vault v2 の隠した id を読む */
     var A = root.__v292DfixSTORE1b; ['explain', 'planByReason', 'discard2DryRun', 'discard2Run', 'discard1DryRun', 'discard1Run', 'free2DryRun'].forEach(function (k) {
