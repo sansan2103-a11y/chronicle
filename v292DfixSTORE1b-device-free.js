@@ -342,7 +342,7 @@
     'v292Dav2_blk_': 'b', 'v292Dav2_cfl_': 'b',   /* 登録の断り／競合の印（中身なし・取り直しで消える） */
     'v292Dfix640PgOn_slot_': 'b', 'v292Dfix844On_slot_': 'b', 'v292Dfix845On_slot_': 'b', 'v292DfixCmfOn_slot_': 'b',
     'v292Dfix382Touched_slot_': 'b', 'v292Dfix374Chosen_chr6_slot_': 'b', 'v292DfixB37onb_': 'b',   /* 表示・機能の印 */
-    'chr6_v292Dfix135_sum_slot_': 'c', 'chr6_v292Dfix135_last_slot_': 'c', 'chr6_v292Dfix136_wi_slot_': 'c', 'chr6_v292Dfix137_ev_slot_': 'c',   /* 長期記憶（AI 生成） */
+    'chr6_v292Dfix135_sum_slot_': 'c', 'chr6_v292Dfix135_last_slot_': 'c', 'chr6_v292Dfix136_wi_slot_': 'c', 'chr6_v292Dfix137_ev_slot_': 'c', 'v292DfixMEM4_slot_': 'c',   /* ★MEM4: 記憶の印は記憶と同じ扱い */   /* 長期記憶（AI 生成） */
     'v292Dfix277Quasi_slot_': 'c', 'v292Dfix298_slot_': 'c',   /* 準登録カルテ・ロスター（手動の退場を含む） */
     'v292capp_slot_': 'c',                   /* 正典の外見（一度決めたら固定する値） */
     'v292Dmem1_slot_': 'c',                  /* Memory Engine（HOME では fix793 が無く projectionV2 に入らない） */

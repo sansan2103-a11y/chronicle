@@ -233,6 +233,52 @@ try {
   check('MEM3 r10: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
 }
 
+// ---------- 9. unit: MEM4 r5 (r5: a stamp that no longer describes the memory is removed with its sequence row while untrusted; r4: r4: the story check also compares the turn count and the last turn; memory provenance stamp, plan A; trust only an observed fix135 rebuild of this story saved as intended; per-device version sequence), default OFF ----------
+try {
+  const vm = (await import('node:vm')).default;
+  const boot = (L, acct) => { const Pl = { _extensions: [], _userExtensions: [], _parseExtensions: [] };
+    const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, clearTimeout() {}, JSON, Math, Date, Uint8Array, crypto: { getRandomValues: (a) => { for (let i = 0; i < a.length; i++) a[i] = (i * 37 + 11) & 255; return a; } },
+      localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
+    const TT = Array.from({ length: 6 }, (_, i) => ({ inputType: 'DO', playerText: 'p', narrative: 'n' + i }));
+    sb.window = sb; sb.Planner = Pl; vm.createContext(sb); sb.S = { turns: TT, scene: { loc: '店' }, cast: { hero: { name: 'h' }, npcs: [] } }; sb.__chronicleDocumentStoryKey = 'chr6_slot_m4s'; sb.__v292Dfix246 = 1; sb.__v292Dfix697 = { status: () => ({ storyId: 'm4s' }) }; sb.__v292Dfix893 = { me: () => (acct ? { accountId: acct } : null), serverMe: () => (acct ? { accountId: acct } : null) };
+    vm.runInContext(read('v292DfixMEM2-longmem-wire.js'), sb); vm.runInContext(read('v292Dfix58-prompt-rebuild.js'), sb);
+    const st = sb.S;
+    return { sb, send: () => JSON.parse(Pl._userExtensions[Pl._userExtensions.length - 1]({ user: JSON.stringify({ currentInput: { type: 'DO', text: 'x' }, storySoFar: 'y' }), state: st })) }; };
+  const MEM = (sum, lb) => ({ 'chr6_v292Dfix135_sum_slot_m4s': sum || '凪は港に着いた。', 'chr6_v292Dfix137_ev_slot_m4s': JSON.stringify([{ turnIdx: 2, importance: 3, event: '鍵を受け取った' }]), 'chr6_v292Dfix135_last_slot_m4s': String(lb || 2) });
+  const put = (L, m) => { for (const k of Object.keys(m)) L.set(k, m[k]); };
+  const fin = (s, L, m) => { put(L, m); s.sb.__v292DfixMEM4Done({ sfx: '_slot_m4s', loc: '店', lb: +m['chr6_v292Dfix135_last_slot_m4s'], ok: true, r: { summary: m['chr6_v292Dfix135_sum_slot_m4s'], worldinfo: [], events: JSON.parse(m['chr6_v292Dfix137_ev_slot_m4s']) } }); };   /* fix135 が保存の直後に知らせるのと同じ順 */
+  const ON = { chr6_slot_m4s: JSON.stringify({ scene: { loc: '店' }, turns: Array.from({ length: 6 }, (_, i) => ({ inputType: 'DO', playerText: 'p', narrative: 'n' + i })) }), v292DfixMEM2aOn: '1', v292DfixMEM4On: '1' };
+  const L = new Map(Object.entries(ON)); const s1 = boot(L, 'acc1'); fin(s1, L, MEM()); const o1 = s1.send();
+  const s2 = boot(L, 'acc1'); const o2 = s2.send();
+  check('MEM4: an observed fix135 rebuild from empty is stamped; after a reload the stamp verifies and the notes are sent', !!o1.memoryNotes && L.has('v292DfixMEM4_slot_m4s') && L.has('v292DfixMEM4Seq') && !!o2.memoryNotes && s2.sb.__v292DfixMEM2.stats().m4.counts.verified === 1, JSON.stringify(s2.sb.__v292DfixMEM2.stats().m4));
+  const LA = new Map(Object.entries(ON)); const sa = boot(LA, 'acc1'); sa.send(); put(LA, MEM()); const oa = sa.send();
+  check('MEM4 r2 (leak A): memory written after the empty state without a fix135 completion signal (restore / another tab) is not trusted (M4_UNSEEN_WRITER), no stamp', !oa.memoryNotes && sa.sb.__v292DfixMEM2.stats().a.skip.M4_UNSEEN_WRITER === 1 && !LA.has('v292DfixMEM4_slot_m4s'), '');
+  const LB = new Map(Object.entries(ON)); const sb1 = boot(LB, 'acc1'); fin(sb1, LB, MEM()); sb1.send(); const snap = new Map([...LB].filter(([k]) => /_slot_m4s$/.test(k) && k !== 'chr6_slot_m4s'));
+  fin(sb1, LB, MEM('二回目', 5)); sb1.send(); fin(sb1, LB, MEM('三回目', 8)); sb1.send(); for (const [k, v] of snap) LB.set(k, v); const sb2 = boot(LB, 'acc1'); const ob = sb2.send();
+  check('MEM4 r2 (leak B): a snapshot restored to the same slot (old memory + old stamp) after two rebuilds is not trusted after a reload (M4_SEQ_MISMATCH)', !ob.memoryNotes && sb2.sb.__v292DfixMEM2.stats().a.skip.M4_SEQ_MISMATCH === 1, JSON.stringify(sb2.sb.__v292DfixMEM2.stats().a.skip));
+  const L3 = new Map(Object.entries(Object.assign({}, ON, MEM()))); const s3 = boot(L3, 'acc1'); const o3 = s3.send();
+  check('MEM4: memory already present without a stamp (e.g. moved from the shared chr6 keys by fix246) is not sent (M4_NO_STAMP)', !o3.memoryNotes && s3.sb.__v292DfixMEM2.stats().a.skip.M4_NO_STAMP === 1, '');
+  const L4 = new Map(L); L4.set('chr6_v292Dfix135_sum_slot_m4s', '別の中身'); const o4 = boot(L4, 'acc1').send();
+  const L5 = new Map(L); const o5 = boot(L5, 'acc2').send();
+  const L6 = new Map(L); L6.set('v292DfixMEM4Dev', 'ffffffffffffffffffffffff'); const o6 = boot(L6, 'acc1').send();
+  check('MEM4: hash mismatch / another account / another device id are not sent', !o4.memoryNotes && !o5.memoryNotes && !o6.memoryNotes, '');
+  const L0 = new Map(Object.entries(Object.assign({}, ON, { v292DfixMEM4On: '0' }))); const s0 = boot(L0, 'acc1'); fin(s0, L0, MEM()); const o0 = s0.send();
+  check('MEM4: off — no stamp, device id or sequence key is written even with a completion signal; the notes follow MEM2 r3 (memory built during this page is sent)', !L0.has('v292DfixMEM4_slot_m4s') && !L0.has('v292DfixMEM4Dev') && !L0.has('v292DfixMEM4Seq') && !!o0.memoryNotes && !s0.sb.__v292DfixMEM2.stats().m4, '');
+  check('MEM4 r2/r3: fix135 signals completion only after its saves (one line after saveLastBuild, passing the result it tried to save)', /saveLastBuild\(curTurn\);\n      try \{ var m4h = window\.__v292DfixMEM4Done; if \(typeof m4h === 'function'\) m4h\(\{ sfx: startSfx, loc: startLoc, lb: curTurn, ok: _lmCanSave\(\), r: result \}\); \} catch\(_\)\{\}/.test(read('v292Dfix135-longmem.js')), '');
+  { const LO = new Map(Object.entries(Object.assign({}, ON, { chr6_slot_m4s: JSON.stringify({ scene: {}, turns: [{ narrative: '別の物語' }] }) }))); const so = boot(LO, 'acc1'); so.send(); fin(so, LO, MEM()); const oo = so.send();
+    const LP = new Map(Object.entries(ON)); const sp = boot(LP, 'acc1'); sp.send(); put(LP, MEM()); sp.sb.__v292DfixMEM4Done({ sfx: '_slot_m4s', loc: '店', lb: 2, ok: true, r: { summary: '保存しようとした別の版', worldinfo: [], events: [] } }); const op = sp.send();
+    check('MEM4 r3 (#127-VX 2/3): a signal whose story does not match the slot body (first turn differs) or whose result was not saved as intended is not used (M4_NOTIFY_OTHER_STORY / M4_NOTIFY_PARTIAL_SAVE), no stamp', !oo.memoryNotes && so.sb.__v292DfixMEM2.stats().a.skip.M4_NOTIFY_OTHER_STORY === 1 && !LO.has('v292DfixMEM4_slot_m4s') && !op.memoryNotes && sp.sb.__v292DfixMEM2.stats().a.skip.M4_NOTIFY_PARTIAL_SAVE === 1 && !LP.has('v292DfixMEM4_slot_m4s'), ''); }
+  { const t7 = Array.from({ length: 5 }, (_, i) => ({ inputType: 'DO', playerText: 'p', narrative: 'n' + i })); const LR = new Map(Object.entries(Object.assign({}, ON, { chr6_slot_m4s: JSON.stringify({ scene: {}, turns: t7 }) }))); const sr = boot(LR, 'acc1'); sr.send(); fin(sr, LR, MEM()); const or = sr.send();
+    const t8 = Array.from({ length: 6 }, (_, i) => ({ inputType: 'DO', playerText: 'p', narrative: i === 5 ? '別の最後' : 'n' + i })); const LS = new Map(Object.entries(Object.assign({}, ON, { chr6_slot_m4s: JSON.stringify({ scene: {}, turns: t8 }) }))); const ss = boot(LS, 'acc1'); ss.send(); fin(ss, LS, MEM()); const os = ss.send();
+    check('MEM4 r4: same first turn but a different turn count or a different last turn (two stories from the same start) is not used (M4_NOTIFY_OTHER_STORY), no stamp', !or.memoryNotes && sr.sb.__v292DfixMEM2.stats().a.skip.M4_NOTIFY_OTHER_STORY === 1 && !LR.has('v292DfixMEM4_slot_m4s') && !os.memoryNotes && ss.sb.__v292DfixMEM2.stats().a.skip.M4_NOTIFY_OTHER_STORY === 1 && !LS.has('v292DfixMEM4_slot_m4s'), ''); }
+  { const LW = new Map(Object.entries(ON)); const sw = boot(LW, 'acc1'); fin(sw, LW, MEM()); sw.send(); const snap = new Map([...LW].filter(([k]) => /_slot_m4s$/.test(k) && k !== 'chr6_slot_m4s'));
+    put(LW, MEM('認証されない版', 5)); sw.send(); put(LW, MEM('認証されない次の版', 8)); sw.send(); const gone = !LW.has('v292DfixMEM4_slot_m4s');
+    for (const [k, v] of snap) LW.set(k, v); const sw2 = boot(LW, 'acc1'); const ow = sw2.send();
+    check('MEM4 r5 (#127-VX 4/5): after unauthenticated rebuilds the stale stamp and its sequence row are removed; restoring the last authenticated snapshot is not trusted (M4_SEQ_UNKNOWN)', gone && !ow.memoryNotes && sw2.sb.__v292DfixMEM2.stats().a.skip.M4_SEQ_UNKNOWN === 1, JSON.stringify(sw2.sb.__v292DfixMEM2.stats().a.skip)); }
+} catch (e) {
+  check('MEM4: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
+}
+
 // ---------- report ----------
 const fail = results.filter(r => !r.ok);
 const summary = { site, version: ver, loaded_js: loaded.size, pass: results.length - fail.length, fail: fail.length, results };

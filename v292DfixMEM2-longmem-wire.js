@@ -36,7 +36,123 @@
   function docSfx(){ var dk = window.__chronicleDocumentStoryKey; var m = (typeof dk === 'string') ? /^chr6_slot_([A-Za-z0-9_-]{1,80})$/.exec(dk) : null; return m ? { dk: dk, id: m[1], sfx: '_slot_' + m[1] } : null; }
   function memEmpty(sfx){ for (var i = 0; i < LMK.length; i++){ if (lsg(LMK[i] + sfx) != null) return false; } return true; }
   function lbOf(sfx){ var v = parseInt(lsg('chr6_v292Dfix135_last' + sfx) || '-1', 10); return (v >= 0) ? v : -1; }
+  /* ★MEM4（案 A・記憶の所属証明・GPT #127-VV 3・既定 OFF: v292DfixMEM4On='1'・kill v292DfixMEM4Off='1'・腕 A が ON のときだけ）
+     MEM2 が見届けた作り直し（空から作られた／信用している版から作り直された）にだけ、別の鍵 v292DfixMEM4_slot_<id> へ印を書く。
+     印 = { v:1, acct（アカウント ID）, sid（物語 id）, dev（この端末の乱数 id）, lb（作ったターン）, h（4 つの鍵の中身の hash）, chain（'empty'|'chained'）, at }。
+     読み込み時に記憶があるときは、印が acct・sid・dev・lb・h のすべてで今と一致したときだけ信用する（再読み込みの後も渡る）。
+     印が無い・壊れている・アカウントが分からない／違う・端末が違う・版や中身がずれている（印だけ古い・更新途中・移行・復元）→ 信用しない（理由を数える）。
+     信用中に中身が変わったとき、作ったターン（lb）が進んでいれば作り直しとして印を付け直す。lb が進まずに中身が変わったら信用をやめる。
+     記憶が全部消えたら（fix135 の reset）印も消す。古い記憶を後から正規と認めることはしない（印を付けるのは見届けた作り直しだけ）。
+     OFF（既定）・腕 A が OFF のときは、印も端末 id も読まない・書かない（従来の track のまま）。 */
+  /* ★MEM4 r2（レビューのすり抜け A・B）:
+     A: 空を見た後・信用中の書き込みを信用するのは、このページの fix135 が作り直しを終えたこと（保存の直後の知らせ〔__v292DfixMEM4Done〕）を見届け、
+        その知らせの接尾辞・ターン（lb）・4 つの鍵の中身の hash・場所（loc）が今と一致したときだけ。復元・別のタブ・storage の書き込み・切り替え途中の書き込みは
+        知らせが無い（または中身が合わない）ので信用しない（M4_UNSEEN_WRITER）。
+     B: 端末ごとの版の通し番号（v292DfixMEM4Seq＝どの物語にも属さない端末の鍵。物語 id は hash で持つ）を印に入れる。印を付けるたびに番号が進むので、
+        snapshot などで古い記憶と古い印が一緒に戻っても、番号が今の版と合わない（M4_SEQ_MISMATCH／M4_SEQ_UNKNOWN）。
+     アカウントはサーバーで確かめた値だけ（fix893 serverMe）。 */
+  var M4K = 'v292DfixMEM4_slot_', M4D = 'v292DfixMEM4Dev', M4Q = 'v292DfixMEM4Seq', M4Q_MAX = 200;
+  var t4 = { dk: null, state: 'n/a', why: null, lb: -1, h: null, stamped: false, since: 0, dn: 0 }, m4st = { stamped: 0, restamped: 0, verified: 0, rejected: {}, removed: 0, done: 0, notifyRej: {}, invalidated: 0 };
+  var m4done = null, m4dseq = 0;   /* このページで見届けた fix135 の作り直しの完了（最後の 1 件） */
+  function m4On(){ return aOn() && lsg('v292DfixMEM4Off') !== '1' && lsg('v292DfixMEM4On') === '1'; }
+  function lss(k, v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
+  function lsr(k){ try { localStorage.removeItem(k); } catch(e){} }
+  function m4acct(){ try { var F = window.__v292Dfix893; var me = (F && typeof F.serverMe === 'function') ? F.serverMe() : null; return (me && me.accountId) ? String(me.accountId) : null; } catch(e){ return null; } }   /* ★r2: サーバーで確かめた値だけ */
+  function m4dev(create){ var v = lsg(M4D); if (v && /^[A-Za-z0-9]{16,40}$/.test(v)) return v; if (!create) return null;
+    var s = ''; try { var a = new Uint8Array(12); (window.crypto || window.msCrypto).getRandomValues(a); for (var i = 0; i < a.length; i++) s += ('0' + a[i].toString(16)).slice(-2); } catch(e){ for (var j = 0; j < 24; j++) s += Math.floor(Math.random() * 16).toString(16); }
+    return lss(M4D, s) ? s : null; }
+  function m4hash(sfx){ var raw = LMK.map(function(k){ var v = lsg(k + sfx); return v == null ? '\u0000' : v; }).join('\u0001');
+    var a = 2166136261, b = 5381; for (var i = 0; i < raw.length; i++){ var c = raw.charCodeAt(i); a ^= c; a = (a * 16777619) >>> 0; b = ((b * 33) ^ c) >>> 0; } return a.toString(36) + '.' + b.toString(36) + '.' + raw.length; }
+  function m4idh(id){ var a = 2166136261; for (var i = 0; i < id.length; i++){ a ^= id.charCodeAt(i); a = (a * 16777619) >>> 0; } return 'h' + a.toString(36) + '.' + id.length; }   /* ★r2 B: 通し番号の表は物語 id をそのまま持たない */
+  function m4seqGet(){ try { var o = JSON.parse(lsg(M4Q) || 'null'); if (o && typeof o.g === 'number' && o.s && typeof o.s === 'object') return o; } catch(e){} return null; }
+  function m4seqNext(id){ var q = m4seqGet() || { g: 0, s: {} }; var n = Math.max(q.g + 1, Date.now()); q.g = n; q.s[m4idh(id)] = n;
+    var ks = Object.keys(q.s); if (ks.length > M4Q_MAX){ ks.sort(function(x, y){ return q.s[x] - q.s[y]; }); for (var i = 0; i < ks.length - M4Q_MAX; i++) delete q.s[ks[i]]; }
+    return lss(M4Q, JSON.stringify(q)) ? n : 0; }
+  function m4seqDrop(id){ var q = m4seqGet(); if (q && q.s[m4idh(id)] != null){ delete q.s[m4idh(id)]; lss(M4Q, JSON.stringify(q)); } }
+  function m4blobLoc(sfx){ try { var b = JSON.parse(lsg('chr6' + sfx) || 'null'); return (b && b.scene) ? (b.scene.loc || null) : null; } catch(e){ return null; } }
+  function m4curLoc(){ try { var s = (typeof S !== 'undefined' && S) ? S : window.S; return (s && s.scene) ? (s.scene.loc || null) : null; } catch(e){ return null; } }
+  /* ★r2 A: fix135 が保存の直後に呼ぶ（このページの作り直しだけ）。その時点の 4 つの鍵の hash を控える。OFF のときは何も読まない（MEM4 の鍵の確認だけ）
+     ★r3（#127-VX ②③①）: 受け手で 2 つ確かめ、合わなければ知らせを使わない（m4done を作らない）。
+       ② NOTIFY_OTHER_STORY: S.turns と、知らせの接尾辞の本体 chr6<sfx> の turns で、ターン数・最初と最後のターンの narrative（先頭 200 字）のどれかが、無い・違う（r4 でターン数と最後のターンを足した）
+          （切り替えの中間状態で、S＝前の物語のまま fix135 が前の物語の記憶を今の slot に書いた形。場所が無い物語でも止まる）
+       ③ NOTIFY_PARTIAL_SAVE: 知らせの r（fix135 が保存しようとした結果）のとおりに 4 つの鍵が保存されていない（容量不足などで一部だけ書けた）。
+          fix135 の保存の形と同じ切り方（summary 800 字・worldinfo 40 件・events 20 件・作ったターン）で比べる。r が無い知らせも使わない
+       ① 知らせの時点の accountId（serverMe）を控え、印を付けるときに今の値と違えば付けない（NOTIFY_ACCT_CHANGED） */
+  var m4nrej = null;   /* ★r3: 最後に使わなかった知らせの理由（見送りの理由に出す） */
+  /* ★r4: 物語の照合 = ターン数・最初のターンの narrative の先頭 200 字・最後のターンの narrative の先頭 200 字。どれかが無い（空・文字列でない）と null（使わない）。
+     本体の保存が S より遅れて合わないときも使わない（安全側・次の作り直しで取り直す） */
+  function m4fp(t){ if (!Array.isArray(t) || !t.length) return null; var a = t[0], z = t[t.length - 1];
+    if (!a || typeof a.narrative !== 'string' || !a.narrative || !z || typeof z.narrative !== 'string' || !z.narrative) return null;
+    return t.length + '\u0001' + a.narrative.slice(0, 200) + '\u0001' + z.narrative.slice(0, 200); }
+  function m4fpS(){ try { var s = (typeof S !== 'undefined' && S) ? S : window.S; return m4fp(s && s.turns); } catch(e){ return null; } }
+  function m4fpB(sfx){ try { var b = JSON.parse(lsg('chr6' + sfx) || 'null'); return m4fp(b && b.turns); } catch(e){ return null; } }
+  function m4savedAsIntended(sfx, r, lb){ try { if (!r || typeof r !== 'object') return false;
+      if (lsg('chr6_v292Dfix135_last' + sfx) !== String(lb)) return false;
+      if (r.summary && lsg('chr6_v292Dfix135_sum' + sfx) !== String(r.summary || '').slice(0, 800)) return false;
+      if (r.worldinfo && r.worldinfo.length && lsg('chr6_v292Dfix136_wi' + sfx) !== JSON.stringify((r.worldinfo || []).slice(0, 40))) return false;
+      if (r.events && r.events.length && lsg('chr6_v292Dfix137_ev' + sfx) !== JSON.stringify((r.events || []).slice(0, 20))) return false;
+      return true; } catch(e){ return false; } }
+  window.__v292DfixMEM4Done = function(o){ try { if (!m4On() || !o || !o.ok) return; m4st.done++;
+    var sfx0 = String(o.sfx || ''), fS = m4fpS(), fB = m4fpB(sfx0);
+    if (fS == null || fB == null || fS !== fB){ m4done = null; m4nrej = 'NOTIFY_OTHER_STORY'; m4st.notifyRej[m4nrej] = (m4st.notifyRej[m4nrej] || 0) + 1; return; }
+    if (!m4savedAsIntended(sfx0, o.r, o.lb)){ m4done = null; m4nrej = 'NOTIFY_PARTIAL_SAVE'; m4st.notifyRej[m4nrej] = (m4st.notifyRej[m4nrej] || 0) + 1; return; }
+    m4dseq++; m4nrej = null;
+    m4done = { n: m4dseq, sfx: sfx0, loc: (o.loc == null ? null : String(o.loc)), lb: +o.lb, h: m4hash(sfx0), acct: m4acct() }; } catch(e){ m4done = null; } };
+  function m4seen(d, lb, h){ var x = m4done; if (!x || x.n <= t4.dn) return false; if (x.sfx !== d.sfx || x.lb !== lb || x.h !== h) return false;
+    var bl = m4blobLoc(d.sfx), cl = m4curLoc(); if (x.loc != null && ((bl != null && bl !== x.loc) || (cl != null && cl !== x.loc))) return false; return true; }
+  function m4rej(code){ m4st.rejected[code] = (m4st.rejected[code] || 0) + 1; return code; }
+  function m4stamp(d, chain){ var acct = m4acct(), dev = m4dev(true); if (!acct || !dev){ t4.stamped = false; return false; }
+    if (t4.dacct && t4.dacct !== acct){ t4.stamped = false; m4st.notifyRej.NOTIFY_ACCT_CHANGED = (m4st.notifyRej.NOTIFY_ACCT_CHANGED || 0) + 1; return false; }   /* ★r3 ①: 知らせの時点のアカウントと違えば付けない */
+    var n = m4seqNext(d.id); if (!n){ t4.stamped = false; return false; }
+    var rec = { v: 2, acct: acct, sid: d.id, dev: dev, n: n, lb: t4.lb, h: t4.h, chain: chain, at: Date.now() }; if (!lss(M4K + d.id, JSON.stringify(rec))){ t4.stamped = false; return false; }
+    t4.stamped = true; if (chain === 'empty') m4st.stamped++; else m4st.restamped++; return true; }
+  function m4verify(d, lb, h){ var r = null; try { r = JSON.parse(lsg(M4K + d.id) || 'null'); } catch(e){ return 'BAD_STAMP'; } if (!r) return 'NO_STAMP'; if (r.v !== 2) return 'BAD_STAMP';
+    var acct = m4acct(); if (!acct) return 'ACCT_UNKNOWN'; if (String(r.acct) !== acct) return 'ACCT_MISMATCH'; if (String(r.sid) !== d.id) return 'SID_MISMATCH';
+    var dev = m4dev(false); if (!dev || String(r.dev) !== dev) return 'DEV_MISMATCH';
+    var q = m4seqGet(), qn = q ? q.s[m4idh(d.id)] : null; if (qn == null) return 'SEQ_UNKNOWN'; if (r.n !== qn) return 'SEQ_MISMATCH';   /* ★r2 B */
+    if (r.lb !== lb) return 'LB_MISMATCH'; if (r.h !== h) return 'HASH_MISMATCH'; return 'OK'; }
+  /* ★MEM4 r5（#127-VX ④⑤）: 信用していない（untrusted・check の）間に、印があり、その hash か作ったターンが今の記憶と違うと分かったら、印と通し番号の行を消す。
+     信用を落とした直後（認証されない作り直し・別の書き手・保存途中）と、その後に認証されない作り直しが保存された後のどちらも含む。
+     こうすると、最後に認証された版（記憶と印の組）を snapshot などで戻しても、通し番号の行が無いので SEQ_UNKNOWN で認証しない。
+     印の hash と作ったターンが今の記憶と合う（別のアカウント・別の端末・物語 id 違い・アカウント待ち）ときは消さない。MEM4 が ON（かつ腕 A が ON）のときだけ動く */
+  function m4inval(){
+    try {
+      if (t4.state === 'trusted' || t4.state === 'clean' || t4.state === 'n/a') return;
+      var d = docSfx(); if (!d || memEmpty(d.sfx)) return;
+      var raw = lsg(M4K + d.id); if (raw == null) return; var r = null; try { r = JSON.parse(raw); } catch(eP){ return; }
+      if (!r || typeof r !== 'object') return;
+      if (r.h === m4hash(d.sfx) && r.lb === lbOf(d.sfx)) return;
+      lsr(M4K + d.id); m4seqDrop(d.id); m4st.invalidated = (m4st.invalidated || 0) + 1;
+    } catch(e){}
+  }
+  function track4(){ var s4 = track4a(); m4inval(); return s4; }
+  function track4a(){
+    try {
+      var d = docSfx(); if (!d){ t4 = { dk: null, state: 'n/a', why: null, lb: -1, h: null, stamped: false, since: 0 }; return 'n/a'; }
+      var empty = memEmpty(d.sfx);
+      if (t4.dk !== d.dk) t4 = { dk: d.dk, state: empty ? 'clean' : 'check', why: null, lb: -1, h: null, stamped: false, since: Date.now(), dn: m4dseq };
+      if (empty){ if (t4.state !== 'clean'){ t4.state = 'clean'; t4.why = null; t4.since = Date.now(); } t4.dn = m4dseq; m4nrej = null;   /* ★r2 A: 空を見るたびに、それまでの知らせは使えなくする */
+        if (lsg(M4K + d.id) != null){ lsr(M4K + d.id); m4seqDrop(d.id); m4st.removed++; } return 'clean'; }
+      var lb = lbOf(d.sfx), h = m4hash(d.sfx);
+      if (t4.state === 'clean'){ if (lb >= 0){
+          if (m4seen(d, lb, h)){ t4.state = 'trusted'; t4.lb = lb; t4.h = h; t4.dn = m4done.n; t4.dacct = m4done.acct || null; t4.since = Date.now(); m4stamp(d, 'empty'); }   /* ★r2 A: 見届けた fix135 の完了と一致したときだけ */
+          else { t4.state = 'untrusted'; t4.why = m4rej(m4nrej || 'UNSEEN_WRITER'); } }   /* ★r3: 使わなかった知らせがあれば、その理由 */
+        return t4.state; }
+      if (t4.state === 'check'){ var v = m4verify(d, lb, h);
+        if (v === 'OK'){ t4.state = 'trusted'; t4.lb = lb; t4.h = h; t4.stamped = true; t4.why = null; t4.dn = m4dseq; m4st.verified++; }
+        else if (v === 'ACCT_UNKNOWN'){ t4.why = v; }   /* アカウントが分かるまで待つ（その間は渡さない） */
+        else { t4.state = 'untrusted'; t4.why = m4rej(v); }
+        return t4.state; }
+      if (t4.state === 'trusted'){
+        if (h !== t4.h){ if (lb > t4.lb && m4seen(d, lb, h)){ t4.lb = lb; t4.h = h; t4.dn = m4done.n; t4.dacct = m4done.acct || null; m4stamp(d, 'chained'); }   /* ★r2 A: 作り直しも見届けたものだけ */
+          else { t4.state = 'untrusted'; t4.why = m4rej(lb > t4.lb ? (m4nrej || 'UNSEEN_WRITER') : 'CHANGED_NO_REBUILD'); } }
+        else if (!t4.stamped) m4stamp(d, 'empty');   /* アカウントが後から分かったとき、見届けた版に印を付ける */
+      }
+    } catch(e){ t4.state = 'untrusted'; t4.why = 'THREW'; }
+    return t4.state;
+  }
   function track(){
+    if (m4On()) return track4();   /* ★MEM4 */
     try {
       var d = docSfx(); if (!d){ trust = { dk: null, state: 'n/a', since: 0 }; return trust.state; }
       if (trust.dk !== d.dk){ trust = { dk: d.dk, state: memEmpty(d.sfx) ? 'clean' : 'untrusted', since: Date.now() }; return trust.state; }
@@ -84,7 +200,7 @@
     if (lsg('v292Dfix783Off') === '1') return skip('F783_OFF');
     try { var F = window.__v292Dfix697; var sid = (F && typeof F.status === 'function') ? F.status().storyId : null; if (sid == null || sid === '') return skip('ID_UNKNOWN'); if (String(sid) !== id) return skip('ID_MISMATCH'); } catch(e){ return skip('ID_UNKNOWN'); }   /* ★r2 (2): 読めない・null は見送る */
     try { var b = JSON.parse(lsg(dk) || 'null'); var bl = b && b.scene ? (b.scene.loc || null) : null, sl = S.scene ? (S.scene.loc || null) : null; if (bl && sl && bl !== sl) return skip('LOC_MISMATCH'); } catch(e){}
-    var ts = track(); if (ts !== 'trusted') return skip(ts === 'clean' ? 'NOT_BUILT_YET' : 'NOT_SESSION_BUILT');   /* ★r2 (1) */
+    var ts = track(); if (ts !== 'trusted') return skip(ts === 'clean' ? 'NOT_BUILT_YET' : (m4On() ? ('M4_' + (t4.why || (ts === 'check' ? 'CHECK' : 'UNTRUSTED'))) : 'NOT_SESSION_BUILT'));   /* ★r2 (1)・★MEM4: 見送りの理由 M4_* */
     var cur = S.turns.length - 1, lb = parseInt(lsg('chr6_v292Dfix135_last' + sfx) || '-1', 10);
     if (!(lb >= 0)) return skip('NO_MEMORY');
     if (lb > cur) return skip('STALE_FUTURE');
@@ -186,7 +302,8 @@
   function recentN(){ if (!cOn()) return 2; st.c.calls++; st.c.applied++; st.c.turns += 4; lastC = { turns: 4, at: Date.now() }; return 4; }
   window.__v292DfixMEM2 = {
     VER: VER, aOn: aOn, cOn: cOn, m3bOn: m3bOn, applyA: applyA, recentN: recentN, clean: clean, MAX: MAX, RULE: RULE,
-    stats: function(){ var o = JSON.parse(JSON.stringify(st)); o.trust = { state: trust.state }; return o; },
+    stats: function(){ var o = JSON.parse(JSON.stringify(st)); o.trust = { state: trust.state }; if (m4On()) o.m4 = { state: t4.state, why: t4.why, stamped: t4.stamped, counts: JSON.parse(JSON.stringify(m4st)) }; return o; },   /* ★MEM4: 数と理由だけ（acct・dev・hash は出さない） */
+    m4On: m4On,
     trust: function(){ track(); return { state: trust.state, since: trust.since }; },
     last: function(){ return { a: lastA ? JSON.parse(JSON.stringify(lastA)) : null, c: lastC ? JSON.parse(JSON.stringify(lastC)) : null }; }
   };

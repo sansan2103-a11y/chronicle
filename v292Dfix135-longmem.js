@@ -317,6 +317,7 @@
       if (result.worldinfo && result.worldinfo.length) saveWorldInfo(result.worldinfo);
       if (result.events && result.events.length) saveEvents(result.events);
       saveLastBuild(curTurn);
+      try { var m4h = window.__v292DfixMEM4Done; if (typeof m4h === 'function') m4h({ sfx: startSfx, loc: startLoc, lb: curTurn, ok: _lmCanSave(), r: result }); } catch(_){}   /* ★MEM4 r2/r3: 作り直しの完了を知らせるだけ（保存は上で済んでいる・受け手が無ければ何もしない）。r3: 保存しようとした結果 r を渡す（受け手が保存のとおりかを確かめる） */
       try { console.log(TAG, 'rebuilt at turn', curTurn, '— summary:', (result.summary||'').length, 'chars, worldinfo:', result.worldinfo.length, ', events:', result.events.length); } catch(_){}
     });
   }

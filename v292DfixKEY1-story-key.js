@@ -34,6 +34,7 @@
     ['v292Dfix640Evid_slot_', 'side'], ['v292Dfix640PgOn_slot_', 'flag'], ['v292Dfix924LinRev_slot_', 'side'],
     ['v292Dfix844On_slot_', 'flag'], ['v292Dfix845On_slot_', 'flag'], ['v292DfixCmfOn_slot_', 'flag'], ['v292Dfix382Touched_slot_', 'flag'],
     ['v292Dfix374Chosen_chr6_slot_', 'flag'],
+    ['v292DfixMEM4_slot_', 'side'],   /* ★MEM4: 記憶の所属証明の印（MEM2 が書く・物語と一緒に消える） */
     ['v292Dmem1_slot_', 'side'], ['v292capp_slot_', 'side'], ['v292aiInstr_slot_', 'side'], ['v292cover_seed_', 'side'],
     ['v292Dav2_mig_', 'side'], ['v292Dav2_reg_', 'side'], ['v292Dav2_blk_', 'side'], ['v292Dav2_cfl_', 'side'],
     ['v292DfixB37onb_', 'flag'],
