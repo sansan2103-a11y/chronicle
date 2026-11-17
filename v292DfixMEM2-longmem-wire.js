@@ -101,6 +101,7 @@
      人物の行は表の説明をそのまま写すだけ（推測で埋めない・行を合わせない）。名前が（ で始まる行・説明に「未登録キャラ」がある行（抽出側の注記）・同じ説明の重複は外す。保存・表には何も書かない。 */
   var M3B_SUM = 520, M3B_PPL = 240, M3B_ROW = 70, M3B_ROWS = 6, M3B_EV_MIN = 200;   /* ★MEM3 r2: 出来事の枠を最低 200 字ぶん先に取る */
   var lastParts = null;
+  var RULE3B = '出来事は起きた順に並ぶ。同じ事柄の行が複数あるときは、番号の大きい（後の）行が今の値。';   /* ★MEM3 r4（r3 の出来事は起きたターンの値のまま＝古い値と新しい値の行が並びうる） */
   /* ★MEM3 r2: あらすじを limit 字に詰める。「確定：…未定：…」の形なら、先に「未定：」の部を削り、「確定：」の部を残す */
   function trimSum(sum, limit){
     if (sum.length <= limit) return sum;
@@ -158,10 +159,11 @@
       var S = curState(state); if (!S || !parsed || typeof parsed !== 'object') { skip('NO_STATE'); return parsed; }
       var mem = readMem(S); if (!mem) return parsed;
       var text = compose(mem); if (!text){ skip('EMPTY'); return parsed; }
+      var rule = m3bOn() ? (RULE + RULE3B) : RULE;   /* ★MEM3 r4: MEM3b ON のときだけ、出来事の読み方を書式の説明として 1 文足す（OFF は従来と同じ文字列） */
       var o = {}, k, placed = false, after = Object.prototype.hasOwnProperty.call(parsed, 'earlierFacts') ? 'earlierFacts' : (Object.prototype.hasOwnProperty.call(parsed, 'storySoFar') ? 'storySoFar' : null);
-      if (!after){ o.memoryNotes = { rule: RULE, text: text }; placed = true; }
-      for (k in parsed){ if (!Object.prototype.hasOwnProperty.call(parsed, k) || k === 'memoryNotes') continue; o[k] = parsed[k]; if (k === after){ o.memoryNotes = { rule: RULE, text: text }; placed = true; } }
-      if (!placed) o.memoryNotes = { rule: RULE, text: text };
+      if (!after){ o.memoryNotes = { rule: rule, text: text }; placed = true; }
+      for (k in parsed){ if (!Object.prototype.hasOwnProperty.call(parsed, k) || k === 'memoryNotes') continue; o[k] = parsed[k]; if (k === after){ o.memoryNotes = { rule: rule, text: text }; placed = true; } }
+      if (!placed) o.memoryNotes = { rule: rule, text: text };
       st.a.applied++; st.a.chars += text.length;
       lastA = { applied: true, why: null, chars: text.length, head80: text.slice(0, 80), at: Date.now(), parts: m3bOn() ? lastParts : null };   /* ★MEM3 r2: MEM3b の内訳（あらすじ／人物／出来事の字数と件数） */
       return o;

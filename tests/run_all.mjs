@@ -150,6 +150,32 @@ try {
   check('MEM3: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
 }
 
+// ---------- 7. unit: MEM3 r4 (memory-notes rule explains how to read events, only with MEM3b), default OFF ----------
+try {
+  const vm = (await import('node:vm')).default;
+  const mk = (ls) => {
+    const L = new Map(Object.entries(ls || {})); const P = { _extensions: [], _userExtensions: [], _parseExtensions: [] };
+    const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, clearTimeout() {}, JSON, Math, Date,
+      localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
+    sb.window = sb; sb.Planner = P; vm.createContext(sb); sb.__chronicleDocumentStoryKey = 'chr6_slot_r4'; sb.__v292Dfix246 = 1; sb.__v292Dfix697 = { status: () => ({ storyId: 'r4' }) };
+    vm.runInContext(read('v292DfixMEM2-longmem-wire.js'), sb); vm.runInContext(read('v292Dfix58-prompt-rebuild.js'), sb);
+    L.set('chr6_slot_r4', JSON.stringify({ scene: { loc: '店' } }));
+    L.set('chr6_v292Dfix135_sum_slot_r4', '確定：受け取りは来週金曜の十八時。'); L.set('chr6_v292Dfix137_ev_slot_r4', JSON.stringify([{ turnIdx: 1, importance: 2, event: '受け取りは三日後と決まる' }, { turnIdx: 3, importance: 2, event: '受け取りが来週金曜十八時に変わる' }])); L.set('chr6_v292Dfix135_last_slot_r4', '4');
+    const st = { turns: Array.from({ length: 6 }, (_, i) => ({ inputType: 'DO', playerText: 'p', narrative: 'n' + i })), scene: { loc: '店' }, cast: { hero: { name: 'h' }, npcs: [] } };
+    return JSON.parse(P._userExtensions[P._userExtensions.length - 1]({ user: JSON.stringify({ currentInput: { type: 'DO', text: 'x' }, storySoFar: 'y' }), state: st })).memoryNotes;
+  };
+  const off = mk({ v292DfixMEM2aOn: '1' }), on = mk({ v292DfixMEM2aOn: '1', v292DfixMEM3bOn: '1' });
+  check('MEM3 r4: with MEM3b the notes rule adds how to read events (later line = current value); without MEM3b the rule is unchanged', /番号の大きい（後の）行が今の値/.test(on.rule) && on.rule.indexOf(off.rule) === 0 && !/後の）行/.test(off.rule) && /T2 受け取りは三日後/.test(on.text) && /T4 受け取りが来週金曜/.test(on.text), on.rule);
+  { const L = new Map(Object.entries({ chr6: JSON.stringify({ cfg: { orKey: 'k' } }), v292DfixMEM3On: '1' })); const sent = [];
+    const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, XMLHttpRequest: class { open() {} setRequestHeader() {} send(b) { sent.push(b); } }, addEventListener() {}, document: { hidden: false, addEventListener() {} },
+      localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
+    sb.window = sb; vm.createContext(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: 'n' + i })), scene: { loc: 'x' } };
+    vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); const pr = JSON.parse(sent[0]).messages[0].content;
+    check('MEM3 r5: the rebuild prompt states the protagonist-feelings criterion (not 確定 unless established; guess = 未定) and one part per matter (unsure = 未定)', /feelings that the text has not established are not recorded as a 確定 fact/.test(pr) && /if a guess is needed, treat them as 未定/.test(pr) && /Each matter goes in only one of 確定 and 未定; when unsure whether it has been decided, put it in 未定/.test(pr) && !/Do not decide the protagonist/.test(pr), ''); }
+} catch (e) {
+  check('MEM3 r4: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
+}
+
 // ---------- report ----------
 const fail = results.filter(r => !r.ok);
 const summary = { site, version: ver, loaded_js: loaded.size, pass: results.length - fail.length, fail: fail.length, results };

@@ -477,6 +477,7 @@
 
 #### MEM3 — 長期記憶の作り直しで事実が落ちる問題（2026-11-17・Local 試作・未出荷・GPT 裁定待ち）
 - MEM3（`v292DfixMEM3On='1'`・kill `v292DfixMEM3Off='1'`・既定 OFF）：fix135 の作り直しの指示のうち、summary の欄の説明・events の欄の説明・Rules の 1 文だけを書き換える（「確定：」「未定：」の 2 部・確定事実は変更が本文に出るまで残す・未定は未定のまま・古い値は新しい値に書き換え・主人公の気持ちや態度を決めない・summary は 500 字まで）。worldinfo の指示は変えない。OFF は送信バイト同一。`__v292DfixMEM3.stats()`。
+- r3・r4（2026-11-17・AB3 の A3 4 本を受けて）：MEM3 の指示で「確定：」を変わりにくい事実だけの欄にし、筋は「経過：」、瞬間の状態（時計の時刻・残り時間・立ち位置・迷い・やりかけ）はどの欄の対象でもない形にした（書式の説明・禁止文の行は足さない）。出来事は起きたターンの値のままで、変更は新しい行・更新はあらすじだけ。r5：本文で確定していない主人公の心情は確定として記録しない（推測が要るなら未定）・同じ事柄を確定と未定の両方に書かない（迷えば未定）。MEM3b ON のとき、覚え書きの rule に「出来事は起きた順。同じ事柄は番号の大きい（後の）行が今の値」を足す。r3 の語の規則で文を外す案（MEM3c）は、レビューで誤って外す 10／22 のため入れていない。
 - MEM3b（`v292DfixMEM3bOn='1'`・kill `v292DfixMEM3bOff='1'`・既定 OFF・MEM2 腕 A が ON のときだけ）：MEM2 の覚え書きを「あらすじ → 人物の表（読むだけ・6 行まで）→ 出来事」の順に組む（r2：出来事を最低 200 字ぶん先に確保し、あらすじは「確定：」の部を優先して詰める。内訳は `__v292DfixMEM2.last().a.parts`）。保存は変えない。
 
 #### MEM2 — 長期記憶の配線（2026-11-17・未出荷・独立レビュー待ち・GPT #127-VR 1）
@@ -1098,8 +1099,8 @@
 | 61 | fix659 | `v292Dfix659-fork-choice.js` | i61 | `d6e39622` | v292Dfix680 | 保存・同期 | `v292Dfix659Off` |
 | 62 | features | `features.js` | i62 | `6d812ce8` | 20261111-xss1 | 本体（ゲーム中核） | `v292Dfix190Off` `v292Dfix205gOff` `v292Dfix748SaveRefuseOff` `v292Dfix834Off` `v292DfixSAVEUIOff` `v292DfixCLICHE2Off` `v292DfixDEDUPQ1Off` `v292DfixSTATE2Off` |
 | 63 | fixP0 | `v292DfixP0-scenario-blocker.js` | i63 | `7c6d79f0` | v292Dfix680 | シナリオ・ホーム |  |
-| 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `11cc7df2` | 20261117-mem3r2 | 記憶 | `v292Dfix894Off` `v292DfixMEM3On` `v292DfixMEM3Off` |
-| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `02b9752c` | 20261117-mem3r2 | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` `v292DfixMEM3bOn` `v292DfixMEM3bOff` |
+| 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `1ac16ec3` | 20261117-mem3r5 | 記憶 | `v292Dfix894Off` `v292DfixMEM3On` `v292DfixMEM3Off` |
+| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `f4ed6ee4` | 20261117-mem3r5 | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` `v292DfixMEM3bOn` `v292DfixMEM3bOff` |
 | 65 | fix138 | `v292Dfix138-continue.js` | i65 | `db8f5e85` | 20260929-ac18 | 記憶 | `v292Drp1Off` |
 | 66 | fix145 | `v292Dfix145-charlist.js` | i66 | `e7b06fd1` | 20261101-bundle79-npres73d4b-on78c | NPC・キャラ状態 | `v292Dfix410Off` `v292Dfix487ListOff` `v292Dfix529Off` `v292Dfix773Off` |
 | 67 | fix777 | `v292Dfix777-icon-lightbox.js` | i67 | `19adb4d6` | 20261021-laneE-a | アイコン・画像 | `v292Dfix777Off` `v292DfixLE2Off` |
