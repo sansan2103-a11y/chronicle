@@ -134,6 +134,7 @@
       bClose.style.cssText = 'margin:6px 0 0 0;padding:6px 12px;font-size:13px;border-radius:7px;border:1px solid #567;background:#1a2431;color:#cfd8e3;cursor:pointer;';
       bClose.onclick = removePanel;
       el.appendChild(bDiag); el.appendChild(bClose); el.appendChild(out);
+      try { var H2 = window.__v292DfixHOLD2; if (H2 && typeof H2.decorate === 'function') H2.decorate(el, out); } catch(eH2){}   /* ★HOLD2 1a（GPT #127-VZ・kill v292DfixHOLD2Off）: 条件を全部確かめられたときだけ「削除してやり直す」を足す */
       (document.body || document.documentElement).appendChild(el);
       return el;
     } catch(e){ return null; }

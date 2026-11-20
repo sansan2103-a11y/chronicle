@@ -1022,6 +1022,7 @@
     if (!flagOn()) return cb({ ok: false, code: 'AV2_FLAG_OFF' });
     var id = curStoryId(); var S = state(); var F = F697();
     if (!id || !S || !isIdentityLocal(S.cast, id) || !F || !F.getStoryV2Once || !F.putCanonicalOnce) return cb({ ok: false, code: 'NOT_SCHEMA2_DOCUMENT' });   /* ★r5: PREP or schema2 (identity present) */
+    try { var H2 = window.__v292DfixHOLD2, w2 = (H2 && typeof H2.matWait === 'function') ? H2.matWait(id) : ''; if (w2) { try { H2.bNote((input && input.origin === AUTO_ORIGIN) ? 'setProfile:auto-refused' : 'setProfile:manual-refused'); } catch (eN) {} return cb({ ok: false, code: 'MATERIALIZATION_PENDING', message: '物語の準備（保存形式の切り替え）がまだ終わっていません。準備が終わってから、もう一度お試しください。' }); } } catch (eH2) {}   /* ★HOLD2 1b（GPT #127-VZ・kill v292DfixHOLD2bOff）: 昇格中は書かない（サーバーの rev を進めない） */
     if (typeof characterId !== 'string' || !CID_RE.test(characterId)) return cb({ ok: false, code: 'BAD_CHARACTER_ID' });
     input = isObj(input) ? input : {};
     var appearance = cleanAppearance(input.appearance);

@@ -137,6 +137,17 @@
   function admfOn() { try { var X = root.__v292DfixADMF1; return !!(X && typeof X.gate === 'function' && X.gate('starticon1', false) === true); } catch (e) { return false; } }   /* ★STARTICON2: 自分の鍵 starticon1（管理者画面）。行なし = OFF */
   function vaultHidden(id) { try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* fail-closed */
   function killed() { return lsGet(KILL) === '1' || lsGet('v292Dav2Off') === '1'; }
+  /* ★HOLD2 1b（GPT #127-VZ・kill v292DfixHOLD2bOff）: この物語の昇格 journal がある間・fix756 の実行中は、外見の自動保存・絵の送信の開始・内部の自動再読込を待つ。
+     待機が WAIT_MS（120 秒）を超えたら、このページでは再開しない（pageStop・自動再試行なし）。HOLD2 が無い・OFF → matWait は '' ＝土台と同じ */
+  function h2Hold() { try { var H = root.__v292DfixHOLD2; return (H && typeof H.matWait === 'function') ? (H.matWait(sid()) || '') : ''; } catch (e) { return 'threw'; } }
+  function h2Gate() { var w = h2Hold(), H = root.__v292DfixHOLD2; var bn = function (k) { try { if (H && typeof H.bNote === 'function') H.bNote(k); } catch (e) {} };
+    if (!w) { if (X.h2Since) { X.h2Since = 0; bn('resume'); } return false; }
+    if (!X.h2Since) { X.h2Since = Date.now(); bn('wait:' + w); }
+    X.why = 'mat-wait';
+    if (Date.now() - X.h2Since > ((H && H.WAIT_MS) || 120000) && X.pageStop !== 'MAT_WAIT_TIMEOUT') {
+      var id0 = sid(); if (X.story !== id0) { X.story = id0; X.firstTurns = null; X.okSince = 0; X.bDone = false; X.bCounted = false; }   /* = tick's own story switch, so the stop is not cleared by it */
+      X.pageStop = 'MAT_WAIT_TIMEOUT'; X.needReload = false; bn('timeout'); }
+    return true; }
   function gateWhy() {
     if (killed()) return 'kill';
     if (!admfOn()) return 'flag-off';
@@ -221,6 +232,7 @@
   /* ---------- outcome tables ---------- */
   var SENSITIVE = { SENSITIVE_DESC: 1, YOUTH_BODY_DESC: 1, SENSITIVE_DRAFT: 1 };
   var SET_STOP = { LOCAL_NOT_SYNCED: 1, REBASE_REQUIRED: 1, READ_FAIL: 1, NOT_CANONICAL_ROW: 1, CONFLICT: 1, NOT_APPLIED: 1, READBACK_FAIL: 1, APPLIED_SERVER_MOVED: 1,
+    MATERIALIZATION_PENDING: 1,   /* ★HOLD2 1b */
     SERVER_NOT_SCHEMA2: 1, AV2_OFF: 1, AV2_FLAG_OFF: 1, NOT_SCHEMA2_DOCUMENT: 1, REGISTRATION_PENDING: 1, NO_LOCAL_RECORD: 1 };   /* = LC1 / B37 STOP_SET (+2) */
   var EF_OK = { CREATED: 1, EXISTS: 1, CREATED_CONFIRMED: 1 };
   var EF_STOP = { BUDGET: 1, RATE_LIMITED: 1, LEDGER_UNHEALTHY: 1, ASSET_V2_UNAVAILABLE: 1, NOT_FOUND: 1, GENERATION_FAILED: 1, OUTCOME_UNKNOWN: 1, READ_FAIL: 1,
@@ -442,6 +454,7 @@
         if (!same(id, a0)) return endB('RECHECK');
         waitFor(quiet, WAIT_MS * 6, function (q) {
           if (!q) { X.bDone = false; return finish('B_NOT_QUIET'); }   /* nothing sent; the loop tries again later on this page */
+          if (h2Hold()) { X.bDone = false; return finish('B_MAT_WAIT'); }   /* ★HOLD2 1b: nothing sent; resumes on this page when the promotion has ended */
           if (!same(id, a0)) return endB('RECHECK');
           var b0 = (soOf(id) || { b: {} }).b[h];
           if (b0 !== 'IN_FLIGHT') return send(c, h, false);
@@ -529,6 +542,7 @@
   }
   function watchReload() {
     if (!X.needReload || X.reloaded || X.busy) return;
+    if (h2Gate()) return;   /* ★HOLD2 1b */
     var lo = listOn(), why = inFlight() ? 'INFLIGHT' : (screenBusy(lo) || (lc1Busy() ? 'LC1' : null));
     if (why) {
       if (lo && why === 'MODAL') { if (!blockedSince) blockedSince = Date.now(); if (Date.now() - blockedSince > 3000) toastWait(document.querySelector('.v292Dfix145-modal') ? 'キャラ一覧を閉じると絵の準備を続けます' : '開いている画面を閉じると絵の準備を続けます'); }
@@ -566,6 +580,7 @@
       watchReload();
       try { watchReopen(); } catch (eR) {}
       var g = gateWhy(); X.why = g || 'on'; if (g) return;
+      if (h2Gate()) return;   /* ★HOLD2 1b */
       if (BILL() && BILL().stopped(sid())) { X.why = 'bill'; return; }   /* ★BILL1c: 何も送らない */
       var id = sid();
       if (X.story !== id) { X.story = id; X.firstTurns = null; X.okSince = 0; X.pageStop = null; X.bDone = false; X.bCounted = false; }

@@ -533,6 +533,7 @@
 | fix743 | `i329`・動的 | schema2 の組み立て・当て込みの関数群（CC2）。単体では何もしない | `v292DfixCC2On`／`Off`・`v292Dfix743Off` |
 | fix750 | `i330` | 1 つの物語を schema1 → schema2 canonical へ移す状態機械（prepare は可逆・commitSchema2 は不可逆） | `v292Dfix750On`／`Off` |
 | fix756 | `i331` | **サーバーに行が無い新しい物語は最初から schema2 にする**（製品の既定。fix750 を 1 回だけ呼ぶ） | `v292Dfix756Off`・`v292Dfix810Off` |
+| fixHOLD2 | index・home | **全物語停止（fix827 の通知）の救済**：journal の対象が開いている物語・同一アカウント・非 Vault・両側 0 ターンと確かめられたときだけ「この作りかけの物語を削除してやり直す」（ホームで公式の削除〔DL2〕→墓標の確認→JR1 の退避）。**昇格中の外見保存の待機**（STARTICON・setProfile） | `v292DfixHOLD2Off`・`v292DfixHOLD2bOff` |
 | fix781 | `i17` | 未同期のローカル進行を server canonical で上書きしない（データ消失の根治） | `v292Dfix781Off` ほか |
 | fix758 | `i333` | 「クラウドに保存できていません」等のバナー（表示だけ・5 秒ごとに fix697 を読む） | `v292Dfix758Off` |
 | fix912 | `i40` | 開いたままの物語で別端末が進めたとき、PUT せず idle で 1 回 reload して収束 | `v292Dfix912Off` |
@@ -1459,6 +1460,7 @@
 | 403 | fixCALL1 | `v292DfixCALL1-confirmed-speech.js` | index（CALL1・SPK3・`ea768d0`） | `2afcbfc1` | 20261113-cast1 | 文章品質・プロンプト | `v292DfixCALL1On` `v292DfixSPK3On`（既定 OFF） |
 | 404 | fixLEAK1 | `v292DfixLEAK1-nonstory-lines.js` | index（LEAK1・`d24bbd5`〜`3ec9d68`） | `2f503c00` | 20261117-leak3r3 | 文章品質・プロンプト | `v292DfixLEAK1Off` `v292DfixLEAK1ApplyOff` `v292DfixLEAK1JkvOff` `v292DfixLEAK1OptOff`（適用は既定 ON） |
 | 417 | fixLEAK3 | `v292DfixLEAK3-internal-lines.js` | index：LEAK1 の直後（LEAK3） | `e6691dd7` | 20261117-leak3r3 | 文章品質・プロンプト | `v292DfixLEAK3On`（既定 OFF） `v292DfixLEAK3Off` |
+| 418 | fixHOLD2 | `v292DfixHOLD2-mat-hold-rescue.js` | index：fix827 の直後・home：DL2 の直後（HOLD2） | `f162e415` | 20261121-hold2 | 保存・同期 | `v292DfixHOLD2Off` `v292DfixHOLD2bOff` |
 | 405 | fixNUM1 | `v292DfixNUM1-input-ledger.js` | index（NUM1・`d24bbd5`・`7338a53`） | `62478e1a` | 20261113-num2 | 文章品質・プロンプト | `v292DfixNUM1On`（既定 OFF） `v292DfixNUM1Off` |
 | 406 | fixERRNOTE1 | `v292DfixERRNOTE1-send-error-note.js` | index（ERRNOTE1・`4f0f2b1`・`248cc36`） | `bc96a1c8` | retry2-a | UI・画面 | `v292DfixERRNOTE1Off` |
 | 407 | fixHEROVOICE1 | `v292DfixHEROVOICE1-hero-voice.js` | index：ACTOR1 の直前（HEROVOICE1・`747a505`・`85b3be2`） | `e6a8736f` | 20261114-hv1b | 文章品質・プロンプト | `v292DfixHEROVOICE1Off` `v292DfixHEROVOICE1Force` |
@@ -2202,6 +2204,7 @@
 - `v292DfixIS1Off` — fixIS1
 - `v292DfixJMPOff` — fixJMP
 - `v292DfixJR1Off` — fixJR1
+- `v292DfixHOLD2Off` / `v292DfixHOLD2bOff` — fixHOLD2（1a: fix827 の通知の「この作りかけの物語を削除してやり直す」／1b: 昇格中の外見の自動保存・setProfile・STARTICON の自動再読込の待機）
 - `v292DfixKN1Off` — fixKN1（93-j から。Knowledge の試験〔参考知識カード〕を止める。ON は管理者画面の `kn1`＝ADMF1 の行）
 - `v292DfixKP1Off` — index.html
 - `v292DfixKP1On` — index.html
