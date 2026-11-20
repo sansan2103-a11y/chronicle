@@ -35,8 +35,8 @@ function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return nul
 function ssg(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
 function sss(k, v) { try { sessionStorage.setItem(k, v); return sessionStorage.getItem(k) === v; } catch (e) { return false; } }
 function ssr(k) { try { sessionStorage.removeItem(k); } catch (e) {} }
-function off() { return lsg('v292DfixHOLD2Off') === '1' || lsg('v292DfixHOLD2On') !== '1'; }   /* stage 1 (2026-11-21): QA 前は既定 OFF。Owner PC の実機 QA 後に既定 ON へ戻す */
-function bOff() { return lsg('v292DfixHOLD2bOff') === '1' || lsg('v292DfixHOLD2bOn') !== '1'; }   /* stage 1: 同上 */
+function off() { return lsg('v292DfixHOLD2Off') === '1'; }   /* 既定 ON（GPT #127-WB・2026-11-21）。kill は v292DfixHOLD2Off */
+function bOff() { return lsg('v292DfixHOLD2bOff') === '1'; }   /* 既定 ON（GPT #127-WB）。kill は v292DfixHOLD2bOff */
 
 var st = { a: { shown: 0, offered: 0, guidance: 0, skip: {}, confirmOpened: 0, confirmCancelled: 0, executed: 0, recheckFailed: 0 },
            home: { started: 0, skip: {}, sheetOpened: 0, success: 0, fail: {}, cancelled: 0, tombstoneOk: 0, retired: 0, retireHold: 0 },
@@ -141,7 +141,7 @@ function checkAll(id) {
 }
 
 /* ---------------------------------------------------------------- 1a: index（fix827 のパネル） */
-var TXT_OTHER = 'ホームに戻り、作りかけ（0 ターン）の物語があれば削除してください。解決しない場合は管理者に連絡してください。';
+var TXT_OTHER = 'この画面からは、止まっている原因の物語を特定できません。管理者に連絡してください。';   /* GPT #127-WB: 対象を特定できないときは削除を促さず管理者案内だけ */
 var TXT_CONFIRM = 'この物語（0 ターン）を一覧から削除します。設定とアイコンは失われます。削除後、ホームで新しく作り直してください。';
 var WHY_TEXT = { turns: 'ターンが進んでいる物語です', vault: '隠している物語です', 'vault-unknown': '隠している物語かどうかを確認できません',
   'account-unknown': 'アカウントを確認できません', 'delete-unavailable': 'この画面からは削除を使えません', 'local-unreadable': '端末の状態を確認できません',
