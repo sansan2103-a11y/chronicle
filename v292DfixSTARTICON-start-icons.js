@@ -152,12 +152,73 @@
      残った句の見た目の種類（髪・瞳・服・顔）が 2 つ未満なら作らない（null） */
   /* ★VICON1 r2（独立レビュー）: 見た目の句でも、筋や時の印・関係の語・固有名らしい語を含む句、20 字を超える句は外へ出さない */
   var VICON1_PHRASE_NG = /第[0-9０-９一二三四五六七八九十百]+[章話幕部巻夜日]|後に|のちに|やがて|いずれ|かつて|以前|昔|[0-9０-９一二三四五六七八九十]+年前|失[うっいわ]|死|殺|亡|になる|となる|された|主人公|ヒロイン|プレイヤー|兄|弟|姉|妹|母|父|娘|息子|夫|妻|恋人|親友|師匠|弟子|と同じ|譲り|形見|そっくり|[「」『』"“”]|[一-龥々]{1,6}[会組団教社党家派軍]の|名札|名前|鍵|証|印|紋章|刻印|[A-Za-z]{3,}/;
+/* ===== VSAFE1-BEGIN (MXVAULT1 r3・GPT #127-WL 3 + review r2) — the SAME text is in the client (STARTICON) and in the Worker; tests compare both. =====
+   v2 = an ALLOW-list: only the words of a look vocabulary may leave (colours, hair, eyes, skin, face, body, AGE words, clothes and small things, patterns,
+   scars and marks, degree words, particles and endings). Hidden (Vault) stories only: what may leave for the translator / imgsafe / the image provider.
+   phrase(x): one look phrase → the rewritten phrase, or '' (dropped).
+     0. NFKC. A phrase of more than 20 chars (as written) or with a secret mark (VICON1_SECRET) is dropped. After step 1, a plot / time / relation / name-like rule (VICON1_PHRASE_NG, with the
+        age words masked so that 妹系・お姉さん・娘 stay, and 印象 allowed) or a rank / role / plot word (ROLE) → the whole phrase is dropped.
+     1. text in （）／() and 「」『』 is removed; rewrite: 吸血鬼の牙 → 鋭く長い犬歯, 悪魔の角 → 角, 天使の翼 → 白い翼, 天使のような → 柔らかな, 九尾 → 九本の尾,
+        クロヘビ → 黒い蛇の模様, 変装用の → '', 付け髭 → 髭.
+     2. the phrase is cut into vocabulary words (longest match). A "word" of the text (a run without hiragana) or a run of hiragana that has ANY character
+        outside the vocabulary is dropped as a whole, whatever its script (hiragana / kanji / katakana / latin / full or half width): くろへび会・ひばり学園・
+        健一・ＮＥＲＶ・ｸﾛﾍﾋﾞ・竜人・神 … never leave. A particle / ending right after a dropped word is dropped too; particles at the end are cut.
+     3. if a look word or an AGE word is left, the rest is kept; otherwise the phrase is dropped.
+   Age words (女子高校生・中学生・十二歳・幼い・少女・ランドセル …) are vocabulary and are never cut (the minor check of imgsafe must see them). */
+var VSAFE1 = (function () {
+  var SECRET = /(^|[^A-Za-z])(GM|ＧＭ)(?![A-Za-z])|専用】|【\s*(GM|ＧＭ)|裏設定|秘密|真相|本当は|本当の|ほんとう|正体|隠して|隠し事|隠れて|実は|ネタバレ|ネタばれ|誰にも|知らせない|知られて|明かす|明かさ|伏線|黒幕|犯人|偽名|本名|真の姿|裏では|表向き|化けて|化けた|見た目は人間|ふりを|振りを|偽って|偽り|内緒|極秘|機密|〔|〕|（GM|\(GM/;
+  var NG = /第[0-9０-９一二三四五六七八九十百]+[章話幕部巻夜日]|後に|のちに|やがて|いずれ|かつて|以前|昔|[0-9０-９一二三四五六七八九十]+年前|失[うっいわ]|死|殺|亡|になる|となる|された|主人公|ヒロイン|プレイヤー|兄|弟|姉|妹|母|父|娘|息子|夫|妻|恋人|親友|師匠|弟子|と同じ|譲り|形見|そっくり|[「」『』"“”]|[一-龥々]{1,6}[会組団教社党家派軍]の|名札|名前|鍵|証|印(?!象)|紋章|刻印|[A-Za-z]{3,}/;
+  var ROLE = /として|追われ|狙われ|幹部|首領|頭目|団員|組員|構成員|会員|信者|教祖|部下|手下|ボス|リーダー|スパイ|工作員|刺客|暗殺者|脱走|逃亡|指名手配|正体|変装/;
+  var V = {}, MAXL = 1;
+  [['c', 'cm kg あご あごひげ あざ うっすら えくぼ えんじ おかっぱ おさげ おでこ お団子 かけた かなり かばん かぶった かわいい かんざし がっしり きれい くせ毛 くま さらさら しっぽ しわ すこし すらり そばかす たれ目 つけた つやつや つややか つり目 とても のぞく ぱっつん ひげ ふっくら ふわふわ ほお ほくろ ほっそり ぼさぼさ ぼろぼろ ぽっちゃり まつげ まなざし まゆ もじゃもじゃ もみあげ やけど やせた やや ゆるい ゆるく よれよれ アイシャドウ アイパッチ アイボリー アホ毛 アンクレット イヤホン イヤリング インナー ウィッグ ウェーブ ウルフ ウール エプロン オッドアイ オレンジ オールバック カチューシャ カット カラー カーキ カーディガン ガウン ガーター キャップ キャミソール クリーム グリーン グレー グローブ ケープ コルセット コート ゴシック ゴム ゴーグル ゴールド サイドテール サングラス サンダル シャツ シュシュ ショート ショートパンツ シルク シルバー ジャケット ジャン ジャンパー ジャージ ジレ ジーンズ スカジャン スカート スカーフ ストッキング ストライプ ストレート ストール スニーカー スーツ ズボン セミロング センター センチ セーター セーラー ソックス タイツ タトゥー タンクトップ タートルネック ターバン ダウン チェック チェーン チャイナ チュニック チョーカー ツインテール ティアラ デニム トレンチ ドット ドレス ドレッド ナース ニット ニーソックス ニーハイ ネイビー ネイル ネクタイ ネグリジェ ネックレス ハイソックス ハイネック ハイライト ハット ハーネス ハーフアップ バッジ バンダナ パジャマ パステル パンク パンツ パンプス パーカー パート パーマ ヒール ピアス ピンク ファー フリル フリース フレーム フード ブラウス ブラウン ブラック ブルゾン ブルー ブレザー ブレスレット ブロンド ブローチ ブーツ プラチナ ヘア ヘアバンド ヘアピン ヘアー ヘッドドレス ヘッドフォン ヘッドホン ベスト ベルト ベレー ベレー帽 ベージュ ベール ペンダント ホワイト ボタン ボブ ボーダー ポケット ポニーテール ポンチョ マスク マニキュア マフラー マント ミニ ミニスカート ミント メイド メガネ メッシュ モノクロ モヒカン ラベンダー ランドセル リボン ルージュ レギンス レザー レッド レース ロリータ ロング ロングスカート ローファー ローブ ワイシャツ ワイン ワッペン ワンピース ヴェール 一つ結び 一重 三つ編み 三白眼 上 上品 上着 上衣 下 下着 下駄 不精 両 両手 両方 両目 両腕 両足 中性的 中肉中背 丸い 丸く 丸刈り 丸眼鏡 丸顔 乱れた 二つ結び 二の腕 二重 亜麻色 付けた 仮面 伸ばした 伸びた 低い 体 体つき 体型 体操服 体格 作務衣 作業服 作業着 修道服 傘 傷 傷痕 傷跡 僧衣 優しい 優しげ 先 光る 光沢 兎 兎耳 兜 入れ墨 全身 八重歯 冷たい 凛々しい 凛とした 刀 切り傷 切れ長 刈った 刈り上げ 制帽 制服 刺し傷 刺繍 刺青 剃った 前 前掛け 前開き 前髪 剣 割烹着 包帯 化粧 半分 半袖 半透明 印象 印象的 卵形 厚い 口 口元 口紅 口髭 古い 古びた 古傷 可愛い 可憐 右 右手 右腕 右足 吊り目 和服 唇 喉 喪服 団子 地味 地毛 坊主 坊主頭 垂れた 垂れ目 型 墨 外套 外衣 大きい 大きく 大きな 大柄 天然パーマ 太い 太く 太もも 妖艶 姿 姿勢 学帽 学生服 宝石 寝癖 寝間着 小さい 小さく 小さな 小麦色 少し 尻尾 尾 届く 履いた 山吹 左 左手 左腕 左足 巫女服 巫女装束 巻いた 巻き毛 布 帯 帽 帽子 広い 強面 形 後ろ 後ろ髪 微笑み 扇子 手 手袋 手首 持った 指 指先 指輪 掛けた 整った 新しい 日 日傘 日焼け 明 明るい 普段着 暗 暗い 服 木綿 本 朱 杖 束ね 束ねた 柄 染み 染めた 柔らかい 柔らかな 柔和 栗 栗色 根元 格子 桃 桃色 桃髪 桜色 模様 横 横髪 橙 歯 毛 毛並み 毛先 毛皮 毛糸 水玉 水着 水色 汚れ 汚れた 法衣 法被 泣きぼくろ 洋服 派手 浅い 浴衣 涙 淡 淡い 深い 深緑 清楚 漆黒 濃 濃い 濃紺 濡れた 火傷 灰 灰白 灰色 灰髪 無地 無精 無精ひげ 無精髭 無表情 焼けた 煙管 熊 爪 片 片方 片目 牙 犬 犬歯 犬耳 狐 狐耳 狭い 狸 狼 猫 猫耳 猫背 獣耳 琥珀 瑠璃 甚平 生えた 生やし 生やした 生成り 甲冑 痕 痣 痩せ 痩せた 痩身 癖 癖毛 白 白っぽい 白目 白色 白衣 白銀 白髪 白髪交じり 皮 皺 目 目つき 目元 目深 目立つ 目鼻立ち 眉 眉毛 真っ白 真っ赤 真っ青 真っ黒 真珠 真紅 眠そう 眼 眼つき 眼差し 眼帯 眼鏡 着 着た 着て 着物 睫毛 瞳 瞳孔 短い 短く 短め 短髪 石 破れた 硬い 碧 碧眼 礼服 私服 穏やか 空色 立派 端正 笑顔 筋肉 筋肉質 簪 精悍 紅 紋 紋様 紐 純白 素朴 素肌 紫 紫色 紫髪 細い 細く 細目 細身 細面 紺 紺色 結い 結った 結び 結んだ 絹 綺麗 緑 緑色 緑髪 編み込み 縁 縞 美しい 美人 美形 群青 羽 羽根 羽織 羽織った 翠 翡翠 翼 耳 耳飾り 肌 肌色 肩 肩幅 肩掛け 背 背丈 背中 背広 胸 胸元 胸当て 胸飾り 脚 腕 腕章 腕輪 腰 腰帯 腹 膝 臙脂 舌 色 色あせた 色白 色眼鏡 色褪せた 色黒 艶 艶やか 花 花柄 花飾り 茶 茶色 茶髪 草履 華やか 華奢 蒼 薄 薄い 薄紅 薄紫 薄茶 藍 虹彩 蛇 血色 衣 衣装 表情 袖 袖なし 被った 袴 装束 装飾 裾 褐 褐色 襟 襟元 襟巻き 覆面 覗く 角 豊か 象牙 赤 赤っぽい 赤色 赤銅 赤髪 足 足袋 跡 跳ねた 身体 身長 軍帽 軍服 軽い 輝く 輪郭 透き通った 透明 重い 金 金属 金色 金髪 鈴 銀 銀色 銀髪 銅 鋭い 鋭く 鎖 鎧 鎧姿 長い 長く 長め 長袖 長身 長靴 長髪 閉じた 開いた 開けた 険しい 隈 隻眼 青 青っぽい 青色 青髪 非常 面 面長 革 革靴 靴 靴下 鞄 頬 頬髭 頭 頭巾 頭髪 額 顎 顎髭 顔 顔つき 顔立ち 飾り 首 首元 首筋 首輪 首飾り 骨格 高い 髪 髪型 髪留め 髪紐 髪色 髪飾り 髭 鬼灯 鮮 鮮やか 鱗 鳥 鹿 麦わら帽子 麻 黄 黄ばんだ 黄色 黄金 黒 黒っぽい 黒子 黒縁 黒色 黒髪 鼻 鼻筋'], ['a', 'DC DK JC JK JS あどけない あどけなさ お兄さん お姉さん くらい ぐらい こども ショタ ロリ 中学 中学校 中学生 中年 中高生 乳児 代 低学年 児童 初老 前半 前後 十代 半ば 園児 大人 大人っぽい 大人びた 大学 大学生 女 女の子 女子 女子中学生 女子中高生 女子大学生 女子大生 女子小学生 女子高校生 女子高生 女性 妹系 姉系 娘 子ども 子供 学年 学生 小学 小学校 小学生 小柄 少女 少年 年少 年生 年配 年長 年頃 幼い 幼く 幼げ 幼さ 幼児 幼女 幼子 幼稚園児 後半 成人 才 新入生 未成年 歳 生徒 男 男の子 男子 男子中学生 男子小学生 男子高校生 男子高生 男性 程度 童顔 美少女 美少年 老いた 老人 老女 老婆 老年 若々しい 若い 若く 若者 赤ちゃん 赤子 青年 頃 高学年 高専生 高校 高校生 高齢'], ['p', ' から が と に は へ まで も や より を ・'], ['o', 'ある い いる かな がかった がち き く げ さ し した して している そう た だ だった っ っぽい っぽく て ている てる で な の ほど ぽい みたい め やか やかな ような ように らしい る れ 交じり 付き 付きの 位 入り 寄り 柄の 気味 混じり 状 的 的な 程 系 色の 調 風'], ['n', '0 1 2 3 4 5 6 7 8 9 〇 一 七 三 九 二 五 八 六 十 千 四 百']].forEach(function (e) { e[1].split(' ').forEach(function (w) { if (w) { V[w] = e[0]; if (w.length > MAXL) MAXL = w.length; } }); });
+  var AGE_RX = new RegExp(Object.keys(V).filter(function (w) { return V[w] === 'a'; }).sort(function (a, b) { return b.length - a.length; }).join('|'), 'g');
+  var DICT = [[/(?:吸血鬼|ヴァンパイア|バンパイア|きゅうけつき)の牙/g, '鋭く長い犬歯'], [/(?:悪魔|鬼|魔族|魔王)の角/g, '角'], [/天使の(?:翼|羽)/g, '白い翼'], [/天使のような/g, '柔らかな'],
+    [/九尾(?:の狐)?/g, '九本の尾'], [/クロヘビ(?:の)?/g, '黒い蛇の模様の'], [/変装用の/g, ''], [/付け髭/g, '髭'], [/付けひげ/g, 'ひげ']];
+  function isHira(ch) { return /[ぁ-ゖゝゞ]/.test(ch); }
+  function phrase(x) {
+    var s = String(x == null ? '' : x).normalize('NFKC').trim(); if (!s || s.length > 20) return '';
+    if (SECRET.test(s)) return '';
+    s = s.replace(/（[^）]*）|\([^)]*\)|「[^」]*」|『[^』]*』/g, '');
+    for (var i = 0; i < DICT.length; i++) s = s.replace(/** @type {RegExp} */ (DICT[i][0]), /** @type {string} */ (DICT[i][1]));
+    if (ROLE.test(s) || NG.test(s.replace(AGE_RX, '■'))) return '';
+    s = s.trim(); var n = s.length; if (!n) return '';
+    /* longest-match cut (fewest unknown characters first, then fewest words) */
+    var bu = [0], bt = [0], bp = [-1], bw = ['']; for (var p = 1; p <= n; p++) { bu[p] = -1; bt[p] = 0; bp[p] = -1; bw[p] = ''; }
+    var take = function (to, u, t, from, w) { if (bu[to] < 0 || u < bu[to] || (u === bu[to] && t < bt[to])) { bu[to] = u; bt[to] = t; bp[to] = from; bw[to] = w; } };
+    for (var p0 = 0; p0 < n; p0++) { if (bu[p0] < 0) continue;
+      take(p0 + 1, bu[p0] + 1, bt[p0] + 1, p0, '?');
+      for (var L = 1; L <= MAXL && p0 + L <= n; L++) { var w = s.slice(p0, p0 + L); if (V[w]) take(p0 + L, bu[p0], bt[p0] + 1, p0, w); } }
+    var toks = []; for (var e = n; e > 0; e = bp[e]) toks.unshift({ a: bp[e], b: e, w: s.slice(bp[e], e), c: bw[e] === '?' ? '?' : V[bw[e]] });
+    /* segments: runs of hiragana, and runs of everything else except spaces; one unknown character spoils its whole segment */
+    var seg = [], sid = -1; for (var k = 0; k < n; k++) { var ch = s[k], hk = /\s/.test(ch) ? 's' : isHira(ch) ? 'h' : 'x'; if (k === 0 || hk !== (/\s/.test(s[k - 1]) ? 's' : isHira(s[k - 1]) ? 'h' : 'x')) sid++; seg[k] = sid; }
+    var bad = {}; toks.forEach(function (t) { if (t.c === '?') for (var k = t.a; k < t.b; k++) bad[seg[k]] = 1; });
+    var out = [], prevKept = false, oRun = 0, look = false;
+    toks.forEach(function (t) { var spoiled = false; for (var k = t.a; k < t.b; k++) if (bad[seg[k]]) spoiled = true;
+      if (/^\s+$/.test(t.w)) { if (prevKept) out.push({ w: ' ', c: 'p' }); return; }
+      if (spoiled || t.c === '?') { prevKept = false; oRun = 0; return; }
+      if (t.c === 'p' || t.c === 'o') { if (!prevKept) return; if (t.c === 'o') { oRun += t.w.length; if (oRun > 5) { prevKept = false; return; } } out.push(t); return; }
+      oRun = 0; prevKept = true; if (t.c === 'c' || t.c === 'a') look = true; out.push(t); });
+    while (out.length && out[out.length - 1].c === 'p') out.pop();
+    if (!look) return '';
+    var r = out.map(function (t) { return t.w; }).join('').replace(/\s+/g, ' ').trim();
+    if (!r || SECRET.test(r)) return '';
+    return r;
+  }
+  function text(t) { var out = []; String(t == null ? '' : t).normalize('NFKC').split(/[、,。]/).forEach(function (x) { var p = phrase(x); if (p && out.indexOf(p) < 0) out.push(p); }); return out.join('、'); }
+  function secret(t) { try { return SECRET.test(String(t == null ? '' : t).normalize('NFKC')); } catch (e) { return true; } }
+  return { v: 2, phrase: phrase, text: text, secret: secret };
+})();
+/* ===== VSAFE1-END ===== */
   function viconVisual(draft) { try { var P = root.__v292DfixLC1prop; if (!draft || !P || typeof P.slotsOf !== 'function') return null;
-      var keep = String(draft.text || '').split('、').map(function (x) { return x.trim(); }).filter(function (x) { if (!x) return false; if (x.length > 20 || VICON1_PHRASE_NG.test(x)) return false; var sl = P.slotsOf(x); for (var k in sl) if (sl[k]) return true; return false; });
+      var keep = String(draft.text || '').split('、').map(function (x) { return VSAFE1.phrase(x); }).filter(function (x, i, a) { if (!x || a.indexOf(x) !== i) return false;   /* ★MXVAULT1 r3: VSAFE1 v2 (見た目の語彙だけを残す。NG・20 字は VSAFE1 の中で元の句に掛ける) */ var sl = P.slotsOf(x); for (var k in sl) if (sl[k]) return true; return false; });
       var sl2 = P.slotsOf(keep.join('、')), n = 0; ['hair', 'eyes', 'clothes', 'feature'].forEach(function (k) { if (sl2[k]) n++; }); if (n < 2) return null;
       return { text: keep.join('、'), gender: draft.gender || '' }; } catch (e) { return null; } }
   function viconUnsafe(desc) { var d = String(desc == null ? '' : desc).normalize('NFC'); if (VICON1_SECRET.test(d)) return 'SECRET_MARK';
     try { var P = root.__v292DfixLC1prop; if (P && typeof P.fx3Hidden === 'function' && P.fx3Hidden(d)) return 'HIDDEN_IDENTITY'; } catch (e) { return 'THREW'; } return ''; }
+  /* ★MXVAULT1: MIDICON（隠した物語）にも同じ VSAFE1 を使わせる（1 か所）。STARTICON の通常の物語の動きは変えない（VICON1 は隠した物語だけ） */
+  root.__v292DfixVICON1Clean = function (t) { try { return VSAFE1.text(t); } catch (e) { return ''; } };
+  root.__v292DfixVICON1Clean.secret = function (t) { return VSAFE1.secret(t); };   /* secret marks only (for a name) */
+  root.__v292DfixVICON1Clean.phrase = function (x) { try { return VSAFE1.phrase(x); } catch (e) { return ''; } };   /* tests: the client side of the shared table */
   function killed() { return lsGet(KILL) === '1' || lsGet('v292Dav2Off') === '1'; }
   /* ★HOLD2 1b（GPT #127-VZ・kill v292DfixHOLD2bOff）: この物語の昇格 journal がある間・fix756 の実行中は、外見の自動保存・絵の送信の開始・内部の自動再読込を待つ。
      待機が WAIT_MS（120 秒）を超えたら、このページでは再開しない（pageStop・自動再試行なし）。HOLD2 が無い・OFF → matWait は '' ＝土台と同じ */

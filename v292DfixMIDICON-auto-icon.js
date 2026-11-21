@@ -111,6 +111,11 @@
   function vaultHidden(id) {   /* fail-closed: no fix889 → treat as hidden (do nothing). Worker is strict as well. */
     try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; }
   }
+  /* ★MXVAULT1（GPT #127-WJ ■2・既定 OFF）: 隠した物語で動いてよいかは STARTICON の __v292DfixVaultOpenWhy（VICON1 の鍵・kill・fix889 が本物・ready・unlocked・status().open）。'' = よい。
+     無い・投げた・それ以外 = 止める（fail-closed）。外見の句は STARTICON の VICON1 と同じ除外（__v292DfixVICON1Clean）を掛ける。 */
+  function mxvWhy(id) { try { var f = root.__v292DfixVaultOpenWhy; if (typeof f !== 'function') return 'NO_VICON1'; var w = f(id); return w ? String(w).slice(0, 24) : ''; } catch (e) { return 'THREW'; } }
+  function mxvClean(t) { try { var f = root.__v292DfixVICON1Clean; return typeof f === 'function' ? String(f(t) || '') : ''; } catch (e) { return ''; } }
+  function mxvSecret(t) { try { var f = root.__v292DfixVICON1Clean; return !(f && typeof f.secret === 'function') || f.secret(t) !== false; } catch (e) { return true; } }
   function killed() { return lsGet(KILL) === '1' || lsGet('v292Dav2Off') === '1'; }
   function gateWhy() {
     if (killed()) return 'kill';
@@ -118,7 +123,7 @@
     if (!loggedIn()) return 'not-logged-in';
     if (!doc2()) return 'not-schema2';
     var id = sid(); if (!id) return 'no-story';
-    if (vaultHidden(id)) return 'vault';
+    if (vaultHidden(id) && mxvWhy(id)) return 'vault';   /* ★MXVAULT1: 隠した物語は VICON1 の鍵 ON・解錠中・扉が開いているときだけ先へ（Worker の名乗りは mx_list の後で確かめる） */
     var f = F697(); if (!f || typeof f.assetV2Mx !== 'function') return 'no-port';
     return '';
   }
@@ -418,7 +423,8 @@
       if (err || !r || r.status !== 200 || !j || !Array.isArray(j.extras)) { stats.listFail++; var code = err || (j && (j.errorCode || j.error)) || ('HTTP_' + (r && r.status)); note({ kind: 'LIST_FAIL', code: code, http: r && r.status });
         if (r && (r.status === 403 || r.status === 404 || r.status === 501)) X.stopped = 'LIST_' + r.status + ':' + String(code).slice(0, 24);   /* not enabled / Vault / not schema 2 / kill → stop for this page */
         cb(null, code); return; }
-      setExtras(id, j); note({ kind: 'LIST_OK', n: X.extras.length, tc: X.turnCount }); cb(j, null);
+      setExtras(id, j); X.mxv = (j.mxVaultV1 === 1) ? id : null;   /* ★MXVAULT1: the Worker said it lets this hidden story through (env CHR_MX_VAULT_ON) */
+      note({ kind: 'LIST_OK', n: X.extras.length, tc: X.turnCount }); cb(j, null);
     });
   }
 
@@ -653,7 +659,7 @@
   var STOP_PAGE = { BUDGET: 1, LEDGER_UNHEALTHY: 1, MX_CAP: 1, RATE_LIMITED: 1, IMG_RATE: 1, IMG_MONTHLY_CAP: 1, IMG_ACCT_MONTHLY_CAP: 1, MX_OFF: 1, MX_NOT_ENABLED: 1, APPEARANCE_UNSAFE_MINOR: 1, NOT_FOUND: 1,
     APPEARANCE_UNSAFE_POLICY: 1, PUBLIC_MODE_OFF: 1, TRIAL_MODEL_UNCONFIGURED: 1, GENERATION_FAILED: 1 };   /* ★mx3-c: + POLICY (real_person / explicit), public mode OFF, provider failure */
   /* ★mx3-c (GPT #127-QM): reason class. The Worker sends mxk for answers of the module; the outer gates (public mode / budget / rate / ledger) are classed here. */
-  var NOT_YET = { MX_NO_EVIDENCE: 1, MX_NOT_YET: 1, MX_THIN: 1, MX_FEW_FEATURES: 1, MX_KIND_NO_EVIDENCE: 1, MX_APPEARANCE_CONFLICT: 1 };
+  var NOT_YET = { VAULT_FEW_VISUAL: 1, MX_NO_EVIDENCE: 1, MX_NOT_YET: 1, MX_THIN: 1, MX_FEW_FEATURES: 1, MX_KIND_NO_EVIDENCE: 1, MX_APPEARANCE_CONFLICT: 1 };
   function reasonKind(st, code, rj) {
     if (rj && typeof rj.mxk === 'string' && /^[a-z_]{2,12}$/.test(rj.mxk)) return rj.mxk;
     if (st === 200) return 'ok'; if (code === 'APPEARANCE_UNSAFE_MINOR' || code === 'APPEARANCE_UNSAFE_POLICY' || code === 'PROFILE_NOT_ENGLISH') return 'imgsafe';
@@ -718,6 +724,11 @@
     return 'started';
   }
   function ensureSend(id, n, p) {   /* ★W-MXREG: the request 2 of the turn, split out so the registered path uses the same answer handling */
+      if (vaultHidden(id)) {   /* ★MXVAULT1: checked again right before the write; the appearance keeps only the VICON1-clean look phrases (the Worker keeps only those found in the story text) */
+        var vw = mxvWhy(id) || (X.mxv === id ? '' : 'WORKER_OFF'); if (vw) return finish('VAULT_GATE', vw);
+        if (mxvSecret(p.key)) return finish('VAULT_HANDLE');   /* r2: the handle is a name (often katakana), so only the secret marks are checked; it goes to the Worker only, never to a provider */
+        var va = mxvClean(p.appearance); if (!va) return finish('VAULT_FEW_VISUAL');
+        p = Object.assign({}, p, { appearance: va }); }
       var args = { story_id: id, handle: p.key, expected_turn_count: n, appearance: p.appearance, kind: p.kind };
       if (p.reg) args.character_id = p.character_id;
       if (p.vars.length) args.variants = p.vars; if (p.traits.length) args.traits = p.traits; if (p.gender) args.gender = p.gender;

@@ -1437,12 +1437,12 @@
 | 376 | fixNDI1 | `v292DfixNDI1-no-direct-image.js` | i1 h1（91-b の番号。両方で最初） | `54dadff9` | 20261103-bundle91-b | アイコン・画像 | （kill なし） |
 | 377 | fixEDLOG | `v292DfixEDLOG-narr-edit-log.js` | SFLTap の直後（92-a。home では読まない） ※読み込み停止（2026-11-15・CLEANUP3） | `4cb1ed47` | 20261103-bundle92-a | 話者・会話ログ | `v292DfixEDLogOn`（既定 OFF）`v292DfixEDLogOff` |
 | 378 | fixICF80 | `v292DfixICF80-record.js` | ICF の直後（92-a。home では読まない） ※読み込み停止（2026-11-15・CLEANUP3） | `592a85ca` | 20261103-bundle92-a | アイコン・画像 | `v292DfixICF80On`（既定 OFF）`v292DfixICF80Off` |
-| 379 | fixMIDICON | `v292DfixMIDICON-auto-icon.js` | SETAV1 の直後（93-a。home では読まない） | `4c7927e0` | 20261108-bundle93-i | アイコン・画像 | `v292DfixMIDICONOff` `v292DfixMIDICONrosOff` `v292DfixMIDICONregOff` |
+| 379 | fixMIDICON | `v292DfixMIDICON-auto-icon.js` | SETAV1 の直後（93-a。home では読まない） | `24bcf460` | 20261121-mxvault1r3 | アイコン・画像 | `v292DfixMIDICONOff` `v292DfixMIDICONrosOff` `v292DfixMIDICONregOff` `v292DfixVICON1Off`（Vault・MXVAULT1） |
 | 380 | fixISO1 | `v292DfixISO1-local-only-foreign-hide.js` | index：fix893 の直後／home：iso2 の後・fix889 の前（93-d） | `0f1ff245` | 20261107-iso1e | Vault・ユーザー分離 | `v292DfixISO1Off` |
 | 381 | fixSETUI1 | `v292DfixSETUI1-settings-layout.js` | index の最後（FLW5 の後・93-g。home では読まない） | `3892c38f` | 20261108-bundle93-g | UI・画面 | `v292DfixSETUI1Off` |
 | 382 | fixIDSPLIT2 | `v292DfixIDSPLIT2-selfname-merge.js` | index：fix620 の直後（93-h。home では読まない） | `3f75a2f2` | 20261108-bundle93-i | 話者・会話ログ | `v292DfixIDSPLIT2Off` |
 | 383 | fixGENDER1 | `v292DfixGENDER1-autogender.js` | index：fix335 の直前／home：fix436 の直前（93-h） | `3291ae11` | 20261108-bundle93-h | シナリオ・ホーム | `v292DfixGENDER1Off` |
-| 384 | fixSTARTICON | `v292DfixSTARTICON-start-icons.js` | index：MIDICON の直後（93-i。home では読まない） | `619ff15a` | 20261121-restyle1on | アイコン・画像 | `v292DfixSTARTICONOff` `v292DfixSTARTICONNoAI` `v292DfixSTARTICONRetryOff` `v292DfixSTARTICONListOff` `v292DfixVICON1Off` |
+| 384 | fixSTARTICON | `v292DfixSTARTICON-start-icons.js` | index：MIDICON の直後（93-i。home では読まない） | `faf8bcb1` | 20261121-mxvault1r3 | アイコン・画像 | `v292DfixSTARTICONOff` `v292DfixSTARTICONNoAI` `v292DfixSTARTICONRetryOff` `v292DfixSTARTICONListOff` `v292DfixVICON1Off` |
 | 385 | fixKN1 | `v292DfixKN1-knowledge-canary.js` | index の最後（SETUI1 の後・93-j。home では読まない） | `63f439a1` | 20261109-bundle93-j | 文章品質・プロンプト | `v292DfixKN1Off` |
 | 386 | fixLORE1 | `v292DfixLORE1-world-lore.js` | index の最後（KN1 の後・93-l。home では読まない） | `34c9217d` | 20261110-bundle93-l | 文章品質・プロンプト | `v292DfixLORE1Off`（ON は鍵 `lore1` か `v292DfixLORE1On`。既定は影モード） |
 | 387 | fixAGENCY1 | `v292DfixAGENCY1-player-intent.js` | index：fix192 の直後（93-m。home では読まない） | `0079579c` | 20261110-agency1c | 文章品質・プロンプト | `v292DfixAGENCY1Off`・`v292DfixAGENCY1StoryOff`・`v292DfixAGENCY1StoryMode`（ON は鍵 `agency1` か `v292DfixAGENCY1On`。既定は影） |
