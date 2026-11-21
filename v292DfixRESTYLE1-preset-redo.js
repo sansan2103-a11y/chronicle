@@ -50,7 +50,7 @@
   function presetKey() { var S = state(); if (!S || !S.cfg) return null; if (!Object.prototype.hasOwnProperty.call(S.cfg, 'artPreset') || S.cfg.artPreset === undefined) return 'dark'; var v = S.cfg.artPreset; return KEYS.indexOf(v) >= 0 ? v : null; }
   function A() { return root.__chronicleAssetV2 || null; }
   function F697() { return root.__v292Dfix697 || null; }
-  function vaultHidden(id) { try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* fail-closed */
+  function vaultHidden(id) { try { var G = root.__v292DfixVAULTGATE2; if (G && typeof G.hidden === 'function') return G.hidden(id) !== false; } catch (e) { return true; } try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* ★VAULTGATE2: vault2 と fix889 の両方（1 か所） */   /* fail-closed */
   function vaultWhy(id) { if (!vaultHidden(id)) return ''; try { var f = root.__v292DfixVaultOpenWhy; if (typeof f !== 'function') return 'NO_VAULT_GATE'; return f(id) || ''; } catch (e) { return 'THREW'; } }   /* = STARTICON VICON1 の判定（1 か所） */
   function saved(id) {
     try { var F5 = root.__v292Dfix705; var d = F5 && typeof F5.docAuthority === 'function' ? F5.docAuthority() : null;

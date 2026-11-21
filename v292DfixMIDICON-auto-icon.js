@@ -109,6 +109,7 @@
   /* ★iconx1 B: the nh1 module (its own key nh1 + kill v292DfixNH1Off) */
   function NH() { try { var N = root.__v292DfixNH1; return (N && typeof N.on === 'function' && N.on()) ? N : null; } catch (e) { return null; } }
   function vaultHidden(id) {   /* fail-closed: no fix889 → treat as hidden (do nothing). Worker is strict as well. */
+    try { var G = root.__v292DfixVAULTGATE2; if (G && typeof G.hidden === 'function') return G.hidden(id) !== false; } catch (e) { return true; }   /* ★VAULTGATE2: vault2 と fix889 の両方（1 か所） */
     try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; }
   }
   /* ★MXVAULT1（GPT #127-WJ ■2・既定 OFF）: 隠した物語で動いてよいかは STARTICON の __v292DfixVaultOpenWhy（VICON1 の鍵・kill・fix889 が本物・ready・unlocked・status().open）。'' = よい。

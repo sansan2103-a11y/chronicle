@@ -135,13 +135,13 @@
   function storyCap() { var n = limOf('starticon_story_imgs', null); if (n === null) return { hero: true, npcs: CAP.npcs, src: 'const' };   /* = before: hero 1 + NPCs 3 */
     if (n === Infinity) return { hero: true, npcs: Infinity, src: 'row' }; return { hero: n >= 1, npcs: Math.max(0, n - 1), src: 'row' }; }
   function admfOn() { try { var X = root.__v292DfixADMF1; return !!(X && typeof X.gate === 'function' && X.gate('starticon1', false) === true); } catch (e) { return false; } }   /* ★STARTICON2: 自分の鍵 starticon1（管理者画面）。行なし = OFF */
-  function vaultHidden(id) { try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* fail-closed */
+  function vaultHidden(id) { try { var G = root.__v292DfixVAULTGATE2; if (G && typeof G.hidden === 'function') return G.hidden(id) !== false; } catch (e) { return true; } try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* ★VAULTGATE2: vault2 と fix889 の両方（1 か所） */   /* fail-closed */
   /* ★VICON1（GPT #127-WH・STARTICON）: 隠した物語でも、Vault が解錠中で、この物語が開かれているときだけ作る。
      判定（どれか 1 つでも欠ければ今までどおり作らない＝fail-closed）: fix889 が本物・状態 ready・解錠のしるし（unlocked）・扉が開いている（status().open）・その物語が隠した物語。
      既定は下の VICON1_DEFAULT_ON（1 か所）。kill: localStorage v292DfixVICON1Off='1'（隠した物語では今までどおり作らない）。VICON1_DEFAULT_ON を false にしたときは v292DfixVICON1On='1' の端末だけ。 */
   var VICON1_DEFAULT_ON = false, vstats = { gate: {}, skip: {}, draft: 0, conf: 0 };
   function viconOn() { return lsGet('v292DfixVICON1Off') !== '1' && (VICON1_DEFAULT_ON || lsGet('v292DfixVICON1On') === '1'); }
-  function vaultOpenWhy(id) { try { var V = root.__v292Dfix889; if (!V || V.__real !== true || typeof V.isHidden !== 'function' || typeof V.state !== 'function' || typeof V.unlocked !== 'function' || typeof V.status !== 'function') return 'NO_VAULT';
+  function vaultOpenWhy(id) { try { var G = root.__v292DfixVAULTGATE2; if (G && typeof G.openWhy === 'function') return G.openWhy(id); } catch (e) { return 'THREW'; } try { var V = root.__v292Dfix889; if (!V || V.__real !== true || typeof V.isHidden !== 'function' || typeof V.state !== 'function' || typeof V.unlocked !== 'function' || typeof V.status !== 'function') return 'NO_VAULT';
       if (!V.isHidden(id)) return 'NOT_HIDDEN'; if (V.state() !== 'ready') return 'NOT_READY'; if (V.unlocked() !== true) return 'LOCKED'; var s = V.status(); if (!s || s.open !== true) return 'NOT_OPEN'; return ''; } catch (e) { return 'THREW'; } }
   function vcount(m, k) { k = String(k || 'X').slice(0, 32); m[k] = (m[k] || 0) + 1; }
   /* ★RESTYLE1: 隠した物語で動いてよいかの判定を 1 か所から出す（VICON1 の ON/OFF と、解錠中で扉が開いていること）。'' = 動いてよい */
