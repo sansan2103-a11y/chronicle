@@ -144,6 +144,8 @@
   function vaultOpenWhy(id) { try { var V = root.__v292Dfix889; if (!V || V.__real !== true || typeof V.isHidden !== 'function' || typeof V.state !== 'function' || typeof V.unlocked !== 'function' || typeof V.status !== 'function') return 'NO_VAULT';
       if (!V.isHidden(id)) return 'NOT_HIDDEN'; if (V.state() !== 'ready') return 'NOT_READY'; if (V.unlocked() !== true) return 'LOCKED'; var s = V.status(); if (!s || s.open !== true) return 'NOT_OPEN'; return ''; } catch (e) { return 'THREW'; } }
   function vcount(m, k) { k = String(k || 'X').slice(0, 32); m[k] = (m[k] || 0) + 1; }
+  /* ★RESTYLE1: 隠した物語で動いてよいかの判定を 1 か所から出す（VICON1 の ON/OFF と、解錠中で扉が開いていること）。'' = 動いてよい */
+  root.__v292DfixVaultOpenWhy = function (id) { try { if (!viconOn()) return 'VICON1_OFF'; return vaultOpenWhy(id); } catch (e) { return 'THREW'; } };
   /* 隠した物語の説明文に、外見以外の秘密が混ざっている印（GM・秘密・正体・隠している 等）があれば、その人物は自動では作らない（安全に分けられないとみなす） */
   var VICON1_SECRET = /(^|[^A-Za-z])(GM|ＧＭ)(?![A-Za-z])|専用】|【\s*(GM|ＧＭ)|裏設定|秘密|真相|本当は|本当の|ほんとう|正体|隠して|隠し事|隠れて|実は|ネタバレ|ネタばれ|誰にも|知らせない|知られて|明かす|明かさ|伏線|黒幕|犯人|偽名|本名|真の姿|裏では|表向き|化けて|化けた|見た目は人間|ふりを|振りを|偽って|偽り|内緒|極秘|機密|〔|〕|（GM|\(GM/;
   /* 近道の下書き（説明文の句そのまま）から、見た目の枠（年代・髪・瞳・服・顔や肌・体格＝LC1prop.slotsOf）に当たる句だけを残す。役割・肩書き・種類の語など枠に当たらない句は外す。

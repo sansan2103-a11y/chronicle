@@ -35,7 +35,8 @@
   var KILLED = lsg('v292DfixD1Off') === '1';
   /* ★admg1（laneADMG）: ON = kill でない && ADMF1.gate('ld1', 端末の opt-in)。OFF で kill でなければ、答えが届いて ON になったら 1 回だけ起こす（ON→OFF は次に開いた時から） */
   var ADM = window.__v292DfixADMF1, devLD1 = function(){ return lsg('v292DfixLD1On') === '1'; };
-  var ON = !KILLED && (function(){ try { return !!(ADM && typeof ADM.gate === 'function' && ADM.gate('ld1', devLD1()) === true); } catch(e){ return false; } })();
+  var RESTYLE1 = lsg('v292DfixRESTYLE1Off') !== '1' && lsg('v292DfixRESTYLE1On') === '1';   /* ★RESTYLE1（GPT #127-WJ ■3）: 画風を戻したとき前の採用画像を表示で戻すのは LD1 だけ。RESTYLE1 が ON の端末では管理者の鍵に依らず ON（この 1 か所） */
+  var ON = !KILLED && (RESTYLE1 || (function(){ try { return !!(ADM && typeof ADM.gate === 'function' && ADM.gate('ld1', devLD1()) === true); } catch(e){ return false; } })());
   if (!ON && !KILLED){ try { if (ADM && typeof ADM.whenOn === 'function') ADM.whenOn('ld1', devLD1, function(){ if (lsg('v292DfixD1Off') === '1') return; var cur = window.__v292DfixLD1; if (cur && cur.on === true) return; window.__v292DfixLD1 = undefined; ld1Main(); }); } catch(e){} }
   if (!ON){ window.__v292DfixLD1 = { version: 'ld1-r2', on: false, killed: KILLED, status: function(){ return { on: false, killed: KILLED }; } }; return; }
 
