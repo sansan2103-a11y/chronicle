@@ -1480,7 +1480,7 @@
 | 416 | fixGEN1 | `v292DfixGEN1-gen-budget.js` | index：fix228 の直後（GEN1） | `9769f4f2` | 20261116-gen1r4 | 保存・同期 | `v292DfixGEN1On`（既定 OFF） `v292DfixGEN1Off` |
 | 419 | fixRESTYLE1 | `v292DfixRESTYLE1-preset-redo.js` | index：fg3 の直後（RESTYLE1・既定 ON（restyle1on）） | `18a8eea3` | 20261122-vaultgate2r2 | アイコン・画像 | `v292DfixRESTYLE1Off` |
 | 420 | fixVAULTGATE2 | `v292DfixVAULTGATE2-vault-open.js` | index：fix889 の直後（VAULTGATE2・既定 ON・r2: 部品が無いと呼ぶ側が止める／読み直しの後退） | `3c1b3a56` | 20261122-vaultgate2r2 | Vault・非表示 | `v292DfixVAULTGATE2Off` |
-| 421 | fixSCENE1 | `v292DfixSCENE1-cast-presence-input.js` | index：fix192 の直後（SCENE1・GPT #127-WN 優先2・既定 OFF。11-11 の laneSCENE1〔NOW1 等〕とは別） | `bb145f10` | 20261122-scene1 | 生成の中心・プロンプト | `v292DfixSCENE1On`（既定 OFF） `v292DfixSCENE1Off` `v292DfixSCENE1aOff` `v292DfixSCENE1bOff` `v292DfixSCENE1cOff` |
+| 421 | fixSCENE1 | `v292DfixSCENE1-cast-presence-input.js` | index：fix192 の直後（SCENE1・GPT #127-WN 優先2・既定 OFF。11-11 の laneSCENE1〔NOW1 等〕とは別） | `ba97abdf` | 20261122-scene1r4 | 生成の中心・プロンプト | `v292DfixSCENE1On`（既定 OFF） `v292DfixSCENE1Off` `v292DfixSCENE1aOff` `v292DfixSCENE1bOff` `v292DfixSCENE1cOff` |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
 

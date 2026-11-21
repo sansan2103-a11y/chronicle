@@ -31,7 +31,7 @@
 (function (root) {
   'use strict';
   if (root.__v292DfixSCENE1) return;
-  var VER = 'scene1-20261122-r3';
+  var VER = 'scene1-20261122-r4';
   var CONT_TEXT = '続きを自然に進めてください。';
   function ls(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function on() { return ls('v292DfixSCENE1Off') !== '1' && ls('v292DfixSCENE1On') === '1'; }
@@ -42,7 +42,7 @@
   function str(x) { return x == null ? '' : String(x); }
   function sp(x) { return str(x).replace(/[\s　]/g, ''); }
   function esc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-  var ST = { builds: 0, fgCalls: 0, aAttr: 0, aSpeaker: 0, aLock: 0, aUnappeared: 0, aUnknown: 0, bExits: 0, bBacks: 0, bBackWhy: { heroMoved: 0, input: 0, speaker: 0, back: 0, withHero: 0, acts: 0 }, bStale: 0, aMaybe: 0, bPlaceLines: 0, bFgOut: 0, bNpres: 0,
+  var ST = { builds: 0, fgCalls: 0, aAttr: 0, aSpeaker: 0, aLock: 0, aUnappeared: 0, aUnknown: 0, bExits: 0, bExitsInput: 0, bBacks: 0, bBackWhy: { heroMoved: 0, input: 0, speaker: 0, back: 0, withHero: 0, acts: 0 }, bStale: 0, aMaybe: 0, bPlaceLines: 0, bFgOut: 0, bNpres: 0,
     cSkip: { '306': 0, '309': 0, '192': 0 }, cTenkai: { T1: 0, T2: 0, chars: 0 }, cFgOut: 0, cKind: { cont: 0, DO: 0, SAY: 0, STORY: 0, unknown: 0 }, cLegacy: 0, cMarked: 0, cRetry: 0,
     sysDelta: { attr: 0, speaker: 0, lock: 0 }, errors: 0 };
   function err() { ST.errors++; }
@@ -204,6 +204,14 @@
   var EXIT_V = '(?:(?:へ|に|の方へ)(?:戻っ|帰っ|引き上げ|引き揚げ)(?!て(?:き|来|く|こ))(?:た|て)|(?:帰って|戻って|下りて|降りて)(?:行っ|いっ)(?:た|て)|出て(?:行っ|いっ)(?:た|て|てしまっ)|(?:部屋|自室|店|家|外|廊下|裏口|玄関|戸口|屋敷|教室|事務所)(?:を|から)出(?:た|て)(?!き|来|い(?:か|け))|立ち去(?:った|って)|去っ(?:た|て)(?!き|来)|去っていっ(?:た|て)|退出し(?:た|て)|退室し(?:た|て)|席を外し(?:た|て)|姿を消し(?:た|て)|(?:追い出され|追放され|締め出され|放り出され|連れ出され)(?:た|て))';
   var OBJ_V = '(?:追い出し|追放し|締め出し|放り出し|押し出し|追い返し|外へ出し|外に出し)(?:た|て|、|$)';
   var INROOM = /(?:席|レジ|机|椅子|カウンター|ソファ|窓辺|窓際|壁際|隅|奥|そば|脇|横|前|後ろ|元の場所|元の位置|定位置|持ち場|作業|仕事|話|本題|手元|視線|顔|調子|笑顔|表情|自分|正気|我|意識)$/;
+  /* ★r4（実 AI の比較 42 本で b が一度も働かなかった真因: 退出の検出が AI の本文だけを読み、利用者の DO・STORY 入力に書かれた退出を読んでいなかった）:
+     利用者の DO・STORY 入力も、本文と同じ規則（主語がその人だけ・否定／仮定／回想／かっこの中は除く・同じ文と次の文で戻る・留まるなら除く）で読む。
+     入力は「戻る・出ていく・立ち去る」のような言い切りの形でも書かれるので、その形を足す。SAY は読まない（台詞の中身は命令や希望であり得る）。
+     依頼・希望・意思（〜よう頼む・〜てほしい・〜たい・〜させる 等）は退出にしない。 */
+  var EXIT_V_IN = '(?:(?:へ|に|の方へ)(?:戻る|帰る|引き上げる|引き揚げる)|(?:帰って|戻って|下りて|降りて)(?:行く|いく)|出て(?:行く|いく)|(?:部屋|自室|店|家|外|廊下|裏口|玄関|戸口|屋敷|教室|事務所)(?:を|から)出る|立ち去る|去る|去っていく|退出する|退室する|席を外す|姿を消す|(?:追い出され|追放され|締め出され|放り出され|連れ出され)る)';
+  var OBJ_V_IN = '(?:追い出す|追放する|締め出す|放り出す|押し出す|追い返す|外へ出す|外に出す)';
+  var IRREAL_IN = /よう(?:に)?(?:頼|言|促|告|伝|お願|命じ)|てほしい|て欲しい|てもらう|させる|させて|たい|たがる|ようとする|しようと|かどうか|ないか|[？?]/;
+  var EXCOUNT = {};   /* 退出を確定した (人, ターン) を 1 回だけ数える（メモリだけ・保存しない） */
   var IRREAL = /かもしれ|だろう|ような|ように|ようと|そうに|そうだ|ふり|つもり|たら|なら|れば|はず|夢|想像|回想|思い出|電話|画面/;
   var PAST = /昔|かつて|以前|その頃|あの頃|あの日|あの時|当時|幼い頃|子供の頃|子どもの頃|若い頃|年前|ヶ月前|か月前|カ月前|ことがある|ことがあった|ていた頃|だった頃/;
   var NEG_AFTER = /^[^。、]{0,6}(?:ず|ずに|ない|なかった|ません|まい)/;
@@ -226,15 +234,15 @@
   function heroForms() { try { var S = getS(); var h = S && S.cast && S.cast.hero && S.cast.hero.name; return h ? [str(h).trim(), sp(h)].concat(rawForms(h)) : []; } catch (e) { return []; } }
   function hasAny(sent, fs) { for (var i = 0; i < fs.length; i++) if (fs[i] && sent.indexOf(fs[i]) >= 0) return true; return false; }
   /* sent の中のその人の退出 → { route } | null。next = 次の文（留まる・戻るの確認用。無ければ ''） */
-  function exitIn(sent, forms, next, hero) {
-    if (!sent || IRREAL.test(sent) || PAST.test(sent)) return null;
+  function exitIn(sent, forms, next, hero, isInput) {
+    if (!sent || IRREAL.test(sent) || PAST.test(sent) || (isInput && IRREAL_IN.test(sent))) return null;
     var hf = hero || heroForms(); if (GROUP.test(sent)) return null;   /* 主語がその人物だけ（二人・一緒 等があれば退出にしない） */
     for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (!f || sent.indexOf(f) < 0) continue;
-      var re = new RegExp(esc(f) + HON + '(?:は|が|も)(' + GAPX + ')(' + EXIT_V + ')'), m = re.exec(sent), hit = null;
+      var re = new RegExp(esc(f) + HON + '(?:は|が|も)(' + GAPX + ')(' + (isInput ? EXIT_V + '|' + EXIT_V_IN : EXIT_V) + ')'), m = re.exec(sent), hit = null;
       if (m) { var pre = m.index > 0 ? sent.charAt(m.index - 1) : ''; if (/[とや・]/.test(pre) || hasAny(m[1], hf)) continue;   /* 「湊と灯里は」「灯里は湊と…」は主人公と一緒 */
         if (/^(?:へ|に|の方へ)/.test(m[2])) { var dst = /([^、\s]{1,12})$/.exec(str(m[1])); if (!dst || INROOM.test(dst[1])) continue; }   /* 「席に戻った」「仕事に戻った」は退出ではない */
         hit = { route: route(m[1], m[2]), end: m.index + m[0].length }; }
-      else { var o = new RegExp(esc(f) + HON + 'を' + GAPX + OBJ_V).exec(sent); if (o) hit = { route: '', end: o.index + o[0].length }; }
+      else { var o = new RegExp(esc(f) + HON + 'を' + GAPX + (isInput ? '(?:' + OBJ_V + '|' + OBJ_V_IN + ')' : OBJ_V)).exec(sent); if (o) hit = { route: '', end: o.index + o[0].length }; }
       if (!hit) continue;
       var tail = sent.slice(hit.end);
       if (NEG_AFTER.test(tail)) continue;                                  /* 出ていかず・戻らない */
@@ -248,9 +256,9 @@
   function route(gap, verb) {   /* 本文に書かれた経路だけ。行き先「〜へ戻った」・出口「〜から出た」。無ければ '' */
     var g = str(gap).replace(/^[、\s]+/, ''), v = str(verb);
     var dest = /([^、\s]{1,12})$/.exec(g);
-    if (/^(?:へ|に|の方へ)/.test(v)) { var p = dest ? dest[1].replace(/^.*(?:て|で|、)/, '') : ''; return p ? p + v.replace(/(?:た|て)$/, 'た').replace(/^(?:の方へ|に)/, 'へ') : ''; }
+    if (/^(?:へ|に|の方へ)/.test(v)) { var p = dest ? dest[1].replace(/^.*(?:て|で|、)/, '') : ''; return p ? p + v.replace(/(?:た|て)$/, 'た').replace(/る$/, 'った').replace(/っった$/, 'った').replace(/^(?:の方へ|に)/, 'へ').replace(/引き上げった$/, '引き上げた').replace(/引き揚げった$/, '引き揚げた') : ''; }
     var fr = /([^、\s]{1,12})から$/.exec(g); if (fr && /^出て/.test(v)) return fr[1].replace(/^.*(?:て|で)/, '') + 'から出た';
-    var ex = /^((?:部屋|自室|店|家|外|廊下|裏口|玄関|戸口|屋敷|教室|事務所)(?:を|から))出/.exec(v); if (ex) return ex[1] + '出た';
+    var ex = /^((?:部屋|自室|店|家|外|廊下|裏口|玄関|戸口|屋敷|教室|事務所)(?:を|から))出/.exec(v); if (ex) return ex[1] + '出た';   /* 入力の「店を出る」も「店を出た」と書く */
     if (fr) return fr[1].replace(/^.*(?:て|で)/, '') + 'から出た';
     return '';
   }
@@ -259,7 +267,9 @@
   function actsHere(sent, forms) {
     if (!sent || IRREAL.test(sent) || PAST.test(sent) || REMOTE.test(sent) || /(?:ない|なかった|ず[、。]|ずに)/.test(sent)) return false;
     for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (!f) continue; var m = new RegExp(esc(f) + HON + '(?:は|が|も)').exec(sent); if (!m) continue;
-      var rest = sent.slice(m.index + m[0].length); if (MOVE_OUT.test(rest) && !BACK.test(rest)) continue; return true; }
+      var rest = sent.slice(m.index + m[0].length); if (MOVE_OUT.test(rest) && !BACK.test(rest)) continue;
+      if (/が$/.test(m[0]) && /^[^、]{1,20}?(?:た|る|ている|ていた)[^、。]{0,12}?は/.test(rest)) continue;   /* ★r4: 「灯里が閉めた二階の扉は…」＝名前は連体の節の主語（場で動いているとは言えない） */
+      return true; }
     return false;
   }
   function withHero(sent, forms, hf) { if (!sent || !hasAny(sent, hf) || !hasAny(sent, forms)) return false; for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (f && new RegExp('(?:と|、)' + esc(f) + HON + '(?:は|が|も)|' + esc(f) + HON + '(?:と|、)').test(sent)) return true; } return /一緒|共に|ともに|二人|ふたり|揃って|並んで/.test(sent); }
@@ -277,6 +287,12 @@
       S.turns.forEach(function (t, i) { var ty = str(t && t.inputType).toUpperCase(); if ((ty === 'DO' || ty === 'STORY') && t.playerText) { try { var ev = P.parseInput(str(t.playerText), hero, ctx, ty === 'STORY') || []; if (ev.some(function (e) { return e && e.kind === 'hero'; })) out[i + 1] = 1; } catch (e2) {} } }); } catch (e) {}
     return out;
   }
+  function noteExit(n, tn, src) { var k = n + '\u0000' + tn + '\u0000' + src; if (EXCOUNT[k]) return; EXCOUNT[k] = 1; ST.bExits++; if (src === 'input') ST.bExitsInput++; }   /* ★r4: 退出を確定した所で数える */
+  function curInput(S) {   /* 組み立て中の入力（begin〜end・または直前の組み立てで同じターン数・60 秒以内）。無ければ null */
+    var X = CUR || (LAST && Date.now() - LAST.at < 60000 && LAST.n === (S && S.turns ? S.turns.length : -1) ? LAST : null);
+    if (!X || !X.t || X.k === 'cont' || (X.m === 'STORY' && X.t.trim() === CONT_TEXT)) return null;
+    return { inputType: X.m, playerText: X.t, narrative: '', _convSays: [] };
+  }
   /* いま退出したままの人: { name: { turn, route } }（毎回ターンから作る・保存しない） */
   function exited(S) {
     var out = {};
@@ -285,21 +301,27 @@
       var hf = heroForms(), L = S.turns.length, hp = heroPlaceSeq(S);
       npcNames(S).forEach(function (n) {
         var fs = formsOf(n), fb = fs.concat(rawForms(n)), st = null;   /* 退出は登録名そのまま（確かな側）・戻りは姓・名の形でも（戻す側） */
-        for (var i = 0; i < L; i++) { var t = S.turns[i] || {}, ty = str(t.inputType).toUpperCase(), tn = i + 1;
+        var TT = S.turns.slice(), cin = curInput(S); if (cin) TT.push(cin);   /* ★r4: 組み立て中の入力も 1 つのターンとして読む（その回の送信から効く） */
+        for (var i = 0; i < TT.length; i++) { var t = TT[i] || {}, ty = str(t.inputType).toUpperCase(), tn = i + 1;
           if (st && tn > st.turn) {
             if (heroMovedAt(S, t) || hp[tn]) { st = null; ST.bBacks++; ST.bBackWhy.heroMoved++; }
             else if ((ty === 'DO' || ty === 'STORY') && hasAny(maskQ(str(t.playerText)), fb) && IN_ARRIVE.test(str(t.playerText)) && !/(?:ない|なかった)/.test(str(t.playerText))) { st = null; ST.bBacks++; ST.bBackWhy.input++; }
             else if (Array.isArray(t._convSays) && t._convSays.some(function (c) { return c && fb.indexOf(str(c.who).trim()) >= 0; })) { st = null; ST.bBacks++; ST.bBackWhy.speaker++; }
           }
+          if (ty === 'DO' || ty === 'STORY') {   /* ★r4: 利用者の入力に書かれた退出（SAY は読まない）。入力で戻ってくる・この場で動くなら解く（既存の条件） */
+            var ins = sents(maskQ(str(t.playerText)));
+            for (var q = 0; q < ins.length; q++) { var xi = exitIn(ins[q], fs, ins[q + 1] || '', hf, true);
+              if (xi) { st = { turn: tn, route: xi.route, src: 'input' }; noteExit(n, tn, 'input'); continue; }
+              if (st && tn > st.turn && actsHere(ins[q], fb)) { st = null; ST.bBacks++; ST.bBackWhy.input++; } } }
           var ss = sents(plain(t.narrative));
           for (var j = 0; j < ss.length; j++) {
-            var x = exitIn(ss[j], fs, ss[j + 1] || '', hf); if (x) { st = { turn: tn, route: x.route }; continue; }
+            var x = exitIn(ss[j], fs, ss[j + 1] || '', hf); if (x) { st = { turn: tn, route: x.route }; noteExit(n, tn, 'narr'); continue; }
             if (!st) continue;
             if (backIn(ss[j], fb)) { st = null; ST.bBacks++; ST.bBackWhy.back++; }
             else if (withHero(ss[j], fb, hf)) { st = null; ST.bBacks++; ST.bBackWhy.withHero++; }
             else if (tn > st.turn && actsHere(ss[j], fb)) { st = null; ST.bBacks++; ST.bBackWhy.acts++; } }
         }
-        if (st && L - st.turn >= STALE_TURNS) { st = null; ST.bStale++; }   /* 6 ターン何も分からない → 言い切らずに外す */
+        if (st && TT.length - st.turn >= STALE_TURNS) { st = null; ST.bStale++; }   /* 6 ターン何も分からない → 言い切らずに外す */
         if (st) out[n] = st;
       });
     } catch (e) { err(); }
@@ -309,7 +331,7 @@
   function exitHit(sent, fs) { try { if (!bOn()) return false; var r = !!exitIn(maskQ(str(sent)), fs || [], '', null); if (r) ST.bNpres++; return r; } catch (e) { err(); return false; } }
   /* NPRES group が聞く: SCENE1 の退出のまま（戻りの条件を満たしていない）か */
   var EXMEMO = null;
-  function exMemo() { var S = getS(), key = S && S.turns ? S.turns.length + '|' + (CUR ? 1 : 0) + '|' + Math.floor(Date.now() / 2000) : ''; if (!EXMEMO || EXMEMO.key !== key) EXMEMO = { key: key, x: exited(S) }; return EXMEMO.x; }
+  function exMemo() { var S = getS(), key = S && S.turns ? S.turns.length + '|' + (CUR ? 'c' + CUR.m + CUR.t : (LAST ? 'l' + LAST.m + LAST.t + LAST.n : '')) + '|' + Math.floor(Date.now() / 2000) : '';   /* r4: いまの入力も鍵に入れる */ if (!EXMEMO || EXMEMO.key !== key) EXMEMO = { key: key, x: exited(S) }; return EXMEMO.x; }
   function stillOut(name) { try { if (!bOn()) return false; return !!exMemo()[str(name).trim()]; } catch (e) { err(); return false; } }
   /* PLACE1 build が聞く: このターン（turn＝何ターン目）の本文で確認でき、いまも退出のままの人（PLACE1 の person の形） */
   function narrExits(narr, names, hero, turn) {
