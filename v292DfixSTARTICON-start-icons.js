@@ -136,6 +136,26 @@
     if (n === Infinity) return { hero: true, npcs: Infinity, src: 'row' }; return { hero: n >= 1, npcs: Math.max(0, n - 1), src: 'row' }; }
   function admfOn() { try { var X = root.__v292DfixADMF1; return !!(X && typeof X.gate === 'function' && X.gate('starticon1', false) === true); } catch (e) { return false; } }   /* ★STARTICON2: 自分の鍵 starticon1（管理者画面）。行なし = OFF */
   function vaultHidden(id) { try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* fail-closed */
+  /* ★VICON1（GPT #127-WH・STARTICON）: 隠した物語でも、Vault が解錠中で、この物語が開かれているときだけ作る。
+     判定（どれか 1 つでも欠ければ今までどおり作らない＝fail-closed）: fix889 が本物・状態 ready・解錠のしるし（unlocked）・扉が開いている（status().open）・その物語が隠した物語。
+     既定は下の VICON1_DEFAULT_ON（1 か所）。kill: localStorage v292DfixVICON1Off='1'（隠した物語では今までどおり作らない）。VICON1_DEFAULT_ON を false にしたときは v292DfixVICON1On='1' の端末だけ。 */
+  var VICON1_DEFAULT_ON = true, vstats = { gate: {}, skip: {}, draft: 0, conf: 0 };
+  function viconOn() { return lsGet('v292DfixVICON1Off') !== '1' && (VICON1_DEFAULT_ON || lsGet('v292DfixVICON1On') === '1'); }
+  function vaultOpenWhy(id) { try { var V = root.__v292Dfix889; if (!V || V.__real !== true || typeof V.isHidden !== 'function' || typeof V.state !== 'function' || typeof V.unlocked !== 'function' || typeof V.status !== 'function') return 'NO_VAULT';
+      if (!V.isHidden(id)) return 'NOT_HIDDEN'; if (V.state() !== 'ready') return 'NOT_READY'; if (V.unlocked() !== true) return 'LOCKED'; var s = V.status(); if (!s || s.open !== true) return 'NOT_OPEN'; return ''; } catch (e) { return 'THREW'; } }
+  function vcount(m, k) { k = String(k || 'X').slice(0, 32); m[k] = (m[k] || 0) + 1; }
+  /* 隠した物語の説明文に、外見以外の秘密が混ざっている印（GM・秘密・正体・隠している 等）があれば、その人物は自動では作らない（安全に分けられないとみなす） */
+  var VICON1_SECRET = /(^|[^A-Za-z])(GM|ＧＭ)(?![A-Za-z])|専用】|【\s*(GM|ＧＭ)|裏設定|秘密|真相|本当は|本当の|ほんとう|正体|隠して|隠し事|隠れて|実は|ネタバレ|ネタばれ|誰にも|知らせない|知られて|明かす|明かさ|伏線|黒幕|犯人|偽名|本名|真の姿|裏では|表向き|化けて|化けた|見た目は人間|ふりを|振りを|偽って|偽り|内緒|極秘|機密|〔|〕|（GM|\(GM/;
+  /* 近道の下書き（説明文の句そのまま）から、見た目の枠（年代・髪・瞳・服・顔や肌・体格＝LC1prop.slotsOf）に当たる句だけを残す。役割・肩書き・種類の語など枠に当たらない句は外す。
+     残った句の見た目の種類（髪・瞳・服・顔）が 2 つ未満なら作らない（null） */
+  /* ★VICON1 r2（独立レビュー）: 見た目の句でも、筋や時の印・関係の語・固有名らしい語を含む句、20 字を超える句は外へ出さない */
+  var VICON1_PHRASE_NG = /第[0-9０-９一二三四五六七八九十百]+[章話幕部巻夜日]|後に|のちに|やがて|いずれ|かつて|以前|昔|[0-9０-９一二三四五六七八九十]+年前|失[うっいわ]|死|殺|亡|になる|となる|された|主人公|ヒロイン|プレイヤー|兄|弟|姉|妹|母|父|娘|息子|夫|妻|恋人|親友|師匠|弟子|と同じ|譲り|形見|そっくり|[「」『』"“”]|[一-龥々]{1,6}[会組団教社党家派軍]の|名札|名前|鍵|証|印|紋章|刻印|[A-Za-z]{3,}/;
+  function viconVisual(draft) { try { var P = root.__v292DfixLC1prop; if (!draft || !P || typeof P.slotsOf !== 'function') return null;
+      var keep = String(draft.text || '').split('、').map(function (x) { return x.trim(); }).filter(function (x) { if (!x) return false; if (x.length > 20 || VICON1_PHRASE_NG.test(x)) return false; var sl = P.slotsOf(x); for (var k in sl) if (sl[k]) return true; return false; });
+      var sl2 = P.slotsOf(keep.join('、')), n = 0; ['hair', 'eyes', 'clothes', 'feature'].forEach(function (k) { if (sl2[k]) n++; }); if (n < 2) return null;
+      return { text: keep.join('、'), gender: draft.gender || '' }; } catch (e) { return null; } }
+  function viconUnsafe(desc) { var d = String(desc == null ? '' : desc).normalize('NFC'); if (VICON1_SECRET.test(d)) return 'SECRET_MARK';
+    try { var P = root.__v292DfixLC1prop; if (P && typeof P.fx3Hidden === 'function' && P.fx3Hidden(d)) return 'HIDDEN_IDENTITY'; } catch (e) { return 'THREW'; } return ''; }
   function killed() { return lsGet(KILL) === '1' || lsGet('v292Dav2Off') === '1'; }
   /* ★HOLD2 1b（GPT #127-VZ・kill v292DfixHOLD2bOff）: この物語の昇格 journal がある間・fix756 の実行中は、外見の自動保存・絵の送信の開始・内部の自動再読込を待つ。
      待機が WAIT_MS（120 秒）を超えたら、このページでは再開しない（pageStop・自動再試行なし）。HOLD2 が無い・OFF → matWait は '' ＝土台と同じ */
@@ -157,7 +177,7 @@
     var a = A(); if (!a || typeof a.ensureFirst !== 'function' || typeof a.setProfile !== 'function' || typeof a.suggestAppearance !== 'function') return 'no-av2';
     if (!doc2()) return 'not-schema2';
     var id = sid(); if (!id) return 'no-story';
-    if (vaultHidden(id)) return 'vault';
+    if (vaultHidden(id)) { if (!viconOn()) return 'vault'; var vw = vaultOpenWhy(id); if (vw){ vcount(vstats.gate, vw); return 'vault'; } }   /* ★VICON1: 解錠中で開いている隠した物語だけ先へ */
     return '';
   }
   function av2Idle() {
@@ -175,7 +195,7 @@
   function lc1Busy() { try { var x = LC1(); var s = x && x.status ? x.status() : null; return !!(s && s.busyOp); } catch (e) { return true; } }
   function quiet() { return !inFlight() && av2Idle() && !lc1Busy() && !xtabStale(); }
   function ready(id) { return canonicalNow(id) && prepSettled() && saveClean(id) && quiet(); }
-  function same(id, a0) { return sid() === id && acct() === a0 && doc2(); }
+  function same(id, a0) { return sid() === id && acct() === a0 && doc2() && (!vaultHidden(id) || (viconOn() && !vaultOpenWhy(id))); }   /* ★VICON1: 途中で施錠されたら止める（隠していない物語では今までと同じ） */
   function waitFor(pred, ms, cb) { var t0 = Date.now(); (function poll() { var ok = false; try { ok = pred(); } catch (e) {} if (ok) return cb(true); if (Date.now() - t0 > ms) return cb(false); setTimeout(poll, 500); })(); }
   function genderOf(v) { return (v === '女性' || v === '男性') ? v : ''; }
   /* ★STARTICON2: when the story was created = the ms timestamp in its id ('s' + Date.now().toString(36) + 1–2 random base-36 chars:
@@ -279,6 +299,7 @@
       if (!by) { X.pageStop = 'READ_FAIL'; return finish('A_READ_FAIL'); }   /* nothing sent; the next page load may try again */
       if (!same(id, a0)) return finish('A_RECHECK');
       /* targets: no picture on the server yet AND a draft is possible (confirmed appearance, or a description that is not sensitive) — then the cap (hero 1 + NPCs 3) */
+      var vm = vaultHidden(id);   /* ★VICON1: ここまで来た隠した物語は、解錠中で開いている（gateWhy） */
       var cs = chars(), tg = [], npc = 0, skip = {}, sc = X.promo ? { hero: false, npcs: Math.min(1, storyCap().npcs), src: 'promo' } : storyCap(), xt = {};   /* ★PROMOICON1: 1 人だけ（r2: アカウントの LIM1 の値も通す）   /* ★LIM1 ★ICONFIX2 t: xt = extract ms per character */
       /* once per story across devices: only the device that created the story (URL new=1) starts with pictures already present; any other device /
          tab starts only when NO character of the story has a picture yet (otherwise another device — or the Owner — already did the start) */
@@ -296,6 +317,7 @@
             if (!dc.ok && SENSITIVE[dc.why]) why = 'SKIP_' + dc.why;   /* left to the manual 2-tap (the Owner reads the draft) */
             else if (!dc.ok && lsGet(NOAI) === '1') why = 'SKIP_NOAI'; }
         }
+        if (!why && vm && !(s && s.current && s.current.appearance)) { var vu = viconUnsafe(s && s.desc); if (vu) why = 'VAULT_' + vu; else if (!(dc && dc.ok)) why = 'VAULT_NO_DIRECT_' + String((dc && dc.why) || 'NONE').slice(0, 20); else { var vu2 = viconUnsafe(dc.draft && dc.draft.text); if (vu2) why = 'VAULT_DRAFT_' + vu2; else { var vd = viconVisual(dc.draft); if (!vd) why = 'VAULT_FEW_VISUAL'; else c.vd = vd; } } if (why) vcount(vstats.skip, why); }   /* ★VICON1: 隠した物語は AI なし・説明文の見た目の句（髪・瞳・服・顔・年代・体格の枠に当たる句）そのままだけ */
         if (!why && X.promo && !(s && s.current && s.current.appearance) && !(dc && dc.ok)) why = 'PROMO_NOT_DESC';   /* ★PROMOICON1 r2: 説明文の句をそのまま使える人だけ（推測・埋めの外見は登録しない） */
         if (why) { skip[hk(c.id)] = why; stats.skipped++; return; }
         if (!c.hero) npc++; c.dc = dc; tg.push(c); xt[hk(c.id)] = Date.now() - x0;
@@ -319,20 +341,20 @@
         var c = tg[i++], h = hk(c.id), s = suggest(c.id);
         var mark = function (code) { soSet(id, function (so) { so.a[h] = code; }); };
         if (!s) { mark('NO_ENTRY'); return next(); }
-        if (s.current && s.current.appearance) { setAny = true; mark('conf'); return next(); }   /* confirmed appearance: never changed silently */
+        if (s.current && s.current.appearance) { setAny = true; mark('conf'); if (vm) vstats.conf++; return next(); }   /* confirmed appearance: never changed silently */
         var desc = String(s.desc || '').trim(), dc = c.dc || { ok: false, why: '?' }, tw = Date.now();
         waitFor(quiet, WAIT_MS * 6, function (q) {
           if (!q) { mark('NOT_QUIET'); return endA('NOT_QUIET'); }   /* nothing sent for this character */
-          var input = { name: c.name, gender: genderOf(s.gender), desc: desc, confirmed: '', context: lore().slice(0, 120), hero: c.hero, auto: true };   /* ★ICONFIX3: auto = 案の失敗で見送らない（LC1prop が決まった語で埋める。旧い LC1prop は読まない） */
+          var input = vm ? { name: '', gender: genderOf(s.gender), desc: '', confirmed: '', context: '', hero: c.hero, auto: true } : { name: c.name, gender: genderOf(s.gender), desc: desc, confirmed: '', context: lore().slice(0, 120), hero: c.hero, auto: true };   /* ★VICON1: 隠した物語では lore・説明文・名前を案へ渡さない */   /* ★ICONFIX3: auto = 案の失敗で見送らない（LC1prop が決まった語で埋める。旧い LC1prop は読まない） */
           stats.proposals++; if (dc.ok) stats.direct++;
           note({ kind: 'PROPOSE', direct: !!dc.ok });
           var tp = Date.now();
-          PR().propose(input, function (res) {
+          (vm ? function (inp, cb0) { vstats.draft++; var dd = c.vd || null; setTimeout(function () { cb0(dd ? { ok: true, code: null, appearance: String(dd.text || ''), gender: genderOf(dd.gender), direct: true, aiCalled: false, vicon: 1 } : { ok: false, code: 'VAULT_NO_DRAFT', appearance: '', aiCalled: false }); }, 0); } : PR().propose)(input, function (res) {   /* ★VICON1: 隠した物語は文章 AI を呼ばない */
             res = res || {};
             var tpe = Date.now();
             tmC(id, h, function (t) { t.w = tp - tw; t.p = tpe - tp; t.ai = (res.aiCalled === true) ? 1 : 0; t.nh = res.nh ? 1 : 0; });   /* ★ICONFIX2 t: w = waiting for a quiet page, p = the proposal (AI or not) */
             if (res.fx3) { note({ kind: 'FX3', why: res.fx3.why, ai: res.fx3.ai || 0, det: res.fx3.det || 0, code: res.fx3.code || null }); soSet(id, function (so) { so.x = so.x || {}; so.x[h] = String(res.fx3.why) + ':' + (res.fx3.ai || 0) + '+' + (res.fx3.det || 0); }); }   /* ★ICONFIX3: 足した語の数だけ（語そのものは残さない） */
-            if (fx2bOn()) {   /* ★ICONFIX2 b: the proposal is checked against the description's fixed facts (whatever path made it) */
+            if (fx2bOn() && !vm) {   /* ★ICONFIX2 b: the proposal is checked against the description's fixed facts (whatever path made it) ★VICON1: 隠した物語は説明文の句そのままなので戻す句を足さない */
               try { res = root.__v292DfixLC1prop.enforceFacts(res, input) || res; } catch (eF) { note({ kind: 'FACTS_THREW', e: String(eF).slice(0, 60) }); }
               var fc = res.facts;
               if (fc && !fc.skipped) {
@@ -662,6 +684,7 @@
       return { ver: VER, killed: killed(), gate: gateWhy() || 'on', story: id, firstTurns: X.firstTurns, busy: X.busy, pageStop: X.pageStop, needReload: X.needReload, reloaded: X.reloaded,
         rec: so ? JSON.parse(JSON.stringify(so)) : null, day: { day: r.day, starts: r.starts }, last: X.last, stats: JSON.parse(JSON.stringify(stats)), hold: ssGet(HOLDK), log: LOG.slice(-40),
         retry: { on: retryOn(), leaseWaitMs: Math.max(0, (X.leaseUntil || 0) - Date.now()) },   /* ★93-j */
+        vicon: { on: viconOn(), defaultOn: VICON1_DEFAULT_ON, why: (function () { try { return id ? (vaultHidden(id) ? (vaultOpenWhy(id) || 'OPEN') : 'NOT_HIDDEN') : null; } catch (eV) { return 'THREW'; } })(), stats: JSON.parse(JSON.stringify(vstats)) },   /* ★VICON1: 数と理由だけ */
         fx2: { facts: fx2bOn(), perChar: fx2cOn(), timing: tmOn() }, timing: (function () { try { return timingOf(id, so); } catch (eT) { return null; } })(),   /* ★ICONFIX2 */
         list: { on: listOn(), reopenPending: !!reopen, screen: screenBusy(listOn()) },   /* ★93-k */
         caps: (function () { var sc = storyCap(), d = capDayStarts(); return { dayStarts: d === Infinity ? -1 : d, hero: sc.hero, npcs: sc.npcs === Infinity ? -1 : sc.npcs, src: sc.src, lim: (root.__v292DfixADMF1 && typeof root.__v292DfixADMF1.limDecide === 'function') ? root.__v292DfixADMF1.limDecide('starticon_day_stories').why : 'no-admf1' }; })() }; },   /* ★LIM1 */
