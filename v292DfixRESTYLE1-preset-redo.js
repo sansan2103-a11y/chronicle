@@ -50,7 +50,8 @@
   function presetKey() { var S = state(); if (!S || !S.cfg) return null; if (!Object.prototype.hasOwnProperty.call(S.cfg, 'artPreset') || S.cfg.artPreset === undefined) return 'dark'; var v = S.cfg.artPreset; return KEYS.indexOf(v) >= 0 ? v : null; }
   function A() { return root.__chronicleAssetV2 || null; }
   function F697() { return root.__v292Dfix697 || null; }
-  function vaultHidden(id) { try { var G = root.__v292DfixVAULTGATE2; if (G && typeof G.hidden === 'function') return G.hidden(id) !== false; } catch (e) { return true; } try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* ★VAULTGATE2: vault2 と fix889 の両方（1 か所） */   /* fail-closed */
+  function vaultHidden(id) { try { var G = root.__v292DfixVAULTGATE2; if (G && typeof G.hidden === 'function') return G.hidden(id) !== false; } catch (e) { return true; } try { if (root.localStorage.getItem('v292DfixVAULTGATE2Off') !== '1') return true; } catch (e) { return true; }   /* ★VAULTGATE2 r2: kill していないのに部品が無い = 隠した物語かもしれない（止める） */ try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* ★VAULTGATE2: vault2 と fix889 の両方（1 か所） */   /* fail-closed */
+  var VG_WAIT_MS = 60000; function vgUnknown(id) { try { var G = root.__v292DfixVAULTGATE2; return !!(G && typeof G.state === 'function' && G.state(id) === 'unknown'); } catch (e) { return false; } }   /* ★VAULTGATE2 r2b */
   function vaultWhy(id) { if (!vaultHidden(id)) return ''; try { var f = root.__v292DfixVaultOpenWhy; if (typeof f !== 'function') return 'NO_VAULT_GATE'; return f(id) || ''; } catch (e) { return 'THREW'; } }   /* = STARTICON VICON1 の判定（1 か所） */
   function saved(id) {
     try { var F5 = root.__v292Dfix705; var d = F5 && typeof F5.docAuthority === 'function' ? F5.docAuthority() : null;
@@ -183,7 +184,7 @@
       if (X.phase === 'running') return;
       if (key !== X.seen) { X.seen = key; stats.changes++; X.wait = { key: key, t0: Date.now() }; if (X.phase === 'ask') { X.phase = 'idle'; X.ask = null; hide(); } }
       if (X.wait && X.phase === 'idle') {
-        var wv = vaultWhy(id); if (wv) { cnt(stats.skip, 'VAULT_' + wv); X.wait = null; return; }
+        var wv = vaultWhy(id); if (wv) { if (vgUnknown(id)) { if (Date.now() - X.wait.t0 <= VG_WAIT_MS) return; wv = 'UNKNOWN_TIMEOUT'; } cnt(stats.skip, 'VAULT_' + wv); X.wait = null; return; }   /* ★VAULTGATE2 r2b: 未確定（読み直し待ち）は最終の見送りにしない。確定するまで待つ（上限 60 秒） */
         if (Date.now() - X.wait.t0 > SAVE_WAIT_MS) { cnt(stats.skip, 'SAVE_TIMEOUT'); X.wait = null; return; }
         if (!saved(id) || X.counting) return;
         X.counting = true; var wk = X.wait.key;

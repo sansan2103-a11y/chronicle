@@ -1437,12 +1437,12 @@
 | 376 | fixNDI1 | `v292DfixNDI1-no-direct-image.js` | i1 h1（91-b の番号。両方で最初） | `54dadff9` | 20261103-bundle91-b | アイコン・画像 | （kill なし） |
 | 377 | fixEDLOG | `v292DfixEDLOG-narr-edit-log.js` | SFLTap の直後（92-a。home では読まない） ※読み込み停止（2026-11-15・CLEANUP3） | `4cb1ed47` | 20261103-bundle92-a | 話者・会話ログ | `v292DfixEDLogOn`（既定 OFF）`v292DfixEDLogOff` |
 | 378 | fixICF80 | `v292DfixICF80-record.js` | ICF の直後（92-a。home では読まない） ※読み込み停止（2026-11-15・CLEANUP3） | `592a85ca` | 20261103-bundle92-a | アイコン・画像 | `v292DfixICF80On`（既定 OFF）`v292DfixICF80Off` |
-| 379 | fixMIDICON | `v292DfixMIDICON-auto-icon.js` | SETAV1 の直後（93-a。home では読まない） | `77c16e20` | 20261122-vaultgate2 | アイコン・画像 | `v292DfixMIDICONOff` `v292DfixMIDICONrosOff` `v292DfixMIDICONregOff` `v292DfixVICON1Off`（Vault・MXVAULT1） |
+| 379 | fixMIDICON | `v292DfixMIDICON-auto-icon.js` | SETAV1 の直後（93-a。home では読まない） | `882fd0ad` | 20261122-vaultgate2r2 | アイコン・画像 | `v292DfixMIDICONOff` `v292DfixMIDICONrosOff` `v292DfixMIDICONregOff` `v292DfixVICON1Off`（Vault・MXVAULT1） |
 | 380 | fixISO1 | `v292DfixISO1-local-only-foreign-hide.js` | index：fix893 の直後／home：iso2 の後・fix889 の前（93-d） | `0f1ff245` | 20261107-iso1e | Vault・ユーザー分離 | `v292DfixISO1Off` |
 | 381 | fixSETUI1 | `v292DfixSETUI1-settings-layout.js` | index の最後（FLW5 の後・93-g。home では読まない） | `3892c38f` | 20261108-bundle93-g | UI・画面 | `v292DfixSETUI1Off` |
 | 382 | fixIDSPLIT2 | `v292DfixIDSPLIT2-selfname-merge.js` | index：fix620 の直後（93-h。home では読まない） | `3f75a2f2` | 20261108-bundle93-i | 話者・会話ログ | `v292DfixIDSPLIT2Off` |
 | 383 | fixGENDER1 | `v292DfixGENDER1-autogender.js` | index：fix335 の直前／home：fix436 の直前（93-h） | `3291ae11` | 20261108-bundle93-h | シナリオ・ホーム | `v292DfixGENDER1Off` |
-| 384 | fixSTARTICON | `v292DfixSTARTICON-start-icons.js` | index：MIDICON の直後（93-i。home では読まない） | `30b59537` | 20261122-vaultgate2 | アイコン・画像 | `v292DfixSTARTICONOff` `v292DfixSTARTICONNoAI` `v292DfixSTARTICONRetryOff` `v292DfixSTARTICONListOff` `v292DfixVICON1Off` |
+| 384 | fixSTARTICON | `v292DfixSTARTICON-start-icons.js` | index：MIDICON の直後（93-i。home では読まない） | `7a53b146` | 20261122-vaultgate2r2 | アイコン・画像 | `v292DfixSTARTICONOff` `v292DfixSTARTICONNoAI` `v292DfixSTARTICONRetryOff` `v292DfixSTARTICONListOff` `v292DfixVICON1Off` |
 | 385 | fixKN1 | `v292DfixKN1-knowledge-canary.js` | index の最後（SETUI1 の後・93-j。home では読まない） | `63f439a1` | 20261109-bundle93-j | 文章品質・プロンプト | `v292DfixKN1Off` |
 | 386 | fixLORE1 | `v292DfixLORE1-world-lore.js` | index の最後（KN1 の後・93-l。home では読まない） | `34c9217d` | 20261110-bundle93-l | 文章品質・プロンプト | `v292DfixLORE1Off`（ON は鍵 `lore1` か `v292DfixLORE1On`。既定は影モード） |
 | 387 | fixAGENCY1 | `v292DfixAGENCY1-player-intent.js` | index：fix192 の直後（93-m。home では読まない） | `0079579c` | 20261110-agency1c | 文章品質・プロンプト | `v292DfixAGENCY1Off`・`v292DfixAGENCY1StoryOff`・`v292DfixAGENCY1StoryMode`（ON は鍵 `agency1` か `v292DfixAGENCY1On`。既定は影） |
@@ -1478,8 +1478,8 @@
 | 414 | fixHDRNL1 | `v292DfixHDRNL1-sys-header-newline.js` | index の先頭近く（PRUNE3 の直前。HDRNL1・`e5d5d30`） | `ecbc38cc` | 20261115-hdrnl1 | 文章品質・プロンプト | `v292DfixHDRNL1Off`（kill。既定 ON） |
 | 415 | fixCONTRACT1 | `v292DfixCONTRACT1-scene-contract.js` | index の先頭近く（HEROVOICE1 の直後。CONTRACT1・`9e585fb`） | `31752391` | 20261116-contract1 | 文章品質・プロンプト | `v292DfixCONTRACT1On`（実験・既定 OFF） `v292DfixCONTRACT1Off` |
 | 416 | fixGEN1 | `v292DfixGEN1-gen-budget.js` | index：fix228 の直後（GEN1） | `9769f4f2` | 20261116-gen1r4 | 保存・同期 | `v292DfixGEN1On`（既定 OFF） `v292DfixGEN1Off` |
-| 419 | fixRESTYLE1 | `v292DfixRESTYLE1-preset-redo.js` | index：fg3 の直後（RESTYLE1・既定 ON（restyle1on）） | `816880b5` | 20261122-vaultgate2 | アイコン・画像 | `v292DfixRESTYLE1Off` |
-| 420 | fixVAULTGATE2 | `v292DfixVAULTGATE2-vault-open.js` | index：fix889 の直後（VAULTGATE2・既定 ON） | `0de0e042` | 20261122-vaultgate2 | Vault・非表示 | `v292DfixVAULTGATE2Off` |
+| 419 | fixRESTYLE1 | `v292DfixRESTYLE1-preset-redo.js` | index：fg3 の直後（RESTYLE1・既定 ON（restyle1on）） | `18a8eea3` | 20261122-vaultgate2r2 | アイコン・画像 | `v292DfixRESTYLE1Off` |
+| 420 | fixVAULTGATE2 | `v292DfixVAULTGATE2-vault-open.js` | index：fix889 の直後（VAULTGATE2・既定 ON・r2: 部品が無いと呼ぶ側が止める／読み直しの後退） | `3c1b3a56` | 20261122-vaultgate2r2 | Vault・非表示 | `v292DfixVAULTGATE2Off` |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
 
