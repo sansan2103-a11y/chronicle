@@ -22,6 +22,7 @@
 
   function block(){
     try{ if(localStorage.getItem('v292Dfix309Off')==='1') return ''; }catch(e){}
+    try{ var Z1=window.__v292DfixSCENE1; if(Z1 && typeof Z1.skipPush==='function' && Z1.skipPush('309')) return ''; }catch(eZ1){}   /* ★SCENE1 c */
     return GUARD;
   }
   function installBuild(){

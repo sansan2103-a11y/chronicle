@@ -11,7 +11,7 @@
 <script src="v292DfixPRUNE3-sys-prune3.js?cb=20261115-prune3"></script><!-- ★PRUNE3（lanePRUNE3・2026-11-15）: 送信直前に「進めよ」の重複・待たずに話してよい・続きの回の食い違い・返事の決まりを今ある文の置き換えで整理（既定 OFF・v292DfixPRUNE3On=1 で ON・v292DfixPRUNE3Parts で部分・kill v292DfixPRUNE3Off） -->
 <script src="v292DfixACTOR1-input-actor.js?cb=20261114-hv1"></script><!-- ★ACTOR1（laneQUALA・2026-11-12・GPT #127-SG §D の D5/D4）: 送信直前（fetch 境界）に入力の説明行だけを直す。(a) DO の入力で「登録キャラ名＋が」が主語の部分を「…の主語は美羽（主人公ではない）」と明示し、「他キャラの行動にしない」を外す（証明できないときは何もしない）。STORY の腕は v292DfixACTOR1aStoryOn="1" の端末だけ。(b) 既定 OFF（v292DfixACTOR1bOn="1"）: 台詞の入力が無い回に「主人公の台詞を書かない」1 行を user 末尾の SAY の行の位置へ・食い違う 2 文を sys から外す。kill = localStorage v292DfixACTOR1Off / aOff / bOff ="1"（毎回評価・送信バイト同一）。CP1 tap の直後・PRUNE2 の前（＝PRUNE1/PRUNE2 の後に当たる） -->
 <script src="v292DfixPRUNE2-sys-prune2.js?cb=20261111-prune2"></script><!-- ★PRUNE2（lanePRUNE2・2026-11-11）: 最終 sys／user の整理・第 2 弾。送信直前（fetch 境界）で決まった文だけを差し替える。P2a＝<say> の決まりを末尾の【話者タグの徹底】1 か所に（【出力の形式】2 項・【出力の掟】1 項・【話者】2 項の重複を外す。見出しと解析が依存する形式は変えない）／P2b＝見本 A を外す・【プレイヤーの種】【NPCの登場】を短く・「先輩」の例文を呼称に依らない文へ／P2c＝user 末尾の逐語反映を短く・psychAnchors の注記から決まり文句の列挙を外す。既定は P2c だけ ON（P2a・P2b は v292DfixPRUNE2aOn / bOn="1" の端末だけ）。kill = localStorage v292DfixPRUNE2aOff / v292DfixPRUNE2bOff / v292DfixPRUNE2cOff（個別）・v292DfixPRUNE2Off（全部）＝"1"（毎回評価・送信バイト同一）。PRUNE1 の直前に置く（PRUNE1 の後・CP1 tap の前に当たる。順が逆でも結果は同じ） -->
-<script src="v292DfixPRUNE1-sys-prune.js?cb=20261111-prune1"></script><!-- ★PRUNE1（lanePRUNE1・2026-11-11）: 最終 sys の当て布の整理。fix459 ほか sys を書き換える部品がすべて済んだ後（fetch を包む部品の内側）で、決まった文だけを外す／差し替える（重複 6 文を外す・食い違いと受け身の強制 7 文を言い換える・進行エンジンを 1 つの規則に・【自発】の定型を 1 行に・【危機のとき】を新設・user 側の「0.5〜3 秒」「直後だけ」を言い換える）。安全・出力形式・<say>/<state> の契約・話者・見本・状態の文は触らない。見つからない文はその 1 手だけ何もしない。kill = localStorage v292DfixPRUNE1Off='1'（毎回評価・送信バイト同一）。CP1-final-tap の直後に置く（tap が整理後の body を見る） -->
+<script src="v292DfixPRUNE1-sys-prune.js?cb=20261122-scene1"></script><!-- ★PRUNE1（lanePRUNE1・2026-11-11）: 最終 sys の当て布の整理。fix459 ほか sys を書き換える部品がすべて済んだ後（fetch を包む部品の内側）で、決まった文だけを外す／差し替える（重複 6 文を外す・食い違いと受け身の強制 7 文を言い換える・進行エンジンを 1 つの規則に・【自発】の定型を 1 行に・【危機のとき】を新設・user 側の「0.5〜3 秒」「直後だけ」を言い換える）。安全・出力形式・<say>/<state> の契約・話者・見本・状態の文は触らない。見つからない文はその 1 手だけ何もしない。kill = localStorage v292DfixPRUNE1Off='1'（毎回評価・送信バイト同一）。CP1-final-tap の直後に置く（tap が整理後の body を見る） -->
 <script src="v292DfixSOL1-story-open-lock.js?cb=20261112-store1b"></script><!-- ★SOL1 (GPT #127-SG Q9): 物語を開いている間 Web Lock chronicle:story-open:&lt;id&gt; を持つ（書込 0・通信 0）。OFF=localStorage v292DfixSOL1Off=1 --><script src="v292DfixKEY1-story-key.js?cb=20261117-mem4r5"></script><!-- ★KEY1 (GPT #127-SG Q10): キーの持ち主を完全一致で決める共通判定（書込 0・通信 0）。OFF=localStorage v292DfixKEY1Off=1 --><script src="v292DfixE64-save-tap.js?cb=20261112-key1"></script><!-- E6-4 r4 (GPT #127-MG): E64Stop がある物語の state を /save へ送らない保存の出口。印なしかつ OFF/kill なら何もしない -->
 <script src="v292Dfix953-card-canary-gate.js?cb=20261015-bundle1-cardA-f957on"></script><!-- v292Dfix953: card canary gate (fix952/fix951/fix444g run ONLY when localStorage v292Dfix953On=1 AND this document story id is in the baked allowlist; otherwise byte-identical to production) -->
 <meta charset="UTF-8">
@@ -355,7 +355,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261122-vaultgate2r2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261122-scene1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -2836,7 +2836,7 @@ const G = {
       /* ★fix748 D2(C10): Planner.build の _userExtensions から
          features.js userExt → clearPending（chr6_pending_dice_）が同期で走る。
          ダイス1回の消費は再構成できない = Class D。network より前・lock の外に network なし。 */
-      const _b748 = await this._dadmRun('TURN_BUILD', () => Planner.build(S.mode, text));
+      const _b748 = await this._dadmRun('TURN_BUILD', () => { const _z1 = window.__v292DfixSCENE1; try { if (_z1 && _z1.begin) _z1.begin(S.mode, text); } catch(_z1e){} try { return Planner.build(S.mode, text); } finally { try { if (_z1 && _z1.end) _z1.end(); } catch(_z1f){} } });   /* ★SCENE1 c: 組み立ての間だけ入力の種類を知らせる（OFF は何もしない） */
       if (!_b748.ran) { this._dadmHold(_b748, inputEl, text); return; }
       const { sys, user } = _b748.result;
       try { _cp1A = window.__v292DfixCP1Att || null; _cp1Att = (_cp1A && typeof _cp1A.of === 'function') ? _cp1A.of(_b748.result) : null; } catch(_cp1e){ _cp1A = null; _cp1Att = null; }   /* ★r5: この build の試行（in-memory の印）を受け取る */
@@ -3270,7 +3270,10 @@ const G = {
     if (S.inFlight || S.turns.length === 0) return;
     document.getElementById('inp').value = '続きを自然に進めてください。';
     const prev = S.mode; this.setMode('STORY');
-    await this.submit(); this.setMode(prev);
+    const _z1n = S.turns.length; window.__v292DfixSCENE1Kind = 'cont';   /* ★SCENE1 c: 「続きを書く」の識別値（UI のボタンから） */
+    try { await this.submit(); } finally { window.__v292DfixSCENE1Kind = ''; }
+    try { const _z1 = window.__v292DfixSCENE1; if (_z1 && _z1.markCont && S.turns.length > _z1n) _z1.markCont(S.turns[S.turns.length - 1]); } catch(_z1e){}
+    this.setMode(prev);
     try { const _ic = document.getElementById('inp'); if (_ic){ _ic.value = ''; _ic.style.height = 'auto'; } } catch(e){}  /* v292Dfix321: 続きを書く後はsentinelを入力欄に残さない */
   },
 
@@ -3290,7 +3293,10 @@ const G = {
     if (!_r748.ran) { this._dadmHold(_r748, null, null); return; }
     const last = _r748.result;
     document.getElementById('inp').value = last.playerText;
-    this.setMode(last.inputType); await this.submit();
+    let _z1k = ''; try { const _z1 = window.__v292DfixSCENE1; if (_z1 && _z1.retryKind) _z1k = _z1.retryKind(last); } catch(_z1e){}   /* ★SCENE1 c: 生成し直すは元のターンの種類を引き継ぐ */
+    this.setMode(last.inputType);
+    if (_z1k) { const _z1n = S.turns.length; window.__v292DfixSCENE1Kind = _z1k; try { await this.submit(); } finally { window.__v292DfixSCENE1Kind = ''; } try { const _z1 = window.__v292DfixSCENE1; if (_z1 && _z1.markCont && S.turns.length > _z1n) _z1.markCont(S.turns[S.turns.length - 1]); } catch(_z1g){} }
+    else await this.submit();
   },
 
   /* ★fix748 D3(C16): 取消の唯一の入口。confirm（ユーザー待ち）は **lock の外**で行い、
@@ -4612,7 +4618,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
   <!-- v292Dfix192: 新プロンプトエンジン（引き算・見本ドリブン）。最外ラップで
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
   <script src="v292Dfix796-memory-retrieve.js?cb=20261021-bundle38-b"></script>
-  <script src="v292Dfix192-newengine.js?cb=20261116-fear2"></script>
+  <script src="v292Dfix192-newengine.js?cb=20261122-scene1"></script>
+  <script src="v292DfixSCENE1-cast-presence-input.js?cb=20261122-scene1"></script><!-- ★SCENE1（GPT #127-WN 優先2・既定 OFF）: 未登場の登録 NPC を既出から分ける・退出の判定・入力の種類。ON v292DfixSCENE1On=1・kill v292DfixSCENE1Off=1 -->
   <script src="v292DfixAGENCY1-player-intent.js?cb=20261110-agency1c"></script><!-- ★AGENCY1 (GPT #127-RS ②): SAY/DO の入力説明の行に「入力されていない主人公の意図・発話内容を確定しない」1 文（fix192 が呼ぶ）。既定は影（足さない）。ON = 管理者画面の鍵 agency1 または localStorage v292DfixAGENCY1On=1。Vault は足さない。kill: localStorage v292DfixAGENCY1Off=1 -->
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
@@ -4654,7 +4661,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix732-session-turn-scope.js?cb=v292Dfix732"></script>
 <script src="v292Dfix303-speaker-backref.js?cb=20261115-owneron1"></script>
 <script src="v292Dfix304-emotion.js?cb=v292Dfix419c"></script>
-<script src="v292Dfix306-npc-liveliness.js?cb=v292Dfix738"></script>
+<script src="v292Dfix306-npc-liveliness.js?cb=20261122-scene1"></script>
 <script src="v292Dfix764-name-variant-fold.js?cb=v292Dfix764"></script>
 <!-- v292Dfix830(ENTITY_MATCH_RESOLVER_V1 / GPT ruling 73+74): one shared read-time predicate for "is this name an entity we already know". Auto-merge only on EXACT / ALIAS_EXACT / FOLDED_EXACT; fix445 castMatch (prefix/suffix) is classified as LEGACY_PARTIAL and never auto-merges. No new persistent state, no Story schema change. kill: localStorage v292Dfix830Off=1. -->
 <script src="v292Dfix830-entity-match-resolver.js?cb=20260907-fix832"></script>
@@ -4672,7 +4679,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script>window.__v292DfixCP1IdxAtt = 'att-r5';</script><!-- bundle43-a r5: この index の G.submit は CP1 の試行を引き継ぐ（CP1 r5 はこの印が無い index では全体 OFF） -->
 <script src="v292DfixCP1-scene-presence.js?cb=20261025-bundle47-cp1r-c"></script>
 <script src="v292Dfix308-creepy-toggle.js?cb=v292Dfix308"></script>
-<script src="v292Dfix309-progression.js?cb=v292Dfix419c"></script>
+<script src="v292Dfix309-progression.js?cb=20261122-scene1"></script>
 <!-- fix577: 物語削除の入口を1つに寄せる。B(gallery)/C(features clearSlot)の独自削除を停止し、
      正規サービスへ委譲する。未搭載なら削除せず fail-closed（旧経路へは戻さない）。OFF=v292Dfix577Off -->
 <!-- fix579: tombstone(墓標)のスキーマとマージ規則。純粋関数のみで、**まだ同期へ配線していない**。
@@ -4708,7 +4715,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix298-roster.js?cb=20261001-ac34"></script>
 <script src="v292Dfix330-somatic-guard.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix332-uifold.js?cb=v292Dfix332"></script>
-<script src="v292Dfix333-actor-reality.js?cb=20261101-bundle79-npres73d4b-on78c"></script>
+<script src="v292Dfix333-actor-reality.js?cb=20261122-scene1"></script>
 <script src="v292Dfix334-entryhub.js?cb=20261101-bundle81-admg-a"></script>
 <!-- ★lane 15 / sp10A(GPT 裁定 #L15entry): 設定の 3 段畳み + 公開文面。どちらも DOM 移動と文字列だけ。
      kill: localStorage['v292Dfix880Off']='1' / localStorage['v292Dfix881Off']='1' -->
@@ -4737,7 +4744,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix376-speaker-guard.js?cb=20260902-fix800"></script>
 <script src="v292Dfix377-voice-anchor.js?cb=20261010-gq1"></script>
 <script src="v292Dfix378-species-judge.js?cb=v292Dfix378"></script>
-<script src="v292Dfix379-wrap-keeper.js?cb=20261101-bundle83-flow-c"></script>
+<script src="v292Dfix379-wrap-keeper.js?cb=20261122-scene1"></script>
 <!-- v292Dfix822: START_RULES_V1（GPT 裁定 2026-09-06(20)(21)）。keeper prio1 で【開始ルール】(毎turn)・【開始時の状況】(T0のみ) を
      S.scene.startRules / S.scene.startCondition から注入。両 field を持つ Story が無ければ sys は 1 バイトも変わらない（dormant）。
      MARKER_SAFE render / fix444 の law 意味論は不使用 / S.scene への書込 0。kill = v292Dfix822Off='1'。 -->
@@ -4790,14 +4797,14 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix442-folklore.js?cb=v292Dfix442"></script>
 <script src="v292Dfix443-drama-rescue.js?cb=20261114-retry1"></script>
 <script src="v292Dfix444-world-law.js?cb=20261014-iso2b-c953r3"></script>
-<script src="v292Dfix445-handle-lock.js?cb=20260901-fix784"></script>
+<script src="v292Dfix445-handle-lock.js?cb=20261122-scene1"></script>
 <script src="v292Dfix446-fill-robust.js?cb=v292Dfix446"></script>
 <script src="v292Dfix447-json-force.js?cb=v292Dfix447"></script>
 <script src="v292Dfix448-genloading.js?cb=v292Dfix448"></script>
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
 <script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
-<script src="v292Dfix459-sys-v2.js?cb=20261116-beat2"></script>
+<script src="v292Dfix459-sys-v2.js?cb=20261122-scene1"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>
 <script src="v292Dfix463-human-guard.js?cb=v292Dfix463"></script>
 <script src="v292Dfix464-say-promote.js?cb=v292Dfix465"></script>
@@ -4948,7 +4955,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix851-posture-directive.js?cb=20261112-stateq1"></script>
 <script src="v292Dfix852-mental-capability.js?cb=20261001-ac33"></script>
 <script src="v292Dfix853-truncated-name-guard.js?cb=20261025-bundle58-npcp1-b"></script>
-<script src="v292DfixNPRES-presence-gate.js?cb=20261101-bundle80-int-a"></script><!-- v292DfixNPRES(73-d4b): NPC を 場面にいる／未確認／別の場所 に分け、未確認・別の場所の人の古い「その瞬間の様子」を次ターンの指示に載せない（読むだけ・保存しない）。既定 OFF・管理者画面で ON にしたアカウントだけ ON（admf2: ADMF1.gate('npres1')。端末の v292DfixNPRESOn は使わない） / kill v292DfixNPRESOff=1（部分 kill d1Off〜d4Off） -->
+<script src="v292DfixNPRES-presence-gate.js?cb=20261122-scene1"></script><!-- v292DfixNPRES(73-d4b): NPC を 場面にいる／未確認／別の場所 に分け、未確認・別の場所の人の古い「その瞬間の様子」を次ターンの指示に載せない（読むだけ・保存しない）。既定 OFF・管理者画面で ON にしたアカウントだけ ON（admf2: ADMF1.gate('npres1')。端末の v292DfixNPRESOn は使わない） / kill v292DfixNPRESOff=1（部分 kill d1Off〜d4Off） -->
 <!-- ★av2 C2 (GPT 911): Asset v2 presentation plane (portrait.list / asset.get / IDB / placeholder / reason display / addBinding / explicit delete UI).
      Acts ONLY on assetSchema-2 documents (canonical-derived; never the local flag). Legacy stories: no DOM work at all.
      kill: localStorage[v292Dav2pOff]=1 (legacy generation guards stay) -->
@@ -5007,7 +5014,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixCALL1-confirmed-speech.js?cb=20261113-cast1"></script><!-- ★CALL1 / SPK3 (laneCAST1・GPT #127-SU ②③): 話者が確定した発話だけから「呼称の先例」1 行（earlierFacts）と recentSpeakers（直近 2 ターンの話者の参照）を作る純関数（fix58 が呼ぶたびに探す）。どちらも既定 OFF・鍵は別々。ON v292DfixCALL1On=1 / v292DfixSPK3On=1・kill v292DfixCALL1Off=1 / v292DfixSPK3Off=1 -->
 <script src="v292DfixLEAK1-nonstory-lines.js?cb=20261117-leak3r3"></script><script src="v292DfixLEAK3-internal-lines.js?cb=20261117-leak3r3"></script><!-- ★LEAK3 (GPT #127-VV ■4・既定 OFF): sys 見出しの復唱・内部 JSON の断片の行だけを取り除く（On=v292DfixLEAK3On='1'・kill=v292DfixLEAK3Off='1'）。既定は数えるだけ。--><script src="v292DfixHEROACT1-hero-act-shadow.js?cb=20261116-heroact1"></script><!-- ★HEROACT1（GPT #127-VB 2(1)・shadow・既定 OFF・On v292DfixHEROACT1On=1・kill v292DfixHEROACT1Off=1）: 入力に無い主人公の発話・行動を数えるだけ（書き換えない・sys 0 字・件数だけ記録） --><!-- ★LEAK1 (laneLEAK1・GPT #127-SW 2): 本文に混ざる物語でない行の検査。影は常時（件数だけ・本文は記録しない）。適用 v292DfixLEAK1Apply='1'（既定 OFF）／kill v292DfixLEAK1Off='1'。保存・sys・送信は変えない。 -->
 <script src="v292DfixOWNERON1-owner-defaults.js?cb=20261115-owneron1"></script><!-- ★OWNERON1 (laneOWNERON1): Owner（/auth/me の entitlement owner かつ active）でログイン中の端末だけ、PLACE1・SPKW1 を既定 ON。各機能の on() が呼ぶたびに聞く（読むだけ・書き込み 0）。各機能の Off 鍵が常に優先・全体 kill v292DfixOWNERON1Off=1。Owner 以外・未ログイン・不明 = 従来と同じ -->
-<script src="v292DfixPLACE1-where-now.js?cb=20261116-place1r8"></script><!-- ★PLACE1 (lanePLACE1): 物のいまの持ち主・置き場所と、その場にいない人の控えを user の whereNow に渡す。純関数だけ（fix58 が呼ぶたびに探す）。鍵 v292DfixPLACE1On=1（既定 OFF＝送信バイト同一）・kill v292DfixPLACE1Off=1 -->
+<script src="v292DfixPLACE1-where-now.js?cb=20261122-scene1"></script><!-- ★PLACE1 (lanePLACE1): 物のいまの持ち主・置き場所と、その場にいない人の控えを user の whereNow に渡す。純関数だけ（fix58 が呼ぶたびに探す）。鍵 v292DfixPLACE1On=1（既定 OFF＝送信バイト同一）・kill v292DfixPLACE1Off=1 -->
 <script src="v292DfixNUM1-input-ledger.js?cb=20261113-num2"></script><!-- ★NUM1 (laneLEAK1・GPT #127-SW 3): 序盤のプレイヤー入力の数・約束を earlierFacts の先頭に最大 5 行・200 字で残す純関数（fix58 が呼ぶ）。鍵 v292DfixNUM1On='1'（既定 OFF）／kill v292DfixNUM1Off='1'。保存なし・sys 0 字。 -->
 </body>
 </html>

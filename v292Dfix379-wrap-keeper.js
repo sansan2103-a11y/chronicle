@@ -42,6 +42,7 @@
   function genderBlock(){
     try {
       var S = getS(); if (!S || !S.cast) return '';
+      try { var Z1 = window.__v292DfixSCENE1; var z1 = (Z1 && typeof Z1.attrBlock === 'function') ? Z1.attrBlock(S) : null; if (typeof z1 === 'string') return z1; } catch(eZ1){}   /* ★SCENE1 a: 未登場の登録 NPC を後ろに分ける（OFF は null） */
       var parts = [];
       var h = S.cast.hero;
       if (h && h.gender && (h.name || '').length) parts.push(h.name + '(主人公)=' + h.gender);

@@ -27,7 +27,7 @@
   if(window.__v292Dfix306) return; window.__v292Dfix306=true;
   var MARKER='【NPCの登場】';
   var GUARD='\n\n'+MARKER+'場面の空気を読むこと。人がいて自然な状況（街・店・宿・捜査・社交・群衆・緊迫など）では、雰囲気の描写だけで済ませず、まだ誰も絡んでいなければ未登録の人物を一人前へ出し、言葉や行動で関わらせる。情報・関係・緊張・選択肢のいずれかに寄与させること。再登場しそうな重要人物には名前を与える（一覧に残り一貫させるため）。ただし既に登場中・直近で出したNPCが居る場合や、親密な二人だけ・一人きりの静かな場面では無理に増やさない。中心キャラの焦点は薄めない。創作したNPCは状況次第で言葉を発し、生きた人物として絡ませてよい。';
-  function block(){ try{ if(localStorage.getItem('v292Dfix306Off')==='1') return ''; }catch(e){} return GUARD; }
+  function block(){ try{ if(localStorage.getItem('v292Dfix306Off')==='1') return ''; }catch(e){} try{ var Z1=window.__v292DfixSCENE1; if(Z1 && typeof Z1.skipPush==='function' && Z1.skipPush('306')) return ''; }catch(eZ1){} return GUARD; }   /* ★SCENE1 c: 「続きを書く」のときだけ */
   function det306(){ try{ return localStorage.getItem('v292Dfix306Det')==='1'; }catch(e){ return false; } }
   function installBuild(){
     try{

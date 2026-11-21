@@ -286,6 +286,7 @@
   function seedBlock(){
     try{
       if (localStorage.getItem('v292SeedOff')==='1') return '';
+      try { var Z1 = window.__v292DfixSCENE1; if (Z1 && typeof Z1.skipPush === 'function' && Z1.skipPush('192')) return ''; } catch(eZ1){}   /* ★SCENE1 c */
       var store = window.__v292Dfix77Store; if(!store) return '';
       var S=getS(); var cur=(S&&S.turns)?S.turns.length:0;
       var cands=[];

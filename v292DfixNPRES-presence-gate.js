@@ -118,6 +118,7 @@
   function sentences(s) { return String(s || '').split(/[。！？!?\n]/).filter(function (x) { return x.trim(); }); }
   var UNREAL = /かもしれ|だろう|ような気|気がした|思い出|回想|夢|幻|電話|通話|受話器|画面|スマホ|端末|メッセージ|噂|らしい|はず|だったら|つもり|かのよう|もし|想像|錯覚|声だけ|声しか/;   /* CP1 の UNREAL と同じ語 */
   function classify(sent, fs) {
+    try { var Z1 = G.__v292DfixSCENE1; if (Z1 && typeof Z1.exitHit === 'function' && Z1.exitHit(sent, fs)) return 'weak'; } catch (eZ1) {}   /* ★SCENE1 b: 退出の語・て／で をまたぐ形（確かめられない (b)。退出のままかは下の stillOut が (c) にする） */
     for (var i = 0; i < fs.length; i++) if (sent.indexOf(fs[i]) >= 0 && new RegExp(esc(fs[i]) + HON + ABSENT_V).test(sent)) return UNREAL.test(sent) ? 'weak' : 'strong';
     return WEAK.test(sent) ? 'weak' : 'present';
   }
@@ -249,6 +250,7 @@
             var fs = formsOf(n), r = '', oth = D1 ? othersOf(n) : null;
             if (fs.length) {
               if (abs[n]) { r = 'c'; ST.cp1c++; }
+              else if ((function () { try { var Z1 = G.__v292DfixSCENE1; return !!(Z1 && typeof Z1.stillOut === 'function' && Z1.stillOut(n)); } catch (eZ1) { return false; } })()) { r = 'c'; }   /* ★SCENE1 b: 退出の後、戻りの条件（PLACE1 と同じ形）を満たすまで */
               else {
                 r = 'b';
                 var endAfter = false;   /* ★d4: より新しいターンに通話の終わりがあった */

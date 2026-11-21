@@ -161,7 +161,8 @@
      前面・背景・強制ローテ・その回の選択と公平カウンタ（lastBeatTurn・__pool・__prevKarada・v292Dfix333Rot）はすべてこの states から作られるので、
      ABSENT の NPC はどれにも入らない。0 人なら selectForeground は null を返し、前面化の行は出ない。 */
   function fgStates333(states, text){ var b=states; try{ var h=window.__v292DfixCP1Fg333; if(typeof h==='function'){ var r=h(states, text); if(r && typeof r==='object') b=r; } }catch(e){ b=states; }
-    try{ var N=window.__v292DfixNPRES, r2=(N && typeof N.fgRestrict==='function') ? N.fgRestrict(b, text) : null; if(r2 && typeof r2==='object'){ var o={}; Object.keys(r2).forEach(function(k){ if(Object.prototype.hasOwnProperty.call(b,k)) o[k]=b[k]; }); b=o; } }catch(e2){}   /* ★NPRES-c333（GPT #127-OG 条件付き許可・既定 OFF）: CP1 の結果を先に取り、その中から NPRES の (b)(c) を外す。名前を足さない・CP1 が外した名前を戻さない */
+    try{ var N=window.__v292DfixNPRES, r2=(N && typeof N.fgRestrict==='function') ? N.fgRestrict(b, text) : null; if(r2 && typeof r2==='object'){ var o={}; Object.keys(r2).forEach(function(k){ if(Object.prototype.hasOwnProperty.call(b,k)) o[k]=b[k]; }); b=o; } }catch(e2){}
+    try{ var Z1=window.__v292DfixSCENE1, r3=(Z1 && typeof Z1.fgFilter==='function') ? Z1.fgFilter(b, text) : null; if(r3 && typeof r3==='object'){ var o3={}; Object.keys(r3).forEach(function(k){ if(Object.prototype.hasOwnProperty.call(b,k)) o3[k]=b[k]; }); b=o3; } }catch(e3){}   /* ★SCENE1 b・c: 退出・不在の人を外す（OFF は null） */   /* ★NPRES-c333（GPT #127-OG 条件付き許可・既定 OFF）: CP1 の結果を先に取り、その中から NPRES の (b)(c) を外す。名前を足さない・CP1 が外した名前を戻さない */
     return b; }
   function foregroundBlock(sel){
     if(!sel||!sel.fg.length) return '';

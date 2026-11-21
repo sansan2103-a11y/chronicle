@@ -132,6 +132,7 @@
     }
     // 危機のとき
     if (s.indexOf(H_CRISIS) < 0){ i = s.indexOf(H_FINAL); if (i >= 0){ s = s.slice(0, i) + CRISIS + s.slice(i); ops.push('add_crisis'); } }
+    try { var Z1 = window.__v292DfixSCENE1, z1 = (Z1 && typeof Z1.tenkaiCut === 'function') ? Z1.tenkaiCut(s) : null; if (typeof z1 === 'string'){ s = z1; ops.push('scene1_tenkai'); } } catch(eZ1){}   /* ★SCENE1 c（r2）: DO・SAY・STORY では【展開】の「場面を自分から動かす」文だけ外す（OFF は null） */
     s = s.replace(/\n{4,}/g, '\n\n\n');
     return { text: s, ops: ops };
   }

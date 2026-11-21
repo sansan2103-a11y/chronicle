@@ -353,6 +353,7 @@
       if (off()) return '';
       var names = liveKnown();
       if (names.length < 2) return '';      // 主人公しか居ない＝注入不要
+      try { var Z1 = G.__v292DfixSCENE1, z1 = (Z1 && typeof Z1.lockSplit === 'function') ? Z1.lockSplit(names) : null; if (z1){ var t0 = z1.a.length >= 2 ? buildLockText(z1.a) : ''; var t1 = (t0 || ('\n' + MARKER)) + z1.extra; return t1.length <= MAX_TEXT ? t1 : t0; } } catch(eZ1){}   /* ★SCENE1 a: 既出だけを「既出の存在」に並べ、未登場は別の一文 */
       return buildLockText(names);
     } catch(e){ return ''; }
   }
