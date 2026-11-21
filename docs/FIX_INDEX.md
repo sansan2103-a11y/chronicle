@@ -476,6 +476,10 @@
 #### fix135 — 長期記憶（あらすじ・自動ワールド情報・重要イベント）
 - 状態：本番稼働 `i64`。役割：数ターンごとに 1 回の AI 呼び出しで、あらすじ（約 300 字）・登場人物や場所の DB（fix136）・重要イベント（fix137）を作り、端末に保存（fix246 で物語ごとのキー）。`window.__longmem`。fix299 で永続化の欠落を根治した記録あり。
 
+#### MEMTALLY・MEMTRIAL — 試用の日別集計と Owner 限定の条件（2026-11-21・Local・GPT #127-WF (a)(3)）
+- 集計: 腕 A が働くとき（kill `v292DfixMEMTallyOff='1'`）、端末の鍵 `v292DfixMEMTally` に日別（端末の日付）で数だけ足す（覚え書きを渡した回数・見送りの理由コード別・MEM4 の信用喪失・印の無効化・通知の不採用の理由別）。本文・物語 id（hash も）・アカウント id は入れない。出来事のその場で +1・14 日より古い日は書くときに消す・書けなければ握りつぶす。読む口 `__v292DfixMEM2.tally()`。同期の除外（PAF 3 か所）に足した。物語の鍵ではない（KEY1 の family に無い）・復元（fix721）は既定で拒否のまま・完全リセット（/^v292Dfix/）で消える。
+- 試用の間だけの条件（kill ではない）: 腕 A・MEM3b・MEM3・MEM4 は、端末の鍵に加えて、この page の /auth/me の答え（fix893 serverMe）が Owner（entitlement owner・status active＝fix905 と同じ判定）のときだけ働く。答えが無い・失敗・Owner 以外は働かない（理由は `__v292DfixMEMTrial.stats()`）。一般向けに ON にするときは MEM2 の `TRIAL_OWNER_ONLY` を false にする（1 か所）。
+
 #### MEM4 — 長期記憶の所属証明（案 A・2026-11-17・Local・未出荷・GPT #127-VV 3）
 - `v292DfixMEM4On='1'`・kill `v292DfixMEM4Off='1'`・既定 OFF・MEM2 腕 A が ON のときだけ。MEM2 が見届けた作り直し（このページの fix135 が保存の直後に知らせた完了〔`__v292DfixMEM4Done`・r2〕と、接尾辞・ターン・中身の hash・場所が一致したもの。r3/r4: 知らせの時点で S の物語と知らせ先の slot の本体のターン数・最初と最後のターンが一致し〔違えば NOTIFY_OTHER_STORY〕、4 つの鍵が知らせの結果のとおりに保存されている〔違えば NOTIFY_PARTIAL_SAVE〕ものだけ。知らせの時点のアカウントも控える）にだけ、別の鍵 `v292DfixMEM4_slot_<id>` へ印（アカウント ID〔サーバーで確かめた値〕・物語 id・端末 id〔`v292DfixMEM4Dev`〕・端末の版の通し番号〔`v292DfixMEM4Seq`・r2〕・作ったターン・4 つの鍵の中身の hash・鎖）を書く。知らせの無い書き込み（復元・別のタブ・切り替え途中）は信用しない（UNSEEN_WRITER）。snapshot などで古い記憶と古い印が一緒に戻っても通し番号が合わない（SEQ_MISMATCH）。r5: 信用していない間に印が今の記憶と合わないと分かったら、印と通し番号の行を消す（最後に認証された版を戻しても SEQ_UNKNOWN）。読み込み時に記憶があるときは、印がすべて一致したときだけ腕 A が渡す（再読み込みの後も渡る）。印なし・壊れ・アカウント不明／違い・端末違い・版や中身のずれ（移行・復元・更新途中）は渡さない（理由は `stats().m4`）。fix135 は保存の後に完了の知らせを 1 行足しただけ（保存の流れは同じ）・fix246 は変えない。新しい鍵は KEY1 の FAMILIES（side）・STORE1b の FAMILY_CLASS（c）・同期の除外（PAF 3 か所）に足した。復元（fix721）は既定で拒否のまま。
 
@@ -1105,8 +1109,8 @@
 | 61 | fix659 | `v292Dfix659-fork-choice.js` | i61 | `d6e39622` | v292Dfix680 | 保存・同期 | `v292Dfix659Off` |
 | 62 | features | `features.js` | i62 | `6d812ce8` | 20261111-xss1 | 本体（ゲーム中核） | `v292Dfix190Off` `v292Dfix205gOff` `v292Dfix748SaveRefuseOff` `v292Dfix834Off` `v292DfixSAVEUIOff` `v292DfixCLICHE2Off` `v292DfixDEDUPQ1Off` `v292DfixSTATE2Off` |
 | 63 | fixP0 | `v292DfixP0-scenario-blocker.js` | i63 | `7c6d79f0` | v292Dfix680 | シナリオ・ホーム |  |
-| 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `69ede21c` | 20261117-mem4r5 | 記憶 | `v292Dfix894Off` `v292DfixMEM3On` `v292DfixMEM3Off` |
-| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `2541678a` | 20261117-mem4r5 | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` `v292DfixMEM3bOn` `v292DfixMEM3bOff` `v292DfixMEM4On` `v292DfixMEM4Off` |
+| 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `1b5c595f` | 20261121-memtally | 記憶 | `v292Dfix894Off` `v292DfixMEM3On` `v292DfixMEM3Off` |
+| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `e8b86a1a` | 20261121-memtally | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` `v292DfixMEM3bOn` `v292DfixMEM3bOff` `v292DfixMEM4On` `v292DfixMEM4Off` `v292DfixMEMTallyOff` |
 | 65 | fix138 | `v292Dfix138-continue.js` | i65 | `db8f5e85` | 20260929-ac18 | 記憶 | `v292Drp1Off` |
 | 66 | fix145 | `v292Dfix145-charlist.js` | i66 | `e7b06fd1` | 20261101-bundle79-npres73d4b-on78c | NPC・キャラ状態 | `v292Dfix410Off` `v292Dfix487ListOff` `v292Dfix529Off` `v292Dfix773Off` |
 | 67 | fix777 | `v292Dfix777-icon-lightbox.js` | i67 | `19adb4d6` | 20261021-laneE-a | アイコン・画像 | `v292Dfix777Off` `v292DfixLE2Off` |

@@ -163,7 +163,9 @@
     return r;
   }
   var m3Stat = { prompts: 0, applied: 0, mismatch: 0, addedChars: 0, settingsChars: 0, lastAdded: 0, lastSettings: 0, lastSettingsWhy: null, filtered: { summary: 0, worldinfo: 0, events: 0 }, lastFiltered: null, filterErr: 0, discarded: 0, seenKept: { summary: 0, events: 0 }, warnMany: 0, filterStopped: 0, skipWhy: {} };
-  function mem3On(){ try { return localStorage.getItem('v292DfixMEM3Off') !== '1' && localStorage.getItem('v292DfixMEM3On') === '1'; } catch(e){ return false; } }
+  function mem3On(){ try { return localStorage.getItem('v292DfixMEM3Off') !== '1' && localStorage.getItem('v292DfixMEM3On') === '1' && m3trial(); } catch(e){ return false; } }
+  /* ★MEMTRIAL（GPT #127-WF (3)・試用の間だけの条件）: MEM2 の __v292DfixMEMTrial（Owner の確認・1 か所）を見る。無い・例外 → 働かない（fail-closed） */
+  function m3trial(){ try { var G = window.__v292DfixMEMTrial; return !!(G && typeof G.ok === 'function' && G.ok('mem3') === true); } catch(e){ return false; } }
   function mem3Prompt(p){
     m3Ctx = null;   /* ★r8: 照合の材料はこの回の分だけ */
     if (!mem3On()) return p;

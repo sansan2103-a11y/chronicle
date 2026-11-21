@@ -84,6 +84,9 @@ try {
   check('EDIT-01: module loads in node', false, String(e && e.message || e).slice(0, 160));
 }
 
+// ★MEMTALLY・MEMTRIAL（GPT #127-WF (3)）: 記憶の試験（5〜9）のサンドボックスに、試用の間だけの条件が見る Owner の /auth/me の答え（fix893 serverMe）を置く。
+//   fix135 だけを読む試験には、条件の 1 か所（MEM2 の __v292DfixMEMTrial）が無いので、Owner と同じ答えを返す置き換えを置く（MEM2 を読む試験では MEM2 の本物が上書きする）。本物の条件は 10 の項目と t_memtally.cjs で見る。
+const __mtOwner = (sb) => { const me = { accountId: 'acc1', entitlement: 'owner', status: 'active' }; if (!sb.__v292Dfix893) sb.__v292Dfix893 = { me: () => me, serverMe: () => me }; if (!sb.__v292DfixMEMTrial) sb.__v292DfixMEMTrial = { ok: () => true }; };
 // ---------- 5. unit: MEM2 (long-term memory wiring, default OFF) on synthetic data ----------
 try {
   const vm = (await import('node:vm')).default;
@@ -92,7 +95,7 @@ try {
     const P = { _extensions: [], _userExtensions: [], _parseExtensions: [] };
     const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, clearTimeout() {}, JSON, Math, Date,
       localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
-    sb.window = sb; sb.Planner = P; vm.createContext(sb);
+    sb.window = sb; sb.Planner = P; vm.createContext(sb); __mtOwner(sb);
     sb.__chronicleDocumentStoryKey = (opt && opt.dk) || 'chr6_slot_mem2a'; sb.__v292Dfix246 = 1;
     sb.__v292Dfix697 = { status: () => ({ storyId: (opt && opt.sidNull) ? null : ((opt && opt.sid) || 'mem2a') }) };
     if (withMem2) vm.runInContext(read('v292DfixMEM2-longmem-wire.js'), sb);
@@ -136,7 +139,7 @@ try {
     class XHR { open() {} setRequestHeader() {} send(b) { sent.push(b); } }
     const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, XMLHttpRequest: XHR, addEventListener() {}, document: { hidden: false, addEventListener() {} },
       localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
-    sb.window = sb; vm.createContext(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' };
+    sb.window = sb; vm.createContext(sb); __mtOwner(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' };
     sb.S = { turns: [0, 1, 2, 3].map(i => ({ playerText: '入力' + i, narrative: '本文' + i + '。高瀬和也は市役所の福祉課のケアマネだと名乗った。' })), scene: { loc: '店' } };
     vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); return { sb, sent };
   };
@@ -157,7 +160,7 @@ try {
     const L = new Map(Object.entries(ls || {})); const P = { _extensions: [], _userExtensions: [], _parseExtensions: [] };
     const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, clearTimeout() {}, JSON, Math, Date,
       localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
-    sb.window = sb; sb.Planner = P; vm.createContext(sb); sb.__chronicleDocumentStoryKey = 'chr6_slot_r4'; sb.__v292Dfix246 = 1; sb.__v292Dfix697 = { status: () => ({ storyId: 'r4' }) };
+    sb.window = sb; sb.Planner = P; vm.createContext(sb); __mtOwner(sb); sb.__chronicleDocumentStoryKey = 'chr6_slot_r4'; sb.__v292Dfix246 = 1; sb.__v292Dfix697 = { status: () => ({ storyId: 'r4' }) };
     vm.runInContext(read('v292DfixMEM2-longmem-wire.js'), sb); vm.runInContext(read('v292Dfix58-prompt-rebuild.js'), sb);
     L.set('chr6_slot_r4', JSON.stringify({ scene: { loc: '店' } }));
     L.set('chr6_v292Dfix135_sum_slot_r4', '確定：受け取りは来週金曜の十八時。'); L.set('chr6_v292Dfix137_ev_slot_r4', JSON.stringify([{ turnIdx: 1, importance: 2, event: '受け取りは三日後と決まる' }, { turnIdx: 3, importance: 2, event: '受け取りが来週金曜十八時に変わる' }])); L.set('chr6_v292Dfix135_last_slot_r4', '4');
@@ -169,7 +172,7 @@ try {
   { const L = new Map(Object.entries({ chr6: JSON.stringify({ cfg: { orKey: 'k' } }), v292DfixMEM3On: '1' })); const sent = [];
     const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, XMLHttpRequest: class { open() {} setRequestHeader() {} send(b) { sent.push(b); } }, addEventListener() {}, document: { hidden: false, addEventListener() {} },
       localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
-    sb.window = sb; vm.createContext(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: 'n' + i })), scene: { loc: 'x' } };
+    sb.window = sb; vm.createContext(sb); __mtOwner(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: 'n' + i })), scene: { loc: 'x' } };
     vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); const pr = JSON.parse(sent[0]).messages[0].content;
     check('MEM3 r5 (wording r7): the rebuild prompt keeps the protagonist-feelings criterion (not 確定 unless established; a guess goes in 未定) and one part per matter (if unsure, 未定)', /the protagonist\'s feelings the text has not established \(a guess goes in 未定\)/.test(pr) && /Each matter goes in one part only; if unsure, 未定/.test(pr) && !/Do not decide the protagonist/.test(pr), ''); }
 } catch (e) {
@@ -182,7 +185,7 @@ try {
   const lm7 = (ls, hidden) => { const L = new Map(Object.entries(Object.assign({ chr6: JSON.stringify({ cfg: { orKey: 'k' } }), v292DfixLORE1On: '1' }, ls))); const sent = [];
     const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, XMLHttpRequest: class { open() {} setRequestHeader() {} send(b) { sent.push(b); } }, addEventListener() {}, document: { hidden: false, addEventListener() {}, readyState: 'complete' },
       localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
-    sb.window = sb; vm.createContext(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r7s' }) }; sb.__v292Dfix889 = { isHidden: () => !!hidden }; sb.__f379reg = [];
+    sb.window = sb; vm.createContext(sb); __mtOwner(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r7s' }) }; sb.__v292Dfix889 = { isHidden: () => !!hidden }; sb.__f379reg = [];
     sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: 'n' + i })), scene: { loc: 'x', lore: '離島の診療所。鍵はよろず屋の千代が預かる。\n【GM専用】千代は昔の院長の娘で、地下室の鍵も持っている。\nただしこの世界の底には、死者は潮とともに戻る——という隠された理がある。' }, cast: { hero: { name: '朔也', desc: '新任の医師' }, npcs: [{ name: '千代', desc: 'よろず屋の店主。\nGM: 実は院長殺しの犯人。' }, { name: '茂', desc: '漁師。実は千代の兄。無口' }] } };
     vm.runInContext(read('v292DfixLORE1-world-lore.js'), sb); vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); return { p: JSON.parse(sent[0]).messages[0].content, sb }; };
   const on = lm7({ v292DfixMEM3On: '1' }), hid = lm7({ v292DfixMEM3On: '1' }, true), off = lm7({});
@@ -202,7 +205,7 @@ try {
       const self = this; Promise.resolve().then(() => { self.status = 200; self.responseText = JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) } }] }); self.onload(); }); } }
     const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, Promise, XMLHttpRequest: XHR, addEventListener() {}, document: { hidden: false, addEventListener() {}, readyState: 'complete' },
       localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
-    sb.window = sb; vm.createContext(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r8s' }) }; sb.__v292Dfix889 = { isHidden: () => false }; sb.__f379reg = [];
+    sb.window = sb; vm.createContext(sb); __mtOwner(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r8s' }) }; sb.__v292Dfix889 = { isHidden: () => false }; sb.__f379reg = [];
     sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: '朔也は診療所に着いた。千代が診療所の鍵を渡した。' })), scene: { loc: 'x', lore: '離島の診療所。地下室の鍵は井戸の底に沈んでいる。' + SECRETS.join('\n') }, cast: { hero: { name: '朔也', desc: '新任の医師' }, npcs: [{ name: '千代', desc: 'よろず屋の店主。' + NSEC.join('') }] } };
     vm.runInContext(read('v292DfixLORE1-world-lore.js'), sb); vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); for (let i = 0; i < 6; i++) await new Promise(r => setTimeout(r, 2));
     return { prompt, L, saved: [L.get('chr6_v292Dfix135_sum'), L.get('chr6_v292Dfix136_wi'), L.get('chr6_v292Dfix137_ev')].join('\n'), st: sb.__v292DfixMEM3.stats() }; };
@@ -221,7 +224,7 @@ try {
     class XHR { open() {} setRequestHeader() {} send(b) { prompt = JSON.parse(b).messages[0].content; const self = this; Promise.resolve().then(() => { self.status = 200; self.responseText = JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) } }] }); self.onload(); }); } }
     const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, Promise, XMLHttpRequest: XHR, addEventListener() {}, document: { hidden: false, addEventListener() {}, readyState: 'complete' },
       localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
-    sb.window = sb; vm.createContext(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r10s' }) }; sb.__v292Dfix889 = { isHidden: () => false }; sb.__f379reg = [];
+    sb.window = sb; vm.createContext(sb); __mtOwner(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r10s' }) }; sb.__v292Dfix889 = { isHidden: () => false }; sb.__f379reg = [];
     sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: narr })), scene: { loc: 'x', lore }, cast: { hero: { name: '朔也' }, npcs: [] } };
     vm.runInContext(read('v292DfixLORE1-world-lore.js'), sb); vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); for (let i = 0; i < 6; i++) await new Promise(r => setTimeout(r, 2));
     return { prompt, L, st: sb.__v292DfixMEM3.stats() }; };
@@ -240,7 +243,7 @@ try {
     const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, clearTimeout() {}, JSON, Math, Date, Uint8Array, crypto: { getRandomValues: (a) => { for (let i = 0; i < a.length; i++) a[i] = (i * 37 + 11) & 255; return a; } },
       localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
     const TT = Array.from({ length: 6 }, (_, i) => ({ inputType: 'DO', playerText: 'p', narrative: 'n' + i }));
-    sb.window = sb; sb.Planner = Pl; vm.createContext(sb); sb.S = { turns: TT, scene: { loc: '店' }, cast: { hero: { name: 'h' }, npcs: [] } }; sb.__chronicleDocumentStoryKey = 'chr6_slot_m4s'; sb.__v292Dfix246 = 1; sb.__v292Dfix697 = { status: () => ({ storyId: 'm4s' }) }; sb.__v292Dfix893 = { me: () => (acct ? { accountId: acct } : null), serverMe: () => (acct ? { accountId: acct } : null) };
+    sb.window = sb; sb.Planner = Pl; vm.createContext(sb); __mtOwner(sb); sb.S = { turns: TT, scene: { loc: '店' }, cast: { hero: { name: 'h' }, npcs: [] } }; sb.__chronicleDocumentStoryKey = 'chr6_slot_m4s'; sb.__v292Dfix246 = 1; sb.__v292Dfix697 = { status: () => ({ storyId: 'm4s' }) }; sb.__v292Dfix893 = { me: () => (acct ? { accountId: acct, entitlement: 'owner', status: 'active' } : null), serverMe: () => (acct ? { accountId: acct, entitlement: 'owner', status: 'active' } : null) };   /* ★MEMTRIAL: Owner の答え */
     vm.runInContext(read('v292DfixMEM2-longmem-wire.js'), sb); vm.runInContext(read('v292Dfix58-prompt-rebuild.js'), sb);
     const st = sb.S;
     return { sb, send: () => JSON.parse(Pl._userExtensions[Pl._userExtensions.length - 1]({ user: JSON.stringify({ currentInput: { type: 'DO', text: 'x' }, storySoFar: 'y' }), state: st })) }; };
@@ -277,6 +280,30 @@ try {
     check('MEM4 r5 (#127-VX 4/5): after unauthenticated rebuilds the stale stamp and its sequence row are removed; restoring the last authenticated snapshot is not trusted (M4_SEQ_UNKNOWN)', gone && !ow.memoryNotes && sw2.sb.__v292DfixMEM2.stats().a.skip.M4_SEQ_UNKNOWN === 1, JSON.stringify(sw2.sb.__v292DfixMEM2.stats().a.skip)); }
 } catch (e) {
   check('MEM4: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
+}
+
+// ---------- 10. unit: MEMTALLY (per-day device counts, numbers only) and MEMTRIAL (trial-only owner condition, fail-closed), default OFF ----------
+try {
+  const vm = (await import('node:vm')).default;
+  const boot = (L, me) => { const Pl = { _extensions: [], _userExtensions: [], _parseExtensions: [] };
+    const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, clearTimeout() {}, JSON, Math, Date, Uint8Array, crypto: { getRandomValues: (a) => a },
+      localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
+    sb.window = sb; sb.Planner = Pl; vm.createContext(sb); sb.S = { turns: [0, 1, 2, 3].map(i => ({ inputType: 'DO', playerText: 'p', narrative: 'n' + i })), scene: { loc: '店' }, cast: { hero: { name: 'h' }, npcs: [] } };
+    sb.__chronicleDocumentStoryKey = 'chr6_slot_mt'; sb.__v292Dfix246 = 1; sb.__v292Dfix697 = { status: () => ({ storyId: 'mt' }) }; sb.__v292Dfix893 = { me: () => me, serverMe: () => me };
+    vm.runInContext(read('v292DfixMEM2-longmem-wire.js'), sb); vm.runInContext(read('v292Dfix58-prompt-rebuild.js'), sb);
+    return { sb, send: () => JSON.parse(Pl._userExtensions[Pl._userExtensions.length - 1]({ user: JSON.stringify({ currentInput: { type: 'DO', text: 'x' }, storySoFar: 'y' }), state: sb.S })) }; };
+  const MEMK = { chr6_v292Dfix135_sum_slot_mt: '凪は港に着いた。', chr6_v292Dfix137_ev_slot_mt: JSON.stringify([{ turnIdx: 2, importance: 3, event: '鍵を受け取った' }]), chr6_v292Dfix135_last_slot_mt: '2' };
+  const ON = { chr6_slot_mt: JSON.stringify({ scene: { loc: '店' }, turns: [0, 1, 2, 3].map(i => ({ inputType: 'DO', playerText: 'p', narrative: 'n' + i })) }), v292DfixMEM2aOn: '1' };
+  const OWNER = { accountId: 'acc1', entitlement: 'owner', status: 'active' };
+  const L = new Map(Object.entries(ON)); const a = boot(L, OWNER); a.send(); for (const k in MEMK) L.set(k, MEMK[k]); const o = a.send(); const t = L.get('v292DfixMEMTally') || '';
+  check('MEMTALLY: the owner device adds per-day numbers at the event (one skip, one injection); no story id, account id or text in the key', !!o.memoryNotes && /"inj":1/.test(t) && /"NOT_BUILT_YET":1/.test(t) && !/mt|acc1|凪/.test(t.replace(/"skip"|"inj"/g, '')), t);
+  const LU = new Map(Object.entries(ON)); const u = boot(LU, { accountId: 'acc9', entitlement: 'user', status: 'active' }); u.send(); for (const k in MEMK) LU.set(k, MEMK[k]); const ou = u.send();
+  const LN = new Map(Object.entries(ON)); const n = boot(LN, null); n.send(); for (const k in MEMK) LN.set(k, MEMK[k]); const on = n.send();
+  check('MEMTRIAL: with the keys ON in the same browser, a non-owner account or an unknown /auth/me answer gets no memory notes and no tally (fail-closed, reason counted)', !ou.memoryNotes && !LU.has('v292DfixMEMTally') && u.sb.__v292DfixMEMTrial.stats().a.NOT_OWNER === 2 && !on.memoryNotes && !LN.has('v292DfixMEMTally') && n.sb.__v292DfixMEMTrial.stats().a.NO_SERVER_ME === 2, '');
+  const LK = new Map(Object.entries(Object.assign({}, ON, { v292DfixMEMTallyOff: '1' }))); const k = boot(LK, OWNER); k.send(); for (const kk in MEMK) LK.set(kk, MEMK[kk]); const ok2 = k.send();
+  check('MEMTALLY: kill v292DfixMEMTallyOff — notes still work, the tally key is never written', !!ok2.memoryNotes && !LK.has('v292DfixMEMTally'), '');
+} catch (e) {
+  check('MEMTALLY: fixtures run in node', false, String(e && e.stack || e).slice(0, 200));
 }
 
 // ---------- report ----------

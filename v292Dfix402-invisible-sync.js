@@ -424,7 +424,7 @@
      （再生成は各 fix が行う。receiver も削除しない）。対象 = PACKAGE_AUTHORITY_MATRIX_V1 の C/B(派生) family:
        longmem fix135/136/137 ・ Quasi(277) ・ snap/snapd(564) ・ LinRev(924) ・ 307Last ・ 640Evid ・ genderMap(54) ・ dlg(104)
      既定 ON。kill = v292DpafOff='1'。3 か所（home / fix402 / fix399）へ同じ正規表現を局所実装する（fix821 と同じ流儀）。 */
-  var F_PAF_DENY = /^(chr6_v292Dfix13[567]_|v292Dfix277Quasi_slot_|chr6_snapd?_|v292Dfix924LinRev_slot_|v292Dfix307Last_slot_|v292Dfix640Evid_slot_|chr6_v292Dfix54_genderMap_|chr6_v292Dfix104_dlg_slot_|v292DfixMEM4)/;   /* ★MEM4 */
+  var F_PAF_DENY = /^(chr6_v292Dfix13[567]_|v292Dfix277Quasi_slot_|chr6_snapd?_|v292Dfix924LinRev_slot_|v292Dfix307Last_slot_|v292Dfix640Evid_slot_|chr6_v292Dfix54_genderMap_|chr6_v292Dfix104_dlg_slot_|v292DfixMEM4|v292DfixMEMTally)/;   /* ★MEM4 */
   function pafOn(){ try { return localStorage.getItem('v292DpafOff') !== '1'; } catch(e){ return true; } }
 
   /* ★★PCP V2（PACKAGE_PRECANONICAL_PUBLISH、GPT #108/#111/#112、T1）: UNCOMMITTED_CANONICAL_BODY MUST NOT ENTER PACKAGE。

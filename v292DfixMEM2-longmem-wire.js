@@ -25,9 +25,38 @@
   var RULE = 'これまでの出来事の覚え書き（参考。プレイヤーの入力・確定した設定・直近の本文と食い違う場合はそちらを優先）';
   var MAX = 800, SUM_MIN = 60;
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
-  function aOn(){ return lsg('v292DfixMEM2aOff') !== '1' && lsg('v292DfixMEM2aOn') === '1'; }
+  /* ★MEMTRIAL（GPT #127-WF (3)・試用の間だけの条件。kill ではない）: 腕 A・MEM3b・MEM3・MEM4 は、端末の鍵に加えて、
+     この page の /auth/me の答え（fix893 serverMe）が Owner（entitlement 'owner'・status が無いか 'active'＝fix905 と同じ判定）のときだけ働く。
+     答えがまだ無い・分からない・失敗・Owner 以外 → 働かない（fail-closed・理由を数える）。新しい判定・新しい保存は作らない（読むだけ）。
+     一般向けに ON にするときは、下の TRIAL_OWNER_ONLY を false にする（この 1 か所だけ。fix135 の MEM3 もここを見る）。 */
+  var TRIAL_OWNER_ONLY = true, trialSt = {};
+  function trialWhy(){ try { var A = window.__v292Dfix893; if (!A || typeof A.serverMe !== 'function') return 'NO_ACCOUNT_API'; var me = A.serverMe();
+      if (!me) return 'NO_SERVER_ME'; if (me.entitlement !== 'owner') return 'NOT_OWNER'; if (me.status && me.status !== 'active') return 'NOT_ACTIVE'; return null; } catch(e){ return 'THREW'; } }
+  function trialOk(feat){ if (!TRIAL_OWNER_ONLY) return true; var w = trialWhy(); if (w && feat){ var m = trialSt[feat] || (trialSt[feat] = {}); m[w] = (m[w] || 0) + 1; } return !w; }
+  window.__v292DfixMEMTrial = { ok: function(feat){ return trialOk(feat); }, ownerOnly: function(){ return TRIAL_OWNER_ONLY; }, stats: function(){ return JSON.parse(JSON.stringify(trialSt)); } };
+  /* ★MEMTALLY（GPT #127-WF (a)）: 端末の 1 本の鍵 v292DfixMEMTally に、日別（端末の日付）で数だけ足す。
+     数えるもの: inj（覚え書きを渡した回数）・skip{理由コード}（見送り）・loss（MEM4 の trusted → untrusted）・inv（印の無効化）・nrej{理由コード}（通知の不採用）。
+     本文・記憶の中身・物語名・物語 id（hash も）・アカウント id・秘密は入れない。理由コードは英大文字・数字・_ だけ（それ以外は OTHER）。
+     出来事が起きたその場で +1（メモリの stats を写さない＝再読み込みでも重複しない）。書くのは腕 A が働く（鍵 ON・Owner）かつ kill v292DfixMEMTallyOff が無いときだけ。
+     OFF・kill では読まない・書かない。書けない（容量不足など）ときは握りつぶす。14 日より古い日は書くときに消す。端末だけの鍵（物語の鍵ではない・同期の除外・復元の対象外）。 */
+  var TK = 'v292DfixMEMTally', TDAYS = 14;
+  function tday(t){ var d = new Date(t); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function tcode(c){ c = String(c == null ? '' : c); return /^[A-Z0-9_]{1,40}$/.test(c) ? c : 'OTHER'; }
+  function tally(field, code){
+    try {
+      if (lsg('v292DfixMEMTallyOff') === '1' || !aOn()) return;
+      var now = Date.now(), day = tday(now), o = null; try { o = JSON.parse(lsg(TK) || 'null'); } catch(eP){ o = null; }
+      if (!o || o.v !== 1 || !o.d || typeof o.d !== 'object' || Array.isArray(o.d)) o = { v: 1, d: {} };
+      var cut = tday(now - (TDAYS - 1) * 864e5); Object.keys(o.d).forEach(function(k){ if (!/^\d{4}-\d\d-\d\d$/.test(k) || k < cut) delete o.d[k]; });
+      var r = o.d[day]; if (!r || typeof r !== 'object') r = o.d[day] = { inj: 0, skip: {}, loss: 0, inv: 0, nrej: {} };
+      if (code === undefined) r[field] = (+r[field] || 0) + 1; else { var m = (r[field] && typeof r[field] === 'object') ? r[field] : (r[field] = {}); var c = tcode(code); m[c] = (+m[c] || 0) + 1; }
+      try { localStorage.setItem(TK, JSON.stringify(o)); } catch(eS){}
+    } catch(e){}
+  }
+  function aKey(){ return lsg('v292DfixMEM2aOff') !== '1' && lsg('v292DfixMEM2aOn') === '1'; }
+  function aOn(){ return aKey() && trialOk(); }   /* ★MEMTRIAL: 鍵に加えて Owner の確認（腕 A・MEM3b・MEM4 はここを通る） */
   function cOn(){ return lsg('v292DfixMEM2cOff') !== '1' && lsg('v292DfixMEM2cOn') === '1'; }
-  function m3bOn(){ return lsg('v292DfixMEM3bOff') !== '1' && lsg('v292DfixMEM3bOn') === '1'; }   /* ★MEM3b（既定 OFF・腕 A が ON のときだけ効く） */
+  function m3bOn(){ return lsg('v292DfixMEM3bOff') !== '1' && lsg('v292DfixMEM3bOn') === '1' && trialOk(); }   /* ★MEM3b（既定 OFF・腕 A が ON のときだけ効く） */
   var st = { a: { calls: 0, applied: 0, chars: 0, skip: {} }, c: { calls: 0, applied: 0, turns: 0 } };
   var lastA = null, lastC = null;
   /* ★r2 (1): この物語の記憶が「このページで空から作られた」かを、メモリだけで追う */
@@ -94,15 +123,15 @@
       return true; } catch(e){ return false; } }
   window.__v292DfixMEM4Done = function(o){ try { if (!m4On() || !o || !o.ok) return; m4st.done++;
     var sfx0 = String(o.sfx || ''), fS = m4fpS(), fB = m4fpB(sfx0);
-    if (fS == null || fB == null || fS !== fB){ m4done = null; m4nrej = 'NOTIFY_OTHER_STORY'; m4st.notifyRej[m4nrej] = (m4st.notifyRej[m4nrej] || 0) + 1; return; }
-    if (!m4savedAsIntended(sfx0, o.r, o.lb)){ m4done = null; m4nrej = 'NOTIFY_PARTIAL_SAVE'; m4st.notifyRej[m4nrej] = (m4st.notifyRej[m4nrej] || 0) + 1; return; }
+    if (fS == null || fB == null || fS !== fB){ m4done = null; m4nrej = 'NOTIFY_OTHER_STORY'; m4st.notifyRej[m4nrej] = (m4st.notifyRej[m4nrej] || 0) + 1; tally('nrej', m4nrej); return; }
+    if (!m4savedAsIntended(sfx0, o.r, o.lb)){ m4done = null; m4nrej = 'NOTIFY_PARTIAL_SAVE'; m4st.notifyRej[m4nrej] = (m4st.notifyRej[m4nrej] || 0) + 1; tally('nrej', m4nrej); return; }
     m4dseq++; m4nrej = null;
     m4done = { n: m4dseq, sfx: sfx0, loc: (o.loc == null ? null : String(o.loc)), lb: +o.lb, h: m4hash(sfx0), acct: m4acct() }; } catch(e){ m4done = null; } };
   function m4seen(d, lb, h){ var x = m4done; if (!x || x.n <= t4.dn) return false; if (x.sfx !== d.sfx || x.lb !== lb || x.h !== h) return false;
     var bl = m4blobLoc(d.sfx), cl = m4curLoc(); if (x.loc != null && ((bl != null && bl !== x.loc) || (cl != null && cl !== x.loc))) return false; return true; }
   function m4rej(code){ m4st.rejected[code] = (m4st.rejected[code] || 0) + 1; return code; }
   function m4stamp(d, chain){ var acct = m4acct(), dev = m4dev(true); if (!acct || !dev){ t4.stamped = false; return false; }
-    if (t4.dacct && t4.dacct !== acct){ t4.stamped = false; m4st.notifyRej.NOTIFY_ACCT_CHANGED = (m4st.notifyRej.NOTIFY_ACCT_CHANGED || 0) + 1; return false; }   /* ★r3 ①: 知らせの時点のアカウントと違えば付けない */
+    if (t4.dacct && t4.dacct !== acct){ t4.stamped = false; m4st.notifyRej.NOTIFY_ACCT_CHANGED = (m4st.notifyRej.NOTIFY_ACCT_CHANGED || 0) + 1; tally('nrej', 'NOTIFY_ACCT_CHANGED'); return false; }   /* ★r3 ①: 知らせの時点のアカウントと違えば付けない */
     var n = m4seqNext(d.id); if (!n){ t4.stamped = false; return false; }
     var rec = { v: 2, acct: acct, sid: d.id, dev: dev, n: n, lb: t4.lb, h: t4.h, chain: chain, at: Date.now() }; if (!lss(M4K + d.id, JSON.stringify(rec))){ t4.stamped = false; return false; }
     t4.stamped = true; if (chain === 'empty') m4st.stamped++; else m4st.restamped++; return true; }
@@ -122,10 +151,10 @@
       var raw = lsg(M4K + d.id); if (raw == null) return; var r = null; try { r = JSON.parse(raw); } catch(eP){ return; }
       if (!r || typeof r !== 'object') return;
       if (r.h === m4hash(d.sfx) && r.lb === lbOf(d.sfx)) return;
-      lsr(M4K + d.id); m4seqDrop(d.id); m4st.invalidated = (m4st.invalidated || 0) + 1;
+      lsr(M4K + d.id); m4seqDrop(d.id); m4st.invalidated = (m4st.invalidated || 0) + 1; tally('inv');
     } catch(e){}
   }
-  function track4(){ var s4 = track4a(); m4inval(); return s4; }
+  function track4(){ var pdk = t4.dk, ps = t4.state; var s4 = track4a(); if (ps === 'trusted' && s4 === 'untrusted' && t4.dk === pdk) tally('loss'); m4inval(); return s4; }   /* ★MEMTALLY: 同じ物語の trusted → untrusted を 1 回だけ数える */
   function track4a(){
     try {
       var d = docSfx(); if (!d){ t4 = { dk: null, state: 'n/a', why: null, lb: -1, h: null, stamped: false, since: 0 }; return 'n/a'; }
@@ -164,7 +193,7 @@
   }
   track();   /* 読み込みの時点（fix246 の移行の後・fix135 の最初の確認〔3 秒後〕より前）の姿を記録 */
   try { setInterval(track, 1500); } catch(e){}
-  function skip(code){ st.a.skip[code] = (st.a.skip[code] || 0) + 1; lastA = { applied: false, why: code, chars: 0, head80: '', at: Date.now() }; return null; }
+  function skip(code){ st.a.skip[code] = (st.a.skip[code] || 0) + 1; tally('skip', code); lastA = { applied: false, why: code, chars: 0, head80: '', at: Date.now() }; return null; }
   /* タグ・内部指示らしい文字列を除く */
   function clean(s){
     s = String(s == null ? '' : s);
@@ -282,7 +311,7 @@
   }
   /* 腕 A: fix58 userExt から呼ばれる。OFF・見送りのときは parsed をそのまま（同じオブジェクト）返す */
   function applyA(parsed, state){
-    if (!aOn()) return parsed;
+    if (!aOn()){ if (aKey()) trialOk('a'); return parsed; }   /* ★MEMTRIAL: 鍵は ON だが Owner の確認が取れない回を数える（送信は OFF と同じ） */
     st.a.calls++;
     try {
       var S = curState(state); if (!S || !parsed || typeof parsed !== 'object') { skip('NO_STATE'); return parsed; }
@@ -293,7 +322,7 @@
       if (!after){ o.memoryNotes = { rule: rule, text: text }; placed = true; }
       for (k in parsed){ if (!Object.prototype.hasOwnProperty.call(parsed, k) || k === 'memoryNotes') continue; o[k] = parsed[k]; if (k === after){ o.memoryNotes = { rule: rule, text: text }; placed = true; } }
       if (!placed) o.memoryNotes = { rule: rule, text: text };
-      st.a.applied++; st.a.chars += text.length;
+      st.a.applied++; st.a.chars += text.length; tally('inj');
       lastA = { applied: true, why: null, chars: text.length, head80: text.slice(0, 80), at: Date.now(), parts: m3bOn() ? lastParts : null };   /* ★MEM3 r2: MEM3b の内訳（あらすじ／人物／出来事の字数と件数） */
       return o;
     } catch(e){ skip('THREW'); return parsed; }
@@ -302,7 +331,8 @@
   function recentN(){ if (!cOn()) return 2; st.c.calls++; st.c.applied++; st.c.turns += 4; lastC = { turns: 4, at: Date.now() }; return 4; }
   window.__v292DfixMEM2 = {
     VER: VER, aOn: aOn, cOn: cOn, m3bOn: m3bOn, applyA: applyA, recentN: recentN, clean: clean, MAX: MAX, RULE: RULE,
-    stats: function(){ var o = JSON.parse(JSON.stringify(st)); o.trust = { state: trust.state }; if (m4On()) o.m4 = { state: t4.state, why: t4.why, stamped: t4.stamped, counts: JSON.parse(JSON.stringify(m4st)) }; return o; },   /* ★MEM4: 数と理由だけ（acct・dev・hash は出さない） */
+    tally: function(){ try { var o = JSON.parse(lsg(TK) || 'null'); return (o && o.v === 1 && o.d && typeof o.d === 'object') ? o : null; } catch(e){ return null; } },   /* ★MEMTALLY: 読むだけ（呼んだときだけ読む・UI なし） */
+    stats: function(){ var o = JSON.parse(JSON.stringify(st)); o.trust = { state: trust.state }; o.trial = JSON.parse(JSON.stringify(trialSt)); if (m4On()) o.m4 = { state: t4.state, why: t4.why, stamped: t4.stamped, counts: JSON.parse(JSON.stringify(m4st)) }; return o; },   /* ★MEM4: 数と理由だけ（acct・dev・hash は出さない） */
     m4On: m4On,
     trust: function(){ track(); return { state: trust.state, since: trust.since }; },
     last: function(){ return { a: lastA ? JSON.parse(JSON.stringify(lastA)) : null, c: lastC ? JSON.parse(JSON.stringify(lastC)) : null }; }
