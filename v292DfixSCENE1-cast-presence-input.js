@@ -31,7 +31,7 @@
 (function (root) {
   'use strict';
   if (root.__v292DfixSCENE1) return;
-  var VER = 'scene1-20261122-r4';
+  var VER = 'scene1-20261122-r5';
   var CONT_TEXT = '続きを自然に進めてください。';
   function ls(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function on() { return ls('v292DfixSCENE1Off') !== '1' && ls('v292DfixSCENE1On') === '1'; }
@@ -42,7 +42,7 @@
   function str(x) { return x == null ? '' : String(x); }
   function sp(x) { return str(x).replace(/[\s　]/g, ''); }
   function esc(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-  var ST = { builds: 0, fgCalls: 0, aAttr: 0, aSpeaker: 0, aLock: 0, aUnappeared: 0, aUnknown: 0, bExits: 0, bExitsInput: 0, bBacks: 0, bBackWhy: { heroMoved: 0, input: 0, speaker: 0, back: 0, withHero: 0, acts: 0 }, bStale: 0, aMaybe: 0, bPlaceLines: 0, bFgOut: 0, bNpres: 0,
+  var ST = { builds: 0, fgCalls: 0, aAttr: 0, aSpeaker: 0, aLock: 0, aUnappeared: 0, aUnknown: 0, bExits: 0, bExitsInput: 0, bBacks: 0, bBackWhy: { heroMoved: 0, input: 0, speaker: 0, back: 0, withHero: 0, acts: 0, obj: 0, voc: 0 }, bStale: 0, aMaybe: 0, bPlaceLines: 0, bFgOut: 0, bNpres: 0,
     cSkip: { '306': 0, '309': 0, '192': 0 }, cTenkai: { T1: 0, T2: 0, chars: 0 }, cFgOut: 0, cKind: { cont: 0, DO: 0, SAY: 0, STORY: 0, unknown: 0 }, cLegacy: 0, cMarked: 0, cRetry: 0,
     sysDelta: { attr: 0, speaker: 0, lock: 0 }, errors: 0 };
   function err() { ST.errors++; }
@@ -211,12 +211,25 @@
   var EXIT_V_IN = '(?:(?:へ|に|の方へ)(?:戻る|帰る|引き上げる|引き揚げる)|(?:帰って|戻って|下りて|降りて)(?:行く|いく)|出て(?:行く|いく)|(?:部屋|自室|店|家|外|廊下|裏口|玄関|戸口|屋敷|教室|事務所)(?:を|から)出る|立ち去る|去る|去っていく|退出する|退室する|席を外す|姿を消す|(?:追い出され|追放され|締め出され|放り出され|連れ出され)る)';
   var OBJ_V_IN = '(?:追い出す|追放する|締め出す|放り出す|押し出す|追い返す|外へ出す|外に出す)';
   var IRREAL_IN = /よう(?:に)?(?:頼|言|促|告|伝|お願|命じ)|てほしい|て欲しい|てもらう|させる|させて|たい|たがる|ようとする|しようと|かどうか|ないか|[？?]/;
+  /* ★r5（レビュー REVIEW_r4「全員 ON の前に要る直し」）:
+     1) 「〜に／へ戻る」の行き先が主人公のいる場所（PLACE1 が持つ主人公の現在地・「ここ」「この場」）なら戻り。「〜から…へ戻る」も戻り。
+        主人公の現在地が分からないときは、行き先が下の AWAY（引き下がる先の語）のときだけ退出。それ以外は退出にしない（分からないときは退出にしない側）。
+     2) 「〜のか」「〜と言う」「〜のを止める」は退出にしない。次の文で（主語なしでも）戻る・降りてくるなら解く。名前の直前が漢字なら別の名前の一部として当てない。
+     3) 戻しに足す: DO の入力でその人が目的語（「灯里に本を手渡す」「灯里を…」）・SAY の呼びかけ（文頭の「灯里、」）。遠くへ呼ぶ・探す・電話・思い出す等は戻さない。 */
+  var AWAY = /(?:二階|三階|上の階|下の階|階上|階下|自室|部屋|寝室|私室|書斎|自宅|家|実家|宿|宿舎|寮|奥|裏|厨房|台所|控え室|楽屋|持ち場|仕事場|職場|会社|屋敷|故郷|田舎)$/;
+  var HERE_W = /^(?:ここ|この場|こちら|こっち|皆の(?:ところ|所|もと)|みんなの(?:ところ|所|もと))$/;
+  var SAY_TAIL = /^と(?:言|い[うっいえ]|告げ|伝え|話|宣言|答え|約束|申し出|切り出|口にす|口にし|書|呟|つぶや|叫)/;
+  var STOP_TAIL = /^(?:の|ところ|所)?を(?:止め|とめ|引き止め|引き留め|呼び止め|阻|遮|制止|妨げ|押しとど|押し留)/;
+  var Q_END = /(?:のか|のかな|のかしら|のでしょうか|のですか|んですか|か)\s*$/;
+  var KANJI_PRE = /[一-鿿々〆]/;
+  var REMOTE_IN = /呼ぶ|呼び|呼ん|叫|探|捜|電話|メール|手紙|連絡|メッセージ|思い出|思い浮|考え|待つ|待っ|見送|後を追|追いかけ|追って|噂|話題|について|のこと|夢|写真|遠く|窓の外|向こう|上へ|下へ|二階へ|階上へ|階下へ|上に向|下に向|階段の上|階段の下/;
+  var SAY_AWAY = /電話|もしもし|どこ(?:に|へ|だ|です|なの|にいる)?|いる[？?の]|いますか|いるか|降りてき|下りてき|戻ってき|来てくれ|来てください|出てき|聞こえ(?:ない|ます|ますか|てない)/;
   var EXCOUNT = {};   /* 退出を確定した (人, ターン) を 1 回だけ数える（メモリだけ・保存しない） */
   var IRREAL = /かもしれ|だろう|ような|ように|ようと|そうに|そうだ|ふり|つもり|たら|なら|れば|はず|夢|想像|回想|思い出|電話|画面/;
   var PAST = /昔|かつて|以前|その頃|あの頃|あの日|あの時|当時|幼い頃|子供の頃|子どもの頃|若い頃|年前|ヶ月前|か月前|カ月前|ことがある|ことがあった|ていた頃|だった頃/;
   var NEG_AFTER = /^[^。、]{0,6}(?:ず|ずに|ない|なかった|ません|まい)/;
   var GROUP = /二人|ふたり|三人|みんな|全員|一緒|共に|ともに|揃って|そろって|連れ立|並んで|一同|皆で/;
-  var BACK = /(?:戻ってく|戻ってき|戻って来|帰ってき|帰って来|引き返してき|引き返して来|追いつい|追い付い|合流し|合流す|入ってき|入って来|駆け込んでき|駆けつけ|駆け付け|姿を見せ|姿を現|現れ|下りてき|降りてき|下りて来|降りて来|上がってき|上がって来|顔を出)/;
+  var BACK = /(?:戻ってく|戻ってき|戻って来|帰ってき|帰って来|引き返してき|引き返して来|追いつい|追い付い|合流し|合流す|入ってき|入って来|駆け込んでき|駆けつけ|駆け付け|姿を見せ|姿を現|現れ|下りてき|降りてき|下りて来|降りて来|上がってき|上がって来|顔を出|下りてく|降りてく|上がってく)/;   /* r5: 「降りてくる」 */
   var STAY = /すぐに|すぐ|まだ|残って|残った|残る|いる|居る|座って|座った|立って|待って|留ま|とどま/;
   var NOT_BACK = /(?:声|聞こえ|電話|待|はず|だろう|かもしれ|ように|たら|なら|れば|写真|向こう|遠く|映って|映る)/;
   var REMOTE = /声|聞こえ|電話|通話|画面|写真|手紙|思い出|回想|夢|噂|のこと|について|の話|向こう|遠く|二階から|階上|階下|外から|窓の外/;
@@ -235,23 +248,57 @@
   function hasAny(sent, fs) { for (var i = 0; i < fs.length; i++) if (fs[i] && sent.indexOf(fs[i]) >= 0) return true; return false; }
   /* sent の中のその人の退出 → { route } | null。next = 次の文（留まる・戻るの確認用。無ければ ''） */
   function exitIn(sent, forms, next, hero, isInput) {
-    if (!sent || IRREAL.test(sent) || PAST.test(sent) || (isInput && IRREAL_IN.test(sent))) return null;
+    if (!sent || IRREAL.test(sent) || PAST.test(sent) || (isInput && (IRREAL_IN.test(sent) || Q_END.test(sent)))) return null;   /* r5: 入力の「〜のか」も疑問 */
     var hf = hero || heroForms(); if (GROUP.test(sent)) return null;   /* 主語がその人物だけ（二人・一緒 等があれば退出にしない） */
     for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (!f || sent.indexOf(f) < 0) continue;
       var re = new RegExp(esc(f) + HON + '(?:は|が|も)(' + GAPX + ')(' + (isInput ? EXIT_V + '|' + EXIT_V_IN : EXIT_V) + ')'), m = re.exec(sent), hit = null;
-      if (m) { var pre = m.index > 0 ? sent.charAt(m.index - 1) : ''; if (/[とや・]/.test(pre) || hasAny(m[1], hf)) continue;   /* 「湊と灯里は」「灯里は湊と…」は主人公と一緒 */
-        if (/^(?:へ|に|の方へ)/.test(m[2])) { var dst = /([^、\s]{1,12})$/.exec(str(m[1])); if (!dst || INROOM.test(dst[1])) continue; }   /* 「席に戻った」「仕事に戻った」は退出ではない */
+      if (m) { var pre = m.index > 0 ? sent.charAt(m.index - 1) : ''; if (/[とや・]/.test(pre) || KANJI_PRE.test(pre) || hasAny(m[1], hf)) continue;   /* 「湊と灯里は」「灯里は湊と…」は主人公と一緒。r5: 「大茂は」は別の名前 */
+        if (/^(?:へ|に|の方へ)/.test(m[2])) { var dst = /([^、\s]{1,12})$/.exec(str(m[1])); if (!dst || INROOM.test(dst[1])) continue;   /* 「席に戻った」「仕事に戻った」は退出ではない */
+          if (/^(?:へ|に|の方へ)(?:戻|帰)/.test(m[2]) && retDest(m[1]) !== 'exit') continue; }   /* ★r5: 主人公のいる所へ戻る・〜から戻る・分からない は退出にしない */
         hit = { route: route(m[1], m[2]), end: m.index + m[0].length }; }
-      else { var o = new RegExp(esc(f) + HON + 'を' + GAPX + (isInput ? '(?:' + OBJ_V + '|' + OBJ_V_IN + ')' : OBJ_V)).exec(sent); if (o) hit = { route: '', end: o.index + o[0].length }; }
+      else { var o = new RegExp(esc(f) + HON + 'を' + GAPX + (isInput ? '(?:' + OBJ_V + '|' + OBJ_V_IN + ')' : OBJ_V)).exec(sent); if (o && !(o.index > 0 && KANJI_PRE.test(sent.charAt(o.index - 1)))) hit = { route: '', end: o.index + o[0].length }; }
       if (!hit) continue;
       var tail = sent.slice(hit.end);
       if (NEG_AFTER.test(tail)) continue;                                  /* 出ていかず・戻らない */
+      var tc = tail.replace(/^(?:いく|行く|いった|行った|いこう|しまう|しまった)/, '');
+      if (SAY_TAIL.test(tc) || STOP_TAIL.test(tc)) continue;              /* ★r5: 「〜と言う」「〜のを止める」（「出て｜いくのを」の形も） */
       if (BACK.test(tail) || /すぐ/.test(tail)) continue;                  /* 同じ文の中で戻る */
       if (next && hasAny(next, forms) && (BACK.test(next) || STAY.test(next))) continue;   /* 次の文で留まる・戻る */
+      if (next && BACK.test(next) && !/(?:ない|なかった)/.test(next) && !/^[^、。]{1,12}?(?:は|が)/.test(next.replace(/^(?:だが|でも|しかし|けれど(?:も)?|けど|ところが|そして|それから|すると|が)、?/, ''))) continue;   /* ★r5: 主語の無い次の文で戻る（「だがすぐに降りてくる」） */
       if (next && /^(?:今は|いまは)?[^。]{0,8}(?:ここに|この場に)(?:いる|居る)/.test(next)) continue;
       return { route: hit.route };
     }
     return null;
+  }
+  var HP = null;   /* exited() の 1 回の間だけ: 主人公の現在地 { place, turn }（PLACE1 が持つもの・無ければ null） */
+  function heroPlaceNow(S, cin) {
+    try { var P = root.__v292DfixPLACE1; if (!P || typeof P.on !== 'function' || !P.on() || typeof P.build !== 'function') return null;
+      var L = P.build(S, cin ? { type: cin.inputType, text: cin.playerText } : null); if (L && L.heroAt && L.heroAt.place && L.now - L.heroAt.turn <= 2) return { place: str(L.heroAt.place), turn: L.heroAt.turn }; } catch (e) {}
+    return null;
+  }
+  function samePlace(a, b) { a = sp(a).replace(/^.*の/, ''); b = sp(b).replace(/^.*の/, ''); if (!a || !b) return false; return a === b || (a.length >= 1 && b.length > a.length && b.slice(-a.length) === a) || (b.length >= 1 && a.length > b.length && a.slice(-b.length) === b); }
+  /* 「(gap)へ／に戻る」の行き先: 'back'（主人公のいる所・「ここ」・「〜から…へ」）| 'exit' | 'none'（分からない） */
+  function retDest(gap) {
+    var g = str(gap).replace(/^[、\s]+/, ''), d = /([^、\s]{1,12})$/.exec(g), dest = d ? d[1].replace(/^.*(?:て|で|、)/, '') : '';
+    var fr = /([^、\s]{1,12}?)から/.exec(g), from = fr ? fr[1].replace(/^.*(?:て|で|、)/, '') : '';
+    if (!dest) return 'none';
+    if (HERE_W.test(dest.replace(/^.*の(?=(?:ところ|所|もと)$)/, '皆の'))) return 'back';
+    var hp = HP && HP.place;
+    if (hp) { if (samePlace(dest, hp)) return 'back'; if (from && samePlace(from, hp)) return 'exit'; return from ? 'back' : 'exit'; }
+    if (from) return 'back';
+    return AWAY.test(dest) ? 'exit' : 'none';
+  }
+  /* ★r5: 入力の戻し（DO でその人が目的語・SAY の呼びかけ）。遠くへ呼ぶ・探す・電話・思い出す 等は戻さない */
+  function objHere(pt, forms) {
+    var t = maskQ(str(pt)); if (!t || IRREAL.test(t) || PAST.test(t) || REMOTE_IN.test(t) || /(?:ない|なかった|ず[、。]|ずに)/.test(t)) return false;
+    for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (!f) continue; var re = new RegExp(esc(f) + HON + '(?:に|を)', 'g'), m;
+      while ((m = re.exec(t))) { var pre = m.index > 0 ? t.charAt(m.index - 1) : ''; if (KANJI_PRE.test(pre) || pre === 'の') continue; return true; } }
+    return false;
+  }
+  function vocHere(pt, forms) {
+    var t = str(pt).trim(); if (!t || SAY_AWAY.test(t)) return false;
+    for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (f && t.indexOf(f) === 0 && new RegExp('^' + HON + '[、，,！!？?\\s　]').test(t.slice(f.length) + ' ')) return true; }
+    return false;
   }
   function route(gap, verb) {   /* 本文に書かれた経路だけ。行き先「〜へ戻った」・出口「〜から出た」。無ければ '' */
     var g = str(gap).replace(/^[、\s]+/, ''), v = str(verb);
@@ -278,7 +325,7 @@
   var HERO_MOVE = /(?:を出て|を出る|を出た|へ向か|に向か|へ行く|へ行っ|に行く|に行っ|へ移|に移|へ入る|へ入っ|に入る|に入っ|へ戻る|へ戻っ|に戻る|に戻っ|へ帰る|へ帰っ|に帰る|に帰っ|へ下り|へ降り|へ上が)/;
   function heroMovedAt(S, t) {
     try { var F = root.__v292DfixCP1; if (F && typeof F.sceneMoveOf === 'function') { var m = F.sceneMoveOf(t, S.cast && S.cast.hero && S.cast.hero.name); if (m && m.to) return true; } } catch (e) {}
-    try { if (str(t && t.inputType).toUpperCase() === 'DO') { var pt = maskQ(str(t.playerText)); if (HERO_MOVE.test(pt) && !/(?:ない|なかった|ようと|たい|つもり)/.test(pt)) return true; } } catch (e2) {}   /* 予備: 主人公の DO の入力が場所を移る（CP1 が読めないとき） */
+    try { if (str(t && t.inputType).toUpperCase() === 'DO') { var pt = maskQ(str(t.playerText)); if (HERO_MOVE.test(pt) && !/(?:ない|なかった|ようと|たい|つもり)/.test(pt) && !/(?:へ|に)向かって[^。]{0,16}(?:呼|叫|声を)/.test(pt)) return true;   /* r5: 「二階へ向かって呼ぶ」は動いていない */ } } catch (e2) {}   /* 予備: 主人公の DO の入力が場所を移る（CP1 が読めないとき） */
     return false;
   }
   function heroPlaceSeq(S) {   /* PLACE1 の主人公の現在地の行が変わったターン（PLACE1 が無い・OFF なら空） */
@@ -294,11 +341,14 @@
     return { inputType: X.m, playerText: X.t, narrative: '', _convSays: [] };
   }
   /* いま退出したままの人: { name: { turn, route } }（毎回ターンから作る・保存しない） */
+  var BUSY = false;   /* ★r5: exited() → PLACE1.build() → narrExits() → exMemo() → exited() の入れ子を止める（入れ子の中では退出なし＝PLACE1 は自分の判定だけで行を作る） */
   function exited(S) {
     var out = {};
+    if (BUSY) return out;
+    BUSY = true;
     try {
       S = S || getS(); if (!S || !Array.isArray(S.turns)) return out;
-      var hf = heroForms(), L = S.turns.length, hp = heroPlaceSeq(S);
+      var hf = heroForms(), L = S.turns.length, hp = heroPlaceSeq(S), cin0 = curInput(S); HP = heroPlaceNow(S, cin0);
       npcNames(S).forEach(function (n) {
         var fs = formsOf(n), fb = fs.concat(rawForms(n)), st = null;   /* 退出は登録名そのまま（確かな側）・戻りは姓・名の形でも（戻す側） */
         var TT = S.turns.slice(), cin = curInput(S); if (cin) TT.push(cin);   /* ★r4: 組み立て中の入力も 1 つのターンとして読む（その回の送信から効く） */
@@ -307,6 +357,8 @@
             if (heroMovedAt(S, t) || hp[tn]) { st = null; ST.bBacks++; ST.bBackWhy.heroMoved++; }
             else if ((ty === 'DO' || ty === 'STORY') && hasAny(maskQ(str(t.playerText)), fb) && IN_ARRIVE.test(str(t.playerText)) && !/(?:ない|なかった)/.test(str(t.playerText))) { st = null; ST.bBacks++; ST.bBackWhy.input++; }
             else if (Array.isArray(t._convSays) && t._convSays.some(function (c) { return c && fb.indexOf(str(c.who).trim()) >= 0; })) { st = null; ST.bBacks++; ST.bBackWhy.speaker++; }
+            else if (ty === 'DO' && objHere(t.playerText, fb)) { st = null; ST.bBacks++; ST.bBackWhy.obj++; }   /* ★r5 */
+            else if (ty === 'SAY' && vocHere(t.playerText, fb)) { st = null; ST.bBacks++; ST.bBackWhy.voc++; }   /* ★r5 */
           }
           if (ty === 'DO' || ty === 'STORY') {   /* ★r4: 利用者の入力に書かれた退出（SAY は読まない）。入力で戻ってくる・この場で動くなら解く（既存の条件） */
             var ins = sents(maskQ(str(t.playerText)));
@@ -325,13 +377,14 @@
         if (st) out[n] = st;
       });
     } catch (e) { err(); }
+    HP = null; BUSY = false;   /* r5: 主人公の現在地は exited() の間だけ使う */
     return out;
   }
   /* NPRES classify が聞く: その文は退出の文か（NPRES では「確かめられない」(b) として数える。退出のままかは stillOut が決める） */
   function exitHit(sent, fs) { try { if (!bOn()) return false; var r = !!exitIn(maskQ(str(sent)), fs || [], '', null); if (r) ST.bNpres++; return r; } catch (e) { err(); return false; } }
   /* NPRES group が聞く: SCENE1 の退出のまま（戻りの条件を満たしていない）か */
   var EXMEMO = null;
-  function exMemo() { var S = getS(), key = S && S.turns ? S.turns.length + '|' + (CUR ? 'c' + CUR.m + CUR.t : (LAST ? 'l' + LAST.m + LAST.t + LAST.n : '')) + '|' + Math.floor(Date.now() / 2000) : '';   /* r4: いまの入力も鍵に入れる */ if (!EXMEMO || EXMEMO.key !== key) EXMEMO = { key: key, x: exited(S) }; return EXMEMO.x; }
+  function exMemo() { var S = getS(), key = S && S.turns ? S.turns.length + '|' + (CUR ? 'c' + CUR.m + CUR.t : (LAST ? 'l' + LAST.m + LAST.t + LAST.n : '')) + '|' + Math.floor(Date.now() / 2000) : '';   /* r4: いまの入力も鍵に入れる */ if (BUSY) return {};   /* r5: 入れ子の中では覚えを作らない */ if (!EXMEMO || EXMEMO.key !== key) EXMEMO = { key: key, x: exited(S) }; return EXMEMO.x; }
   function stillOut(name) { try { if (!bOn()) return false; return !!exMemo()[str(name).trim()]; } catch (e) { err(); return false; } }
   /* PLACE1 build が聞く: このターン（turn＝何ターン目）の本文で確認でき、いまも退出のままの人（PLACE1 の person の形） */
   function narrExits(narr, names, hero, turn) {
