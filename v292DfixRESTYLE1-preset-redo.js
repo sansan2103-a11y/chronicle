@@ -19,7 +19,7 @@
  * ■上限・守り: 1 回の作り直しの人数は LIM1 の「1 物語の枚数」（ADMF1.limit('starticon_story_imgs')・行なしは 4）まで。imgsafe・費用の上限・利用権は Worker のまま
  *   （regenerate は手動と同じ入口）。HOLD2 1b の待ちは STARTICON と同じ（matWait）。
  * ■Vault で隠した物語: STARTICON の VICON1 と同じ判定（__v292DfixVaultOpenWhy・1 か所）が '' のときだけ。使う外見は確定済みの profile だけ（説明文からは作らない）。
- * ■スイッチ: ON は端末の localStorage v292DfixRESTYLE1On='1'（既定 OFF）。kill v292DfixRESTYLE1Off='1'（勝つ）。OFF・kill では何もしない（鍵 2 つを読むだけ）。
+ * ■スイッチ: 既定 ON（2026-11-21 restyle1on・Owner の決定・実機確認後）。kill v292DfixRESTYLE1Off='1'（勝つ）。OFF・kill では何もしない（鍵 2 つを読むだけ）。
  * ■記録: localStorage 'v292DfixRESTYLE1_v1' に、物語 ID のハッシュごと・画風ごとの「聞いた／断った」だけ。名前・本文・ID そのものは残さない。
  * ■診断: window.__v292DfixRESTYLE1.status()（件数と理由コードだけ）
  * ===================================================================== */
@@ -28,7 +28,7 @@
   if (typeof window === 'undefined' || root.__v292DfixRESTYLE1) return;
   function lsGet(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { root.localStorage.setItem(k, v); return true; } catch (e) { return false; } }
-  function on() { return lsGet('v292DfixRESTYLE1Off') !== '1' && lsGet('v292DfixRESTYLE1On') === '1'; }
+  function on() { return lsGet('v292DfixRESTYLE1Off') !== '1'; }
   if (!on()) { root.__v292DfixRESTYLE1 = { on: false, status: function () { return { on: false }; } }; return; }
   var VER = 'restyle1-20261121-r2';
   var KEYS = ['beautiful', 'cool', 'dark'], LABEL = { beautiful: 'デフォルト', cool: 'クール', dark: 'ダーク' };

@@ -1389,7 +1389,7 @@
 | 338 | fix852 | `v292Dfix852-mental-capability.js` | i338 | `dbd6fffe` | 20261001-ac33 | NPC・キャラ状態 | `v292Dfix852Off` `v292Dfix852On` `v292Dfix936Off` `v292DrrOff` |
 | 339 | fix853 | `v292Dfix853-truncated-name-guard.js` | i339 | `14e1e6de` | 20261025-bundle58-npcp1-b | NPC・キャラ状態 | `v292Dfix853Off` `v292Dfix853pOff` `v292DfixA4Off` |
 | 340 | av2-portrait | `v292Dav2-portrait.js` | i340（86 では i345） | `8c744237` | 20261110-bundle93-k | アイコン・画像 | `v292Dav2pOff` `v292Dfix993Off` `v292DfixB37aOff` `v292DfixFG1cOff` `v292Dav2pRenameOff` |
-| 341 | fixLD1 | `v292DfixLD1-preset-portrait.js` | i341 | `88f8193b` | 20261121-restyle1 | アイコン・画像 | `v292DfixD1Off` `v292DfixLD1On` `v292DfixRESTYLE1On` |
+| 341 | fixLD1 | `v292DfixLD1-preset-portrait.js` | i341 | `10dcebf5` | 20261121-restyle1on | アイコン・画像 | `v292DfixD1Off` `v292DfixLD1On` `v292DfixRESTYLE1Off` |
 | 342 | fixB37 | `v292DfixB37-onboard.js` | i342 | `899aaaa5` | 20261109-bundle93-j | シナリオ・ホーム | `v292DfixB37bOff` `v292DfixB37gOff` |
 | 343 | fixLC1 | `v292DfixLC1-appearance-proposal.js` | i343（86 では i348） | `30261b87` | 20261115-rw1 | アイコン・画像 | `v292DfixLC1Off` `v292DfixICONFIX1aOff` `v292DfixAPPX1Off` |
 | 344 | fixLC1 | `v292DfixLC1-workbench.js` | i344（86 では i349） | `f4564ac3` | 20261110-bundle93-k | アイコン・画像 | `v292DfixLC1Off` `v292DfixLC1On` `v292DfixLC1PtrRefreshOff` |
@@ -1442,7 +1442,7 @@
 | 381 | fixSETUI1 | `v292DfixSETUI1-settings-layout.js` | index の最後（FLW5 の後・93-g。home では読まない） | `3892c38f` | 20261108-bundle93-g | UI・画面 | `v292DfixSETUI1Off` |
 | 382 | fixIDSPLIT2 | `v292DfixIDSPLIT2-selfname-merge.js` | index：fix620 の直後（93-h。home では読まない） | `3f75a2f2` | 20261108-bundle93-i | 話者・会話ログ | `v292DfixIDSPLIT2Off` |
 | 383 | fixGENDER1 | `v292DfixGENDER1-autogender.js` | index：fix335 の直前／home：fix436 の直前（93-h） | `3291ae11` | 20261108-bundle93-h | シナリオ・ホーム | `v292DfixGENDER1Off` |
-| 384 | fixSTARTICON | `v292DfixSTARTICON-start-icons.js` | index：MIDICON の直後（93-i。home では読まない） | `619ff15a` | 20261121-restyle1 | アイコン・画像 | `v292DfixSTARTICONOff` `v292DfixSTARTICONNoAI` `v292DfixSTARTICONRetryOff` `v292DfixSTARTICONListOff` `v292DfixVICON1Off` |
+| 384 | fixSTARTICON | `v292DfixSTARTICON-start-icons.js` | index：MIDICON の直後（93-i。home では読まない） | `619ff15a` | 20261121-restyle1on | アイコン・画像 | `v292DfixSTARTICONOff` `v292DfixSTARTICONNoAI` `v292DfixSTARTICONRetryOff` `v292DfixSTARTICONListOff` `v292DfixVICON1Off` |
 | 385 | fixKN1 | `v292DfixKN1-knowledge-canary.js` | index の最後（SETUI1 の後・93-j。home では読まない） | `63f439a1` | 20261109-bundle93-j | 文章品質・プロンプト | `v292DfixKN1Off` |
 | 386 | fixLORE1 | `v292DfixLORE1-world-lore.js` | index の最後（KN1 の後・93-l。home では読まない） | `34c9217d` | 20261110-bundle93-l | 文章品質・プロンプト | `v292DfixLORE1Off`（ON は鍵 `lore1` か `v292DfixLORE1On`。既定は影モード） |
 | 387 | fixAGENCY1 | `v292DfixAGENCY1-player-intent.js` | index：fix192 の直後（93-m。home では読まない） | `0079579c` | 20261110-agency1c | 文章品質・プロンプト | `v292DfixAGENCY1Off`・`v292DfixAGENCY1StoryOff`・`v292DfixAGENCY1StoryMode`（ON は鍵 `agency1` か `v292DfixAGENCY1On`。既定は影） |
@@ -1478,7 +1478,7 @@
 | 414 | fixHDRNL1 | `v292DfixHDRNL1-sys-header-newline.js` | index の先頭近く（PRUNE3 の直前。HDRNL1・`e5d5d30`） | `ecbc38cc` | 20261115-hdrnl1 | 文章品質・プロンプト | `v292DfixHDRNL1Off`（kill。既定 ON） |
 | 415 | fixCONTRACT1 | `v292DfixCONTRACT1-scene-contract.js` | index の先頭近く（HEROVOICE1 の直後。CONTRACT1・`9e585fb`） | `31752391` | 20261116-contract1 | 文章品質・プロンプト | `v292DfixCONTRACT1On`（実験・既定 OFF） `v292DfixCONTRACT1Off` |
 | 416 | fixGEN1 | `v292DfixGEN1-gen-budget.js` | index：fix228 の直後（GEN1） | `9769f4f2` | 20261116-gen1r4 | 保存・同期 | `v292DfixGEN1On`（既定 OFF） `v292DfixGEN1Off` |
-| 419 | fixRESTYLE1 | `v292DfixRESTYLE1-preset-redo.js` | index：fg3 の直後（RESTYLE1・既定 OFF） | `ddadf2f6` | 20261121-restyle1 | アイコン・画像 | `v292DfixRESTYLE1On` `v292DfixRESTYLE1Off` |
+| 419 | fixRESTYLE1 | `v292DfixRESTYLE1-preset-redo.js` | index：fg3 の直後（RESTYLE1・既定 ON（restyle1on）） | `d83f2db4` | 20261121-restyle1on | アイコン・画像 | `v292DfixRESTYLE1Off` |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
 
