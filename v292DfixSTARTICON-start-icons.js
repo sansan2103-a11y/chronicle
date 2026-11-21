@@ -139,7 +139,7 @@
   /* ★VICON1（GPT #127-WH・STARTICON）: 隠した物語でも、Vault が解錠中で、この物語が開かれているときだけ作る。
      判定（どれか 1 つでも欠ければ今までどおり作らない＝fail-closed）: fix889 が本物・状態 ready・解錠のしるし（unlocked）・扉が開いている（status().open）・その物語が隠した物語。
      既定は下の VICON1_DEFAULT_ON（1 か所）。kill: localStorage v292DfixVICON1Off='1'（隠した物語では今までどおり作らない）。VICON1_DEFAULT_ON を false にしたときは v292DfixVICON1On='1' の端末だけ。 */
-  var VICON1_DEFAULT_ON = true, vstats = { gate: {}, skip: {}, draft: 0, conf: 0 };
+  var VICON1_DEFAULT_ON = false, vstats = { gate: {}, skip: {}, draft: 0, conf: 0 };
   function viconOn() { return lsGet('v292DfixVICON1Off') !== '1' && (VICON1_DEFAULT_ON || lsGet('v292DfixVICON1On') === '1'); }
   function vaultOpenWhy(id) { try { var V = root.__v292Dfix889; if (!V || V.__real !== true || typeof V.isHidden !== 'function' || typeof V.state !== 'function' || typeof V.unlocked !== 'function' || typeof V.status !== 'function') return 'NO_VAULT';
       if (!V.isHidden(id)) return 'NOT_HIDDEN'; if (V.state() !== 'ready') return 'NOT_READY'; if (V.unlocked() !== true) return 'LOCKED'; var s = V.status(); if (!s || s.open !== true) return 'NOT_OPEN'; return ''; } catch (e) { return 'THREW'; } }
