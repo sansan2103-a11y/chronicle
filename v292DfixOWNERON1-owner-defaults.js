@@ -28,15 +28,17 @@
   var ACCT_RE = /^[0-9a-f]{32}$/;
   /* 対象の機能（名前 → その機能の kill 鍵）。On 鍵の判定は各機能の on() が先にしている */
   var FEATURES = {
-    place1: { off: 'v292DfixPLACE1Off' },   /* PLACE1: 物のいまの持ち主・置き場所の控え（v292DfixPLACE1-where-now.js） */
-    spkw1: { off: 'v292DfixSPKW1Off' }      /* SPKW1: 話者の窓推測の直し（index.html の genConvLog 付近・v292Dfix303・v292Dfix469） */
+    place1: { off: 'v292DfixPLACE1Off', all: true },   /* ★ALLON-B: ログイン中のアカウントなら ON */   /* PLACE1: 物のいまの持ち主・置き場所の控え（v292DfixPLACE1-where-now.js） */
+    spkw1: { off: 'v292DfixSPKW1Off', all: true }   /* ★ALLON-B: ログイン中のアカウントなら ON */      /* SPKW1: 話者の窓推測の直し（index.html の genConvLog 付近・v292Dfix303・v292Dfix469） */
   };
   var ST = { evals: 0, yes: 0, lastWhy: null, why: {} };
 
   function lsGet(k) { try { var ls = root.localStorage; return ls ? ls.getItem(k) : null; } catch (e) { return undefined; } }   /* undefined = 読めない */
 
   /* owner() → { on: bool, why } — 読むだけ */
-  function owner() {
+  function owner() { return acctOf(false); }
+  function member() { return acctOf(true); }   /* ★ALLON core: ログイン中のアカウント（owner か beta）なら ON。条件は owner() と同じ（答え・写し・印・匿名経路・全体の kill）で、entitlement だけ owner か beta。未ログイン・none・答えなしは OFF */
+  function acctOf(any) {
     var k = lsGet(KILL);
     if (k === undefined) return { on: false, why: 'storage-unreadable' };
     if (k === '1') return { on: false, why: 'killed' };
@@ -45,7 +47,7 @@
     var me = null, snap = null;
     try { me = F.serverMe(); snap = F.flagsSnap(); } catch (e) { return { on: false, why: 'read-error' }; }
     if (!me) return { on: false, why: 'no-server-me' };
-    if (me.entitlement !== 'owner') return { on: false, why: 'not-owner' };
+    if (me.entitlement !== 'owner' && !(any === true && me.entitlement === 'beta')) return { on: false, why: 'not-owner' };
     if (me.status !== 'active') return { on: false, why: 'not-active' };
     var acct = String(me.accountId || '');
     if (!ACCT_RE.test(acct)) return { on: false, why: 'bad-account' };
@@ -54,7 +56,7 @@
     if (!mark || mark.sid !== 'cookie' || mark.acct !== acct) return { on: false, why: 'mark-mismatch' };
     try { var P = root.__v292Dfix886; if (P && P.api && typeof P.api.active === 'function' && P.api.active()) return { on: false, why: 'anon' }; }
     catch (e) { return { on: false, why: 'anon-unknown' }; }
-    return { on: true, why: 'owner' };
+    return { on: true, why: me.entitlement === 'owner' ? 'owner' : 'member' };
   }
   /* want(name): その機能を Owner の既定で ON にしてよいとき true。それ以外は全部 false */
   function want(name) {
@@ -64,7 +66,7 @@
       var off = lsGet(FEATURES[name].off);
       if (off === undefined) why = 'storage-unreadable';
       else if (off === '1') why = 'feature-off';
-      else { var o = owner(); on = o.on; why = o.why; }
+      else { var o = FEATURES[name].all === true ? member() : owner(); on = o.on; why = o.why; }   /* ★ALLON core: all の機能はログイン中のアカウントなら ON */
     }
     ST.evals++; if (on) ST.yes++; ST.lastWhy = String(name) + ':' + why; ST.why[why] = (ST.why[why] || 0) + 1;
     return on;
@@ -74,6 +76,6 @@
     for (var n in FEATURES) if (Object.prototype.hasOwnProperty.call(FEATURES, n)) { var off = lsGet(FEATURES[n].off); f[n] = { off: off === '1', ownerDefault: !!(o.on && off !== '1' && off !== undefined) }; }
     return { ver: VER, killed: lsGet(KILL) === '1', owner: o, features: f, evals: ST.evals, yes: ST.yes, lastWhy: ST.lastWhy, why: JSON.parse(JSON.stringify(ST.why)) };
   }
-  try { Object.defineProperty(root, '__v292DfixOWNERON1', { value: Object.freeze({ ver: VER, want: want, owner: owner, status: status, features: function () { return Object.keys(FEATURES); } }), configurable: false, enumerable: false, writable: false }); }
+  try { Object.defineProperty(root, '__v292DfixOWNERON1', { value: Object.freeze({ ver: VER, want: want, owner: owner, member: member, status: status, features: function () { return Object.keys(FEATURES); } }), configurable: false, enumerable: false, writable: false }); }
   catch (e) { try { root.__v292DfixOWNERON1 = { ver: VER, want: want, owner: owner, status: status }; } catch (e2) {} }
 })(typeof window !== 'undefined' ? window : globalThis);

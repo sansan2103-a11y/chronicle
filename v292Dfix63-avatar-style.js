@@ -161,6 +161,22 @@ setTimeout(inject, 2000);
   }
   setInterval(sweep, 1500);
   setTimeout(sweep, 300);
+  /* ★FLICK1: 会話ログの入れ物（#dialogue-stream）の中で、img の src が変わった・カードが足されたときだけ、1 フレームに 1 回まとめて目印を付け直す
+     （1.5 秒の間、顔の寄せの無い絵が出ないように）。本文の流し込みは見ない。入れ物が作り直されたら 1.5 秒ごとの sweep で付け直す。kill v292DfixFLICK1Off='1'（見張りなし＝土台と同じ） */
+  var fk = { mo: null, node: null, q: false, runs: 0, ms: 0 };
+  function fkRun(){ fk.q = false; var t = (window.performance && performance.now) ? performance.now() : Date.now(); sweep(); fk.runs++; fk.ms += ((window.performance && performance.now) ? performance.now() : Date.now()) - t; }
+  function fkQueue(){ if (fk.q) return; fk.q = true; try { (window.requestAnimationFrame || function(f){ return setTimeout(f, 16); })(fkRun); } catch(e){ fk.q = false; } }
+  function fkAttach(){
+    try {
+      if (lsg('v292DfixFLICK1Off') === '1'){ if (fk.mo){ fk.mo.disconnect(); fk.mo = null; fk.node = null; } return; }
+      var n = document.getElementById('dialogue-stream'); if (!n || n === fk.node) return;
+      if (fk.mo) fk.mo.disconnect();
+      fk.mo = new MutationObserver(function(muts){ for (var i = 0; i < muts.length; i++){ var u = muts[i]; if (u.type === 'attributes' || (u.addedNodes && u.addedNodes.length)){ fkQueue(); return; } } });
+      fk.mo.observe(n, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] }); fk.node = n;
+    } catch(e){}
+  }
+  setInterval(fkAttach, 1500); setTimeout(fkAttach, 300);
+  window.__v292DfixFLICK1 = { version: 'flick1-r1', stats: function(){ return { on: lsg('v292DfixFLICK1Off') !== '1', attached: !!fk.node && fk.node.isConnected !== false, runs: fk.runs, ms: Math.round(fk.ms * 10) / 10 }; } };
   window.__v292Dfix979 = { sweep: sweep, stats: function(){ return { on: !off(), filter: filterLevel(), scale: scale(), scaleSp: scaleSp(), scalePc: scalePc(), marked: stats.marked, skippedNonHuman: stats.skippedNonHuman, skippedPlaceholder: stats.skippedPlaceholder }; } };
 })();
 })();

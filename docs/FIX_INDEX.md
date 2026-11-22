@@ -1067,7 +1067,7 @@
 | 13 | iso2-owner-send-guard | `v292Diso2-owner-send-guard.js` | i13 h8 | `621fc588` | 20261014-iso2b | Vault・非表示 | `v292Dfix946M3Off` `v292Dfix946Off` `v292Diso2Off` |
 | 14 | p8d-image-egress-guard | `v292Dp8d-image-egress-guard.js` | i14 | `15e91a71` | 20261009-p8d2 | アイコン・画像 | `v292Dp8dOff` |
 | 15 | fix905 | `v292Dfix905-me-owner-gate.js` | i15 | `701becfa` | 20260929-ac17 | 認証・アカウント | `v292Dfix905Off` `v292Dfix905cOff` `v292Dfix917Off` `v292DmeOff` |
-| 16 | smrc1-model-registry | `v292Dsmrc1-model-registry.js` | i16 h9 | `52ca67f1` | 20261022-bf1owner | モデル・API | `v292DfixBF1Off` `v292DfixBF1On` `v292DfixCmfOff` |
+| 16 | smrc1-model-registry | `v292Dsmrc1-model-registry.js` | i16 h9 | `01132fae` | 20261122-allonb | モデル・API | `v292DfixBF1Off` `v292DfixBF1On` `v292DfixCmfOff` |
 | 17 | fix781 | `v292Dfix781-unsynced-guard.js` | i17 | `8c861398` | 20261019-bundle31-a | 保存・同期 | `v292Dfix729tOff` `v292Dfix781Off` `v292Dfix781bOff` `v292Dfix781cOff` |
 | 18 | fix745 | `v292Dfix745-gws-lock.js` | i18 | `4e422c58` | 20260830-fix756 | 保存・同期 | `v292Dfix743Off` `v292Dfix745Off` `v292Dfix750Off` `v292Dfix750On` |
 | 19 | fix746 | `v292Dfix746-slot-isolation-authority.js` | i19 | `2cbe79e5` | 20260829-fix748 | 保存・同期 | `v292Dfix746Off` |
@@ -1100,7 +1100,7 @@
 | 46 | fix860 | `v292Dfix860-story-unlock-ui.js` | i46 h23 | `6de33b75` | 20260916-sp2 | Vault・非表示 | `v292Dfix860Off` |
 | 47 | fix573 | `v292Dfix573-hero-guard.js` | i47 | `c90d8be8` | 20261009-f573b | NPC・キャラ状態 | `v292Dfix573Off` `v292Dfix573bOff` |
 | 48 | fix553 | `v292Dfix553-punct-probe.js` | i48 | `1d54eb16` | 20260913-q119b5 | 文章品質・プロンプト | `v292DQ119PageCanaryOff` `v292DQ119PageCanaryOn` `v292DQ119PhaseBOn` `v292Dfix553Off` |
-| 49 | fix562 | `v292Dfix562-backup-inventory.js` | i49 h13 | `7c09d9ee` | 20261116-discard2 | 保存・同期 | `v292Dfix562Off` |
+| 49 | fix562 | `v292Dfix562-backup-inventory.js` | i49 h13 | `4bc77edc` | 20261122-allonb | 保存・同期 | `v292Dfix562Off` |
 | 50 | fix564 | `v292Dfix564-snapshot.js` | i50 h14 | `134543bc` | v292Dfix567 | 保存・同期 | `v292Dfix564Off` |
 | 51 | fix726 | `v292Dfix726-export-secret-guard.js` | i51 h15 backup | `fecc81d7` | 20261019-bundle31-a | 保存・同期 | `v292Dfix726Off` |
 | 52 | fix721 | `v292Dfix721-safe-restore.js` | i52 h16 | `62e39f67` | 20260829-fix748 | 保存・同期 | `v292Dfix721Off` |
@@ -1116,7 +1116,7 @@
 | 62 | features | `features.js` | i62 | `6d812ce8` | 20261111-xss1 | 本体（ゲーム中核） | `v292Dfix190Off` `v292Dfix205gOff` `v292Dfix748SaveRefuseOff` `v292Dfix834Off` `v292DfixSAVEUIOff` `v292DfixCLICHE2Off` `v292DfixDEDUPQ1Off` `v292DfixSTATE2Off` |
 | 63 | fixP0 | `v292DfixP0-scenario-blocker.js` | i63 | `7c6d79f0` | v292Dfix680 | シナリオ・ホーム |  |
 | 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `7f77b62e` | 20261122-acct1r2 | 記憶 | `v292Dfix894Off` `v292DfixMEM3On` `v292DfixMEM3Off` |
-| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `cc695462` | 20261122-acct1r3 | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` `v292DfixMEM3bOn` `v292DfixMEM3bOff` `v292DfixMEM4On` `v292DfixMEM4Off` `v292DfixMEMTallyOff` |
+| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `d19f9cd0` | 20261122-allonmem | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` `v292DfixMEM3bOn` `v292DfixMEM3bOff` `v292DfixMEM4On` `v292DfixMEM4Off` `v292DfixMEMTallyOff` |
 | 65 | fix138 | `v292Dfix138-continue.js` | i65 | `db8f5e85` | 20260929-ac18 | 記憶 | `v292Drp1Off` |
 | 66 | fix145 | `v292Dfix145-charlist.js` | i66 | `e7b06fd1` | 20261101-bundle79-npres73d4b-on78c | NPC・キャラ状態 | `v292Dfix410Off` `v292Dfix487ListOff` `v292Dfix529Off` `v292Dfix773Off` |
 | 67 | fix777 | `v292Dfix777-icon-lightbox.js` | i67 | `19adb4d6` | 20261021-laneE-a | アイコン・画像 | `v292Dfix777Off` `v292DfixLE2Off` |
@@ -1132,7 +1132,7 @@
 | 77 | fix60 | `v292Dfix60-display-pipeline.js` | i77 | `fc5144f4` | v292Dfix60 | アイコン・画像 |  |
 | 78 | fix59 | `v292Dfix59-hybrid-extractor.js` | i78 | `12c56db5` | v292Dfix59 | NPC・キャラ状態 |  |
 | 79 | fix61 | `v292Dfix61-alpha-strip-protect.js` | i79 | `7cbb4781` | 20260829-fix748 | 文章品質・プロンプト |  |
-| 80 | fix63 | `v292Dfix63-avatar-style.js` | i80 | `77b3d9b2` | 20261101-bundle82-iconux-b | アイコン・画像 | `v292Dfix979Off` |
+| 80 | fix63 | `v292Dfix63-avatar-style.js` | i80 | `5c769ad7` | 20261122-flick1 | アイコン・画像 | `v292Dfix979Off` |
 | 81 | fix65 | `v292Dfix65-dialogue-rescue.js` | i81 | `a616558a` | v292Dfix65b | 話者・会話ログ |  |
 | 82 | fix74 | `v292Dfix74-ext-dedup-and-say.js` | i82 | `a7131790` | 20260912-q119s4 | 話者・会話ログ | `v292DQ119PageCanaryOff` `v292DQ119PageCanaryOn` |
 | 83 | fixSFL1 | `v292DfixSFL1-speaker-correct.js` | i83 | `3d1b805d` | 20261122-acct1r3 | 話者・会話ログ | `v292Dfix781Off` `v292DfixCP1Off` `v292DfixSFL1Off` `v292DfixSFL1On` `v292DfixSAVEUIOff` |
@@ -1148,7 +1148,7 @@
 | 93 | fix77 | `v292Dfix77-state-memory.js` | i93 | `d53f65aa` | 20261019-bundle31-a | NPC・キャラ状態 | `v292Dfix532Off` `v292Dfix901Off` `v292Dfix938Off` `v292Dfix961Off` |
 | 94 | fix78 | `v292Dfix78-tag-case-normalize.js` | i94 | `bd33ee86` | 20260912-q119s4 | 話者・会話ログ | `v292DQ119PageCanaryOff` `v292DQ119PageCanaryOn` |
 | 95 | fix79 | `v292Dfix79-momentum-anchor.js` | i95 ※読み込み停止（2026-11-15・CLEANUP3） | `78d3c840` | v292Dfix79 | NPC・キャラ状態 |  |
-| 96 | fixBF1 | `v292DfixBF1-reasoning-fallback.js` | i96 | `85c75741` | 20261022-bf1owner | モデル・API | `v292DfixBF1Off` `v292DfixBF1On` |
+| 96 | fixBF1 | `v292DfixBF1-reasoning-fallback.js` | i96 | `9b3096f9` | 20261122-allonb | モデル・API | `v292DfixBF1Off` `v292DfixBF1On` |
 | 97 | fix80 | `v292Dfix80-gen-gate-retry.js` | i97 | `6b90a1f2` | 20260929-ac23 | モデル・API | `v292Dfix504Off` `v292Dfix923Off` |
 | 98 | fix82 | `v292Dfix82-injury-reaction-root.js` | i98 ※読み込み停止（2026-11-15・CLEANUP3） | `cf4e514f` | v292Dfix82 | NPC・キャラ状態 |  |
 | 99 | fix83 | `v292Dfix83-name-truncation-repair.js` | i99 | `109f7ff6` | v292Dfix83 | NPC・キャラ状態 |  |
@@ -1343,7 +1343,7 @@
 | 288 | fix482 | `v292Dfix482-output-quality.js` | i288 | `895da7e1` | 20261019-bundle31-a | 文章品質・プロンプト | `v292Dfix482Off` `v292Dfix482RetryOff` `v292Dfix482RetryOn` `v292Dfix482mOff` |
 | 289 | fix489 | `v292Dfix489-convlog-gate.js` | i289 | `2263d032` | 20260901-fix784 | 話者・会話ログ | `v292Dfix489DropOn` `v292Dfix489Off` `v292Dfix783Off` |
 | 290 | fix490 | `v292Dfix490-slot-write-guard.js` | i290 | `874dce71` | v292Dfix565 | 保存・同期 | `v292Dfix490Off` `v292Dfix576Off` |
-| 291 | fix492 | `v292Dfix492-genfail-toast.js` | i291（86 では i295） | `6a8d3d5b` | 20261109-bundle93-j | UI・画面 | `v292Dfix492Off` |
+| 291 | fix492 | `v292Dfix492-genfail-toast.js` | i291（86 では i295） | `535d64b4` | 20261122-nocost1 | UI・画面 | `v292Dfix492Off` |
 | 292 | fix501 | `v292Dfix501-legacy-appearance-probe.js` | 読み込み停止（CLEANUP1 C1・GitHub `4dcd38c`。元の読込 i292。ファイルは残る） | `bd3bb1ca` | v292Dfix501 | アイコン・画像 | `v292Dfix501Off` |
 | 293 | fix515 | `v292Dfix515-icon-persist-probe.js` | 読み込み停止（CLEANUP1 C1・GitHub `4dcd38c`。元の読込 i293。ファイルは残る） | `dd96cd56` | v292Dfix515 | アイコン・画像 | `v292Dfix515Off` `v292Dfix515On` |
 | 294 | fix516 | `v292Dfix516-regen-local-display.js` | i294 | `115a78e1` | 20261002-ac36 | アイコン・画像 | `v292Dfix516Off` |
@@ -1394,12 +1394,12 @@
 | 337 | fix851 | `v292Dfix851-posture-directive.js` | i337 | `22543ee2` | 20261001-ac33 | NPC・キャラ状態 | `v292Dfix851Off` `v292Dfix851On` `v292Dfix936Off` `v292DrrOff` |
 | 338 | fix852 | `v292Dfix852-mental-capability.js` | i338 | `dbd6fffe` | 20261001-ac33 | NPC・キャラ状態 | `v292Dfix852Off` `v292Dfix852On` `v292Dfix936Off` `v292DrrOff` |
 | 339 | fix853 | `v292Dfix853-truncated-name-guard.js` | i339 | `14e1e6de` | 20261025-bundle58-npcp1-b | NPC・キャラ状態 | `v292Dfix853Off` `v292Dfix853pOff` `v292DfixA4Off` |
-| 340 | av2-portrait | `v292Dav2-portrait.js` | i340（86 では i345） | `6e664203` | 20261122-acct1r3-allona | アイコン・画像 | `v292Dav2pOff` `v292Dfix993Off` `v292DfixB37aOff` `v292DfixFG1cOff` `v292Dav2pRenameOff` |
+| 340 | av2-portrait | `v292Dav2-portrait.js` | i340（86 では i345） | `b6f6b310` | 20261122-flick1 | アイコン・画像 | `v292Dav2pOff` `v292Dfix993Off` `v292DfixB37aOff` `v292DfixFG1cOff` `v292Dav2pRenameOff` |
 | 341 | fixLD1 | `v292DfixLD1-preset-portrait.js` | i341 | `10dcebf5` | 20261121-restyle1on | アイコン・画像 | `v292DfixD1Off` `v292DfixLD1On` `v292DfixRESTYLE1Off` |
-| 342 | fixB37 | `v292DfixB37-onboard.js` | i342 | `899aaaa5` | 20261109-bundle93-j | シナリオ・ホーム | `v292DfixB37bOff` `v292DfixB37gOff` |
+| 342 | fixB37 | `v292DfixB37-onboard.js` | i342 | `b794bcf2` | 20261122-nocost1 | シナリオ・ホーム | `v292DfixB37bOff` `v292DfixB37gOff` |
 | 343 | fixLC1 | `v292DfixLC1-appearance-proposal.js` | i343（86 では i348） | `30261b87` | 20261115-rw1 | アイコン・画像 | `v292DfixLC1Off` `v292DfixICONFIX1aOff` `v292DfixAPPX1Off` |
 | 344 | fixLC1 | `v292DfixLC1-workbench.js` | i344（86 では i349） | `f4564ac3` | 20261110-bundle93-k | アイコン・画像 | `v292DfixLC1Off` `v292DfixLC1On` `v292DfixLC1PtrRefreshOff` |
-| 345 | av2-migrate-ui | `v292Dav2-migrate-ui.js` | i345 | `a5dcf137` | 20261109-bundle93-j | アイコン・画像 | `v292Dav2Off` `v292Dav2On` `v292Dav2mOff` |
+| 345 | av2-migrate-ui | `v292Dav2-migrate-ui.js` | i345 | `f8df095d` | 20261122-nocost1 | アイコン・画像 | `v292Dav2Off` `v292Dav2On` `v292Dav2mOff` |
 | 346 | fg3-artpreset | `v292Dfg3-artpreset.js` | i346 | `5c575d27` | 20261021-bundle37-a | アイコン・画像 | `v292Dfg3Off` `v292DfixB37fOff` |
 | 347 | fix886 | `v292Dfix886-public-anon-client.js` | 読み込み停止（CLEANUP2 C2a・GitHub `05da4aa`。元の読込 i347。ファイルは残る） | `0d4b103e` | 20260921-sp16r | 認証・アカウント | `v292Dfix837Off` `v292Dfix841Off` `v292Dfix886Off` `v292Dfix886TurnOff` |
 | 348 | fix890 | `v292Dfix890-anon-gate-yield.js` | 読み込み停止（CLEANUP2 C2a・GitHub `05da4aa`。元の読込 i348。ファイルは残る） | `f832fbfc` | 20260920-sp14j | 認証・アカウント |  |
@@ -1460,7 +1460,7 @@
 | 393 | fixGHOST1 | `v292DfixGHOST1-legacy-slot-ghost.js` | home：fix889 の直後（index では読まない。GHOST1・GitHub `98cf4bc`） | `cf49f461` | 20261111-ghost1 | シナリオ・ホーム | `v292DfixGHOST1Off`（kill。既定 ON） |
 | 394 | fixKEY1 | `v292DfixKEY1-story-key.js` | index・home（KEY1・GitHub `e4d982e`） | `499b6c97` | 20261112-key1 | 保存・同期 | `v292DfixKEY1Off`（kill。既定 ON） |
 | 395 | fixSOL1 | `v292DfixSOL1-story-open-lock.js` | index（KEY1 の直前。SOL1・`e4d982e`） | `4617f25e` | 20261112-store1b | 保存・同期 | `v292DfixSOL1Off`（kill。既定 ON） |
-| 396 | fixSTORE1b | `v292DfixSTORE1b-device-free.js` | home：DL2 の直後（index では読まない。STORE1b・`a46c2f1`〜`72ab286`） | `726bd8dd` | 20261117-zt1d | 削除・墓標 | `v292DfixSTORE1Off` `v292DfixFREE2Off` `v292DfixSTUCK1On` `v292DfixZT1On` `v292DfixZT1DirtyOn`（既定 OFF） `v292DfixEXTRA1Off` `v292DfixDISCARD1Off` `v292DfixDISCARD2Off` `v292DfixAUTOCLEAN1On`（既定 OFF） `v292DfixAUTOCLEAN1Pace`（既定 OFF） `v292DfixAUTOCLEAN1Days`（r6 から効かない） `v292DfixVCLEAN1On`（既定 OFF） |
+| 396 | fixSTORE1b | `v292DfixSTORE1b-device-free.js` | home：DL2 の直後（index では読まない。STORE1b・`a46c2f1`〜`72ab286`） | `963f7b82` | 20261122-allonb | 削除・墓標 | `v292DfixSTORE1Off` `v292DfixFREE2Off` `v292DfixSTUCK1On` `v292DfixZT1On` `v292DfixZT1DirtyOn`（既定 OFF） `v292DfixEXTRA1Off` `v292DfixDISCARD1Off` `v292DfixDISCARD2Off` `v292DfixAUTOCLEAN1On`（既定 OFF） `v292DfixAUTOCLEAN1Pace`（既定 OFF） `v292DfixAUTOCLEAN1Days`（r6 から効かない） `v292DfixVCLEAN1On`（既定 OFF） |
 | 397 | fixACTOR1 | `v292DfixACTOR1-input-actor.js` | index：HEROVOICE1 の直後（ACTOR1・`5b8a837`） | `1bb474f0` | 20261114-hv1 | 文章品質・プロンプト | `v292DfixACTOR1Off` `v292DfixACTOR1aOff` `v292DfixACTOR1bOn`（既定 OFF） |
 | 398 | fixLAT1 | `v292DfixLAT1-press-feedback.js` | index（LAT1・`f2b6d56`） | `43ec809d` | 20261112-lat1 | UI・画面 | `v292DfixLAT1Off` |
 | 399 | fixUI3 | `v292DfixUI3-polish.js` | index（UI3・`f2b6d56`） | `17bf53cc` | 20261112-ui3a | UI・画面 | `v292DfixUI3Off` |
@@ -1474,7 +1474,7 @@
 | 405 | fixNUM1 | `v292DfixNUM1-input-ledger.js` | index（NUM1・`d24bbd5`・`7338a53`） | `62478e1a` | 20261113-num2 | 文章品質・プロンプト | `v292DfixNUM1On`（既定 OFF） `v292DfixNUM1Off` |
 | 406 | fixERRNOTE1 | `v292DfixERRNOTE1-send-error-note.js` | index（ERRNOTE1・`4f0f2b1`・`248cc36`） | `bc96a1c8` | retry2-a | UI・画面 | `v292DfixERRNOTE1Off` |
 | 407 | fixHEROVOICE1 | `v292DfixHEROVOICE1-hero-voice.js` | index：ACTOR1 の直前（HEROVOICE1・`747a505`・`85b3be2`） | `e6a8736f` | 20261114-hv1b | 文章品質・プロンプト | `v292DfixHEROVOICE1Off` `v292DfixHEROVOICE1Force` |
-| 408 | fixOWNERON1 | `v292DfixOWNERON1-owner-defaults.js` | index（OWNERON1・`2b3271e`） | `6643467e` | 20261115-owneron1 | 認証・アカウント | `v292DfixOWNERON1Off` |
+| 408 | fixOWNERON1 | `v292DfixOWNERON1-owner-defaults.js` | index（OWNERON1・`2b3271e`） | `691cfe89` | 20261122-allonb-mem | 認証・アカウント | `v292DfixOWNERON1Off` |
 | 409 | fixPLACE1 | `v292DfixPLACE1-where-now.js` | index（PLACE1・`f35a302`〜`3c57fc3`） | `8a30e3cd` | 20261122-scene1 | 文章品質・プロンプト | `v292DfixPLACE1On`（既定 OFF・Owner は OWNERON1 で ON） `v292DfixPLACE1Off` `v292DfixPLACE1R5Off` `v292DfixPLACE1R6Off` `v292DfixPLACE1R7Off` `v292DfixPLACE1R8Off` |
 | 410 | fixRETRY2 | `v292DfixRETRY2-send-policy.js` | index：fix80 の直前（RETRY2・`248cc36`） | `5343838b` | retry2-a | 生成の中心 | `v292DfixRETRY2Off` `v292DfixRETRY2CmfOn` `v292DfixRETRY2IdOn` |
 | 411 | fixHOLDNOTE1 | `v292DfixHOLDNOTE1-hold-note.js` | index：ERRNOTE1 の直前（HOLDNOTE1） | `095d6225` | 20261115-holdnote1 | UI・画面 | `v292DfixHOLDNOTE1Off` |
@@ -1484,13 +1484,13 @@
 | 414 | fixHDRNL1 | `v292DfixHDRNL1-sys-header-newline.js` | index の先頭近く（PRUNE3 の直前。HDRNL1・`e5d5d30`） | `ecbc38cc` | 20261115-hdrnl1 | 文章品質・プロンプト | `v292DfixHDRNL1Off`（kill。既定 ON） |
 | 415 | fixCONTRACT1 | `v292DfixCONTRACT1-scene-contract.js` | index の先頭近く（HEROVOICE1 の直後。CONTRACT1・`9e585fb`） | `336de67d` | 20261122-acct1r3 | 文章品質・プロンプト | `v292DfixCONTRACT1On`（実験・既定 OFF） `v292DfixCONTRACT1Off` |
 | 416 | fixGEN1 | `v292DfixGEN1-gen-budget.js` | index：fix228 の直後（GEN1） | `9769f4f2` | 20261116-gen1r4 | 保存・同期 | `v292DfixGEN1On`（既定 OFF） `v292DfixGEN1Off` |
-| 419 | fixRESTYLE1 | `v292DfixRESTYLE1-preset-redo.js` | index：fg3 の直後（RESTYLE1・既定 ON（restyle1on）） | `18a8eea3` | 20261122-vaultgate2r2 | アイコン・画像 | `v292DfixRESTYLE1Off` |
+| 419 | fixRESTYLE1 | `v292DfixRESTYLE1-preset-redo.js` | index：fg3 の直後（RESTYLE1・既定 ON（restyle1on）） | `552d4981` | 20261122-nocost1 | アイコン・画像 | `v292DfixRESTYLE1Off` |
 | 420 | fixVAULTGATE2 | `v292DfixVAULTGATE2-vault-open.js` | index：fix889 の直後（VAULTGATE2・既定 ON・r2: 部品が無いと呼ぶ側が止める／読み直しの後退） | `3c1b3a56` | 20261122-vaultgate2r2 | Vault・非表示 | `v292DfixVAULTGATE2Off` |
-| 421 | fixSCENE1 | `v292DfixSCENE1-cast-presence-input.js` | index：fix192 の直後（SCENE1・GPT #127-WN 優先2・既定 OFF。11-11 の laneSCENE1〔NOW1 等〕とは別） | `641c64a2` | 20261122-scene1r7 | 生成の中心・プロンプト | `v292DfixSCENE1On`（a・c は既定 OFF・r7 から b は全員の既定 ON） `v292DfixSCENE1Off` `v292DfixSCENE1aOff` `v292DfixSCENE1bOff` `v292DfixSCENE1cOff` |
+| 421 | fixSCENE1 | `v292DfixSCENE1-cast-presence-input.js` | index：fix192 の直後（SCENE1・GPT #127-WN 優先2・既定 OFF。11-11 の laneSCENE1〔NOW1 等〕とは別） | `57b9f16c` | 20261122-scene1r8 | 生成の中心・プロンプト | `v292DfixSCENE1On`（a・c は既定 OFF・r7 から b は全員の既定 ON） `v292DfixSCENE1Off` `v292DfixSCENE1aOff` `v292DfixSCENE1bOff` `v292DfixSCENE1cOff` |
 | 422 | fixMEM4R | `v292DfixMEM4R-rebuild.js` | index：長期記憶の部品の後（MEM4R・11-22） | `8df0898d` | 20261122-mem4r-exp1 | 長期記憶 | 既定 ON（長期記憶が ON の人だけ働く） kill `v292DfixMEM4ROff`。印の無い古い記憶・空の記憶を、その物語の保存済みの本文から 12 ターン刻みで作り直す（1 物語・1 端末につき 1 回）。Vault は VAULTGATE2 の認可があるときだけ。出荷 11-22・実機は未確認 |
 | 423 | fixEXP1 | `v292DfixEXP1-experience.js` | index：長期記憶の部品の後（EXP1 の E1・11-22・GPT #127-WR 裁定 5） | `823c6236` | 20261122-memfix1 | 長期記憶 | 既定 ON（長期記憶が ON の人だけ働く） kill `v292DfixEXP1Off`。要約の AI への指示の人物欄に「経験・習得」を 1 項目足し、4 段階（教わった／初めてできた／身についた／できなかった）で覚え書きに残す。型の検査で本文に無い習得を捨てる。1 人 3 件まで。出荷 11-22・実 AI と実機は未確認。r6（11-22）＝文字の一致をやめ、登場・言い切り・主語の条件で検査（実物の応答の再生で作り話 0） |
 | 424 | fixMEMFIX1 | `v292DfixMEMFIX1-longmem-robust.js` | index：長期記憶の部品の後（MEMFIX1・11-22） | `933e4d8e` | 20261122-memfix1 | 長期記憶 | 既定 ON（長期記憶が ON の人だけ働く） kill `v292DfixMEMFIX1Off`。要約の応答が途中で切れて壊れたとき、読めた分を回収して先へ進む（2 回失敗で max_tokens を上げて 1 回・次は範囲を半分・5 回目で飛ばす）。summary の長さを形で指示し 800 字の内側で切る。実 AI の壊れた応答 4 回の再生で確認・実機は未確認 |
-| 422 | fixACCT1 | `v292DfixACCT1-owner-account-trial.js` | index：OWNERON1 の直後（ACCT1・GPT #127-WN 優先3・#127-WP） | `1d854928` | 20261122-acct1r3 | 認証・アカウント | `v292DfixACCT1Off` `v292DfixACCT1MemOff` `v292DfixACCT1Scene1bOff` |
+| 422 | fixACCT1 | `v292DfixACCT1-owner-account-trial.js` | index：OWNERON1 の直後（ACCT1・GPT #127-WN 優先3・#127-WP） | `a5569f25` | 20261122-allonb-mem | 認証・アカウント | `v292DfixACCT1Off` `v292DfixACCT1MemOff` `v292DfixACCT1Scene1bOff` |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
 

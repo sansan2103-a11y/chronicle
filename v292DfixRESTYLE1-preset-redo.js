@@ -80,7 +80,7 @@
   function bar() { var b = document.getElementById(BAR); if (b) return b; b = document.createElement('div'); b.id = BAR; b.setAttribute('data-av2-ui', 'restyle1'); b.setAttribute('role', 'status');
     b.style.cssText = 'position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147481000;max-width:min(560px,calc(100vw - 24px));background:#2b2620;color:#f4ece0;border:1px solid #a08050;border-radius:8px;padding:8px 12px;font-size:13px;line-height:1.5;box-shadow:0 2px 10px rgba(0,0,0,.4);';
     (document.body || document.documentElement).appendChild(b); return b; }
-  function btn(txt, act) { var x = document.createElement('button'); x.type = 'button'; x.textContent = txt; x.setAttribute('data-restyle1', act); x.style.cssText = 'margin:6px 8px 0 0;background:#fff;color:#5a3a00;border:0;border-radius:6px;padding:4px 12px;font-size:13px;cursor:pointer;'; return x; }
+  function btn(txt, act) { var x = document.createElement('button'); x.type = 'button'; x.textContent = txt; x.setAttribute('data-restyle1', act); x.style.cssText = 'margin:6px 8px 0 0;background:#f4ece0;color:#3a2600;-webkit-text-fill-color:#3a2600;opacity:1;font-weight:600;border:0;border-radius:6px;padding:4px 12px;font-size:13px;cursor:pointer;'; return x; }
   function show(msg, acts) { var b = bar(); b.textContent = ''; var t = document.createElement('div'); t.setAttribute('data-restyle1', 'msg'); t.textContent = msg; b.appendChild(t);
     (acts || []).forEach(function (a) { b.appendChild(btn(a[0], a[1])); }); }
   function hide() { var b = document.getElementById(BAR); if (b && b.parentNode) b.parentNode.removeChild(b); }
@@ -93,7 +93,7 @@
     else if (a === 'close') { ev.preventDefault(); hide(); } else if (a === 'entry') { ev.preventDefault(); askFromEntry(); } }, true);
 
   /* ---------- 流れ ---------- */
-  function msgAsk(key, n) { return 'この画風（' + LABEL[key] + '）の絵が無い人が ' + n + ' 人います。この画風で ' + n + ' 人分を作り直しますか（画像 ' + n + ' 枚分の費用。通常の「新しいデザインを生成」' + n + ' 回と同じ）。今の絵は、作り直すまでそのままです。'; }
+  function msgAsk(key, n) { return 'この画風（' + LABEL[key] + '）の絵が無い人が ' + n + ' 人います。この画風で ' + n + ' 人分を作り直しますか。今の絵は、作り直すまでそのままです。'; }
   function count(id, key, cb) {
     readList(id, function (j) {
       if (!j) { cnt(stats.skip, 'READ_FAIL'); return cb(null, 'READ_FAIL'); }
@@ -132,7 +132,7 @@
     X.phase = 'running'; X.job = job; stats.started++; recSet(job.id, 'd_' + job.key, 'started');
     step(job);
   }
-  function progress(job) { show('この画風（' + LABEL[job.key] + '）で作り直しています: ' + (job.done + job.fails + job.had) + '/' + job.targets.length + ' 人' + (job.had ? '（既にあり ' + job.had + ' 人）' : '') + (job.fails ? '（未完成 ' + job.fails + ' 人）' : '') + '。送った分の費用はかかります。', [['やめる', 'stop']]); }
+  function progress(job) { show('この画風（' + LABEL[job.key] + '）で作り直しています: ' + (job.done + job.fails + job.had) + '/' + job.targets.length + ' 人' + (job.had ? '（既にあり ' + job.had + ' 人）' : '') + (job.fails ? '（未完成 ' + job.fails + ' 人）' : '') + '。', [['やめる', 'stop']]); }
   function step(job) {
     var why = stillOk(job); if (why) return finish(job, why);
     if (job.i >= job.targets.length) return finish(job, null);

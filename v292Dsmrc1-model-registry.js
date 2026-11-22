@@ -97,12 +97,12 @@
      entitlement==='owner' かつ status==='active' のときだけ true。/auth/me 未応答（null）・失敗・401・非 owner・API 不在・例外 → false（fail-closed = 表の値そのまま）。
      匿名経路（fix886 active = x-chronicle-anon を付ける Customer 経路。Worker が権威）では Owner 判定を使わない（opt-in は従来どおり）。
      kill は Owner でも常に勝つ。storage が読めない = kill 不明 = OFF。書くもの: なし。/auth/me を増やさない。 */
-  function __bf1Owner(){
+  function __bf1Owner(){   /* ★ALLON-B: ログイン中のアカウント（owner・beta）は既定 ON（kill v292DfixBF1Off が勝つ） */
     try {
       var A = (typeof window !== 'undefined') ? window.__v292Dfix893 : null;
       if (!A || typeof A.serverMe !== 'function') return false;
       var me = A.serverMe();
-      return !!(me && me.entitlement === 'owner' && me.status === 'active');
+      return !!(me && (me.entitlement === 'owner' || me.entitlement === 'beta') && me.status === 'active');
     } catch (e) { return false; }
   }
   function __bf1Anon(){

@@ -244,8 +244,10 @@
     pic = tmpApply(m, ident, mxl, pic);   /* ★TMPICON1: 未登録・絵なしの話者だけ、表示だけの仮アイコン（OFF では pic をそのまま返す） */
     if (pic.tmp){ if (img.getAttribute('data-av2-tmp') !== '1'){ img.setAttribute('data-av2-tmp', '1'); tmpStats.shown++; } }
     else if (img.hasAttribute('data-av2-tmp')){ img.removeAttribute('data-av2-tmp'); tmpStats.replaced++; }
-    if (img.getAttribute('src') !== pic.src){ try { img.onerror = null; img.src = pic.src; stats.set++; } catch(e){} }
-    if (img.getAttribute('data-av2') !== pic.state) img.setAttribute('data-av2', pic.state);
+    var keepPic = (pic.state === 'loading' && ident.kind === 'REGISTERED' && !!listed && listed.story_id === m.story_id && !listed.error && lsg('v292DfixFLICK1Off') !== '1' && img.getAttribute('data-av2-id') === ident.id && /^data:image\/(png|jpe?g|webp)/.test(img.getAttribute('src') || ''));   /* ★FLICK1: 一覧があり・同じ物語・失敗でなく、同じ人の本物の絵が出ている間に次の絵を読み込むときは、その絵を出したまま */
+    if (keepPic) stats.kept = (stats.kept || 0) + 1;
+    if (!keepPic && img.getAttribute('src') !== pic.src){ try { img.onerror = null; img.src = pic.src; stats.set++; } catch(e){} }
+    if (!keepPic && img.getAttribute('data-av2') !== pic.state) img.setAttribute('data-av2', pic.state);
     if (ident.kind === 'REGISTERED'){ if (img.getAttribute('data-av2-id') !== ident.id) img.setAttribute('data-av2-id', ident.id); }
     else if (img.hasAttribute('data-av2-id')) img.removeAttribute('data-av2-id');
     if (img.hasAttribute('data-avpk')) img.removeAttribute('data-avpk');
@@ -284,13 +286,13 @@
               /* ★cand_sideport_authority R3-1 */ APPLIED_SERVER_MOVED: '保存されましたが、別の端末も更新しています。ページを再読み込みしてください', NOT_CANONICAL_ROW: 'この物語はサーバー側で編集できない状態です（非表示または削除済み）', READBACK_FAIL: '保存結果を確認できませんでした。ページを再読み込みしてください', 'canonical-deleted': 'この物語は削除されています', 'not-canonical': 'この物語はまだサーバーの正本になっていません',
               IN_FLIGHT: '作成中です。少し待ってから確認してください', IN_PROGRESS: '作成中です', LOST_RACE: '別の操作で絵が決まりました',
               BUDGET: '今月の画像の上限に達しました', RATE_LIMITED: '混み合っています。少し待ってからもう一度お試しください', GENERATION_FAILED: '絵を作れませんでした',
-              PROFILE_NOT_ENGLISH: '外見の文の中に、絵の指示に直せない言葉がありました（絵は作っていないため、画像の費用はかかっていません）。「外見を設定」で、髪・目・服・体格などの見た目だけを短く書き直してください（例：黒髪の長髪の少女、細身、白いドレス）', LEDGER_UNHEALTHY: '利用記録の確認中のため、画像の作成を一時的に止めています。しばらくしてからお試しください', OUTCOME_UNKNOWN: '結果を確認できませんでした。しばらくしてから表示を確認してください', READ_FAIL: 'サーバーに接続できませんでした',
+              PROFILE_NOT_ENGLISH: '外見の文の中に、絵の指示に直せない言葉がありました。「外見を設定」で、髪・目・服・体格などの見た目だけを短く書き直してください（例：黒髪の長髪の少女、細身、白いドレス）', LEDGER_UNHEALTHY: '利用記録の確認中のため、画像の作成を一時的に止めています。しばらくしてからお試しください', OUTCOME_UNKNOWN: '結果を確認できませんでした。しばらくしてから表示を確認してください', READ_FAIL: 'サーバーに接続できませんでした',
               ASSET_V2_UNAVAILABLE: 'この物語では使えません', NOT_FOUND: 'この物語では使えません',
-              /* ★R1920 */ APPEARANCE_UNSAFE_POLICY: 'この外見では絵を作れません（絵は作っていないため、画像の費用はかかっていません）。「外見を設定」で外見を直してください',   /* ★90-b: 理由が届かないときの中立の文 */
-              /* ★IMGSAFE1 (GPT #127-PE) */ APPEARANCE_UNSAFE_MINOR: '未成年に見える人物の性的な描写があるため、この外見では絵を作れません（絵は作っていないため、画像の費用はかかっていません）。「外見を設定」で、性的な体の描写や見せ方を外してください' };
+              /* ★R1920 */ APPEARANCE_UNSAFE_POLICY: 'この外見では絵を作れません。「外見を設定」で外見を直してください',   /* ★90-b: 理由が届かないときの中立の文 */
+              /* ★IMGSAFE1 (GPT #127-PE) */ APPEARANCE_UNSAFE_MINOR: '未成年に見える人物の性的な描写があるため、この外見では絵を作れません。「外見を設定」で、性的な体の描写や見せ方を外してください' };
   /* ★LaneE: 読み込み失敗の文言を原因（HTTP status）で分ける。文言だけ・流れは変えない */
   function readFailMsg(res){ var h = res && res.http; if (h === 404) return 'この物語は非表示中か、見つかりません'; if (h === 401) return 'ログインが切れました。もう一度ログインしてください'; if (h === 429 || h === 503) return '混み合っています。少し待ってからお試しください'; return 'サーバーに接続できませんでした'; }
-  var POLICY_WHY = { real_person: '実在の人物に該当する可能性があるため、画像生成を保留しました。オリジナルの架空キャラクターに変更する場合は、『外見を設定』から編集できます。前の画像はそのまま残ります。', explicit: '露骨な性的描写があるため、この外見では絵を作れません（絵は作っていないため、画像の費用はかかっていません）。「外見を設定」で外見を直してください' };   /* ★90-b: imgsafeWhy ごとの理由（入れなかった語は出さない） */
+  var POLICY_WHY = { real_person: '実在の人物に該当する可能性があるため、画像生成を保留しました。オリジナルの架空キャラクターに変更する場合は、『外見を設定』から編集できます。前の画像はそのまま残ります。', explicit: '露骨な性的描写があるため、この外見では絵を作れません。「外見を設定」で外見を直してください' };   /* ★90-b: imgsafeWhy ごとの理由（入れなかった語は出さない） */
   function msgFor(res, okKey){ if (res && res.ok) return MSG[okKey]; if (res && res.code === 'READ_FAIL') return readFailMsg(res); if (res && res.code === 'APPEARANCE_UNSAFE_POLICY' && own(POLICY_WHY, String(res.imgsafeWhy || ''))) return POLICY_WHY[res.imgsafeWhy]; return ((res && MSG[res.code]) || 'できませんでした') + imgsafeHint(res); }
   function imgsafeHint(res){ try { var G = window.__chrImgSafe; if (!(res && res.code === 'APPEARANCE_UNSAFE_MINOR' && res.imgsafe && G && G.hint)) return ''; if (G.remember) G.remember(res.imgsafe.y, res.imgsafe.s); return G.hint(res.imgsafe.y, res.imgsafe.s); } catch(e){ return ''; } }   /* ★IMGSAFE2: 分類の文言だけ ★IMGSAFE3: FLW2 が読み直しの後にも分類を出せるよう、分類の 2 語だけを覚える（画面の中だけ・保存しない） */
   try { window.__v292DfixFLW2msg = function(c){ return (typeof c === 'string' && own(MSG, c)) ? MSG[c] : null; }; } catch(eF2m){}   /* ★FLW2: 読み直しのあと理由コードから文を作り直すための読み口（読むだけ） */
@@ -929,11 +931,11 @@
     sweep();
   }
   /* ★LaneE: 画面に戻ったとき・金庫の表示/非表示が変わったときは、絵の一覧を取り直す（読み取りだけ） */
-  try { document.addEventListener('visibilitychange', function(){ if (!document.hidden){ try { window.__chronicleAv2Portrait.refresh(); } catch(e){} } }); window.addEventListener('chr:vault2-ui-changed', function(){ try { window.__chronicleAv2Portrait.refresh(); } catch(e){} }); } catch(e){}
+  try { document.addEventListener('visibilitychange', function(){ if (!document.hidden){ try { window.__chronicleAv2Portrait.refresh(); } catch(e){} } }); window.addEventListener('chr:vault2-ui-changed', function(){ try { window.__chronicleAv2Portrait.refresh({ drop: true }); } catch(e){} });   /* ★FLICK1: 金庫の表示の切り替えは一覧を捨てる */ } catch(e){}
   window.__chronicleAv2Portrait = {
     status: function(){ return { doc: doc(), killed: killed(), storyId: sid(), listed: listed ? { story_id: listed.story_id, at: listed.at, error: listed.error, n: Object.keys(listed.by || {}).length } : null,
                                  mem: Object.keys(mem).length, stats: JSON.parse(JSON.stringify(stats)), wrapped118: wrapped118, log: LOG.slice(-20), flw1: { off: flw1Off(), c: JSON.parse(JSON.stringify(flw1)) } }; },
-    refresh: function(){ listed = null; getFailed = {}; schedule(); return true; },
+    refresh: function(o){ if ((o && o.drop === true) || lsg('v292DfixFLICK1Off') === '1') listed = null; else if (listed) listed.at = 0; getFailed = {}; schedule(); return true; },   /* ★FLICK1: ふだんは一覧を「古い」にするだけ（取り直す間も今の絵を出す＝文字の丸に戻さない）。drop と kill v292DfixFLICK1Off は今までどおり捨てる */
     extrasChanged: function(){ schedule(); return true; },   /* ★MIDICON3: new extras data → one more sweep (no list refetch) */
     mxStats: function(){ return JSON.parse(JSON.stringify(mxStats)); },
     renameStats: function(){ return { on: lsg('v292Dav2pRenameOff') !== '1', byName: renameStats.byName }; },   /* ★93-k RENAME1 */

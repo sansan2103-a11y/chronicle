@@ -67,7 +67,8 @@
 
   function applyA(s, ops){
     // 錨が全部（ちょうど 1 回ずつ）そろったときだけ当てる
-    if (cnt(s, A_END_OLD) !== 1 || cnt(s, A_OKITE) !== 1 || cnt(s, A_FMT_S) !== 1 || cnt(s, A_FMT_E) !== 1) return s;
+    var A_END_OLD_ = A_END_OLD, A_END_NEW_ = A_END_NEW; try { var N2 = window.__v292DfixSPKNEW1; if (N2 && typeof N2.blkP2 === 'function'){ var pr2 = N2.blkP2(A_END_OLD, A_END_NEW); A_END_OLD_ = pr2[0]; A_END_NEW_ = pr2[1]; } } catch(eN2){}   /* ★SPKNEW1（既定 OFF）: fix514 の文が置き換わっていても当たる・まとめた後の文も同じ形に */
+    if (cnt(s, A_END_OLD_) !== 1 || cnt(s, A_OKITE) !== 1 || cnt(s, A_FMT_S) !== 1 || cnt(s, A_FMT_E) !== 1) return s;
     var hf = s.indexOf(H_FMT), i0 = s.indexOf(A_FMT_S), i1 = s.indexOf(A_FMT_E);
     if (hf < 0 || i0 < hf || i1 <= i0) return s;
     var mid = s.slice(i0, i1 + A_FMT_E.length);
@@ -76,7 +77,7 @@
     var r;
     s = s.slice(0, i0) + A_FMT_NEW + s.slice(i1 + A_FMT_E.length); ops.push('a_fmt');
     r = cut1(s, A_OKITE, ''); s = r; ops.push('a_okite');
-    r = cut1(s, A_END_OLD, A_END_NEW); s = r; ops.push('a_end');
+    r = cut1(s, A_END_OLD_, A_END_NEW_); s = r; ops.push('a_end');
     r = cut1(s, A_SPK2, ''); if (r != null){ s = r; ops.push('a_spk2'); }
     r = cut1(s, A_SPK3, ''); if (r != null){ s = r; ops.push('a_spk3'); }
     return s;

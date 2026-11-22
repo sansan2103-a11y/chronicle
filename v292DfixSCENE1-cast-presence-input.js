@@ -31,7 +31,7 @@
 (function (root) {
   'use strict';
   if (root.__v292DfixSCENE1) return;
-  var VER = 'scene1-20261122-r7';
+  var VER = 'scene1-20261122-r8';
   var CONT_TEXT = '続きを自然に進めてください。';
   function ls(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function on() { return ls('v292DfixSCENE1Off') !== '1' && ls('v292DfixSCENE1On') === '1'; }
@@ -235,6 +235,8 @@
   var REMOTE_IN = /呼ぶ|呼び|呼ん|叫|探|捜|電話|メール|手紙|連絡|メッセージ|思い出|思い浮|考え|待つ|待っ|見送|後を追|追いかけ|追って|噂|話題|について|のこと|夢|写真|遠く|窓の外|向こう|上へ|下へ|二階へ|階上へ|階下へ|上に向|下に向|階段の上|階段の下/;
   var SAY_AWAY = /電話|もしもし|どこ(?:に|へ|だ|です|なの|にいる)?|いる[？?の]|いますか|いるか|降りてき|下りてき|戻ってき|来てくれ|来てください|出てき|聞こえ(?:ない|ます|ますか|てない)/;
   var EXCOUNT = {};   /* 退出を確定した (人, ターン) を 1 回だけ数える（メモリだけ・保存しない） */
+  var BKCOUNT = {};   /* ★r8: 戻り（と言い切らずに外した回）を (人, ターン, 理由) ごとに 1 回だけ数える。exited() は呼ばれるたびに全ターンを読み直すので、r7 までは同じ戻りを毎回数え直していた（状態は同じ・数だけが増えた） */
+  function noteBack(n, tn, why) { var k = n + '\u0000' + tn + '\u0000' + why; if (BKCOUNT[k]) return; BKCOUNT[k] = 1; if (why === 'stale') { ST.bStale++; return; } ST.bBacks++; ST.bBackWhy[why] = (ST.bBackWhy[why] || 0) + 1; }
   /* ★r7（レビュー REVIEW_r6）: 「〜そうに」を仮定とするのは、退出の動詞の形に付いたとき（出ていきそうに・帰りそうに）だけ。様子の語（寂しそうに・嬉しそうに・不機嫌そうに）は仮定にしない */
   var IRREAL = /かもしれ|だろう|ような|ように|ようと|(?:出ていき|出て行き|出てき|いき|行き|戻り|帰り|去り|立ち去り|引き上げ|引き揚げ|外し|消し|出)そうに|そうだ|ふり|つもり|たら|なら|れば|はず|夢|想像|回想|思い出|電話|画面/;
   var PAST = /昔|かつて|以前|その頃|あの頃|あの日|あの時|当時|幼い頃|子供の頃|子どもの頃|若い頃|年前|ヶ月前|か月前|カ月前|ことがある|ことがあった|ていた頃|だった頃/;
@@ -337,6 +339,22 @@
   }
   function withHero(sent, forms, hf) { if (!sent || !hasAny(sent, hf) || !hasAny(sent, forms)) return false; for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (f && new RegExp('(?:と|、)' + esc(f) + HON + '(?:は|が|も)|' + esc(f) + HON + '(?:と|、)').test(sent)) return true; } return /一緒|共に|ともに|二人|ふたり|揃って|並んで/.test(sent); }
   function formsOf(name) { var n = str(name).trim(), f = [n], s = sp(n); if (s && s !== n) f.push(s); return f; }
+  /* ★r8: 本文の「彼女は／彼は」で始まる文を、直前の（引用だけでない）文の主語の登録人物として読む（退出の判定だけ）。
+     条件（どれか欠ければ読み替えない）: 直前の文がその人の呼び名＋は／がで始まる・直前の文に他の登録人物と主人公の名前が無い・
+     性別が登録されていれば「彼女」は女性・「彼」は男性に合う。戻り・動きの判定（backIn・actsHere）は今までどおり名前だけ。 */
+  var PRO_RE = /^[\s\u3000\u0001]*(彼女|彼)(は|が)/;   /* 文頭（引用〔伏せ字〕の直後も） */
+  function proSub(ss, j, pv, n, fs, S, hf) {
+    try { var m = PRO_RE.exec(ss[j] || ''); if (!m || pv < 0) return null; var prev = ss[pv] || '';
+      var hit = false; for (var i = 0; i < fs.length; i++) { if (fs[i] && new RegExp('^[\\s\\u3000]*(?:[^、。]{0,12}、)?' + esc(fs[i]) + HON + '(?:は|が)').test(prev)) { hit = true; break; } }
+      if (!hit) return null;
+      if (hasAny(prev, hf)) return null;
+      var others = []; npcNames(S).forEach(function (o) { if (o !== n) others = others.concat(formsOf(o), rawForms(o)); });   /* 1 字の名前（茂）も */
+      var pm = prev; fs.forEach(function (f) { if (f) pm = pm.split(f).join(''); }); if (hasAny(pm, others)) return null;
+      var g = ''; try { (S.cast.npcs || []).forEach(function (c) { if (c && str(c.name).trim() === n) g = str(c.gender || ''); }); } catch (eg) {}
+      if (g) { var fem = /女/.test(g), mal = /男/.test(g) && !fem; if (m[1] === '彼女' && mal) return null; if (m[1] === '彼' && fem) return null; }
+      ST.bPro = (ST.bPro || 0) + 1;
+      return ss[j].replace(PRO_RE, function (all, pr, pa) { return all.slice(0, all.length - pr.length - pa.length) + n + pa; });
+    } catch (e) { return null; } }
   function exitForms(n, S) {   /* ★r7: 退出は登録名そのまま＋「姓 名」（空白で分かれる）か 4 字の名の後ろ 2 字で、他の人物・主人公の呼び名と重ならない形（「氷室灯里」の「灯里」） */
     var f = formsOf(n), k = str(n).trim(), parts = k.split(/[\s　・]+/).filter(Boolean), cand = [];
     if (parts.length === 2) cand = parts.filter(function (p) { return p.length >= 2; }); else if (k.length === 4 && parts.length === 1) cand = [k.slice(2)];
@@ -377,26 +395,28 @@
         var TT = S.turns.slice(), cin = curInput(S); if (cin) TT.push(cin);   /* ★r4: 組み立て中の入力も 1 つのターンとして読む（その回の送信から効く） */
         for (var i = 0; i < TT.length; i++) { var t = TT[i] || {}, ty = str(t.inputType).toUpperCase(), tn = i + 1;
           if (st && tn > st.turn) {
-            if (heroMovedAt(S, t) || hp[tn]) { st = null; ST.bBacks++; ST.bBackWhy.heroMoved++; }
-            else if ((ty === 'DO' || ty === 'STORY') && hasAny(maskQ(str(t.playerText)), fb) && IN_ARRIVE.test(str(t.playerText)) && !/(?:ない|なかった)/.test(str(t.playerText))) { st = null; ST.bBacks++; ST.bBackWhy.input++; }
-            else if (Array.isArray(t._convSays) && t._convSays.some(function (c) { return c && fb.indexOf(str(c.who).trim()) >= 0; })) { st = null; ST.bBacks++; ST.bBackWhy.speaker++; }
-            else if (ty === 'DO' && objHere(t.playerText, fb)) { st = null; ST.bBacks++; ST.bBackWhy.obj++; }   /* ★r5 */
-            else if (ty === 'SAY' && vocHere(t.playerText, fb)) { st = null; ST.bBacks++; ST.bBackWhy.voc++; }   /* ★r5 */
+            if (heroMovedAt(S, t) || hp[tn]) { st = null; noteBack(n, tn, 'heroMoved'); }
+            else if ((ty === 'DO' || ty === 'STORY') && hasAny(maskQ(str(t.playerText)), fb) && IN_ARRIVE.test(str(t.playerText)) && !/(?:ない|なかった)/.test(str(t.playerText))) { st = null; noteBack(n, tn, 'input'); }
+            else if (Array.isArray(t._convSays) && t._convSays.some(function (c) { return c && fb.indexOf(str(c.who).trim()) >= 0; })) { st = null; noteBack(n, tn, 'speaker'); }
+            else if (ty === 'DO' && objHere(t.playerText, fb)) { st = null; noteBack(n, tn, 'obj'); }   /* ★r5 */
+            else if (ty === 'SAY' && vocHere(t.playerText, fb)) { st = null; noteBack(n, tn, 'voc'); }   /* ★r5 */
           }
           if (ty === 'DO' || ty === 'STORY') {   /* ★r4: 利用者の入力に書かれた退出（SAY は読まない）。入力で戻ってくる・この場で動くなら解く（既存の条件） */
             var ins = sents(maskQ(str(t.playerText)));
             for (var q = 0; q < ins.length; q++) { var xi = exitIn(ins[q], fs, ins[q + 1] || '', hf, true);
               if (xi) { st = { turn: tn, route: xi.route, src: 'input' }; noteExit(n, tn, 'input'); continue; }
-              if (st && tn > st.turn && actsHere(ins[q], fb)) { st = null; ST.bBacks++; ST.bBackWhy.input++; } } }
+              if (st && tn > st.turn && actsHere(ins[q], fb)) { st = null; noteBack(n, tn, 'input'); } } }
           var ss = sents(plain(t.narrative));
+          var pv = -1;   /* ★r8: 直前の（引用だけでない）文の番号 */
           for (var j = 0; j < ss.length; j++) {
-            var x = exitIn(ss[j], fs, ss[j + 1] || '', hf); if (x) { if (!(st && st.src === 'input' && st.turn === tn)) st = { turn: tn, route: x.route, j: j }; noteExit(n, tn, 'narr'); continue; }   /* ★r7: 同じ回の入力の退出の言い直しは、入力の退出のまま（同じ回の取り消しは本文の退出だけ） */
+            var sj = proSub(ss, j, pv, n, fs, S, hf); if (!/^[\u0001\s]*$/.test(ss[j])) pv = j;
+            var x = exitIn(sj || ss[j], fs, ss[j + 1] || '', hf); if (x) { if (!(st && st.src === 'input' && st.turn === tn)) st = { turn: tn, route: x.route, j: j }; noteExit(n, tn, 'narr'); continue; }   /* ★r7: 同じ回の入力の退出の言い直しは、入力の退出のまま（同じ回の取り消しは本文の退出だけ） */
             if (!st) continue;
-            if (backIn(ss[j], fb)) { st = null; ST.bBacks++; ST.bBackWhy.back++; }
-            else if (withHero(ss[j], fb, hf)) { st = null; ST.bBacks++; ST.bBackWhy.withHero++; }
-            else if ((tn > st.turn || (st.j !== undefined && st.turn === tn && j > st.j)) && actsHere(ss[j], fb)) { st = null; ST.bBacks++; ST.bBackWhy.acts++; } }   /* ★r7: 本文の退出は、同じ回のその後の文でその人が主語で動けば取り消す（使いに行って同じ回に戻る型） */
+            if (backIn(ss[j], fb)) { st = null; noteBack(n, tn, 'back'); }
+            else if (withHero(ss[j], fb, hf)) { st = null; noteBack(n, tn, 'withHero'); }
+            else if ((tn > st.turn || (st.j !== undefined && st.turn === tn && j > st.j)) && actsHere(ss[j], fb)) { st = null; noteBack(n, tn, 'acts'); } }   /* ★r7: 本文の退出は、同じ回のその後の文でその人が主語で動けば取り消す（使いに行って同じ回に戻る型） */
         }
-        if (st && TT.length - st.turn >= STALE_TURNS) { st = null; ST.bStale++; }   /* 6 ターン何も分からない → 言い切らずに外す */
+        if (st && TT.length - st.turn >= STALE_TURNS) { noteBack(n, st.turn, 'stale'); st = null; }   /* 6 ターン何も分からない → 言い切らずに外す */
         if (st) out[n] = st;
       });
     } catch (e) { err(); }

@@ -24,10 +24,10 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261122-r6';
+  var VER = 'exp1-20261122-r7';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
-  var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {} };   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
+  var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
   function cnt(o, k) { o[k] = (o[k] || 0) + 1; }
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return undefined; } }
   function sid() { try { var f = root.__v292Dfix697; var id = f && f.status ? f.status().storyId : null; return id ? String(id) : null; } catch (e) { return null; } }
@@ -245,7 +245,19 @@
     if (k === 'failed' && !A2_FAIL.test(text.replace(/失敗(を|も)(恐れ|怖が|気にせ|いと)[^。、]*/g, ''))) return 'A2_NO_FAIL';   /* 「失敗を恐れず」は失敗ではない */
     return { k: k, s: s, t: p.i };
   }
+  /* ★r7（realai_out_voiceex1 の実測）: 要約 AI は、最初の作り直しで書かなかった経験を、後の作り直しで元のターンの番号（範囲より前）のまま書く。
+     r6 はそれを「古い件（前の版に残っている）」として捨てたが、前の版に無いときは二度と入らなかった（A2・A4 で kept 0）。
+     fix135 がこの範囲より前の 12 ターン（ctx.older）を渡すときだけ、t がそこに当たるなら、そのターンの本文だけで同じ検査（r5 → A2）を通す。 */
   function checkLoc(x, ctx, who) {
+    var t0 = x && typeof x === 'object' ? parseT(x.t) : NaN;
+    if (!isNaN(t0) && ctx && t0 < ctx.from && Array.isArray(ctx.older) && ctx.older.length) {
+      var op = null; for (var oi = 0; oi < ctx.older.length; oi++) if (ctx.older[oi] && ctx.older[oi].i === t0) { op = ctx.older[oi]; break; }
+      if (op) { var oc = {}; for (var ok in ctx) if (Object.prototype.hasOwnProperty.call(ctx, ok) && ok !== 'older') oc[ok] = ctx[ok]; oc.from = t0; oc.to = t0; oc.text = String(op.pt || '') + '\n' + String(op.nr || ''); oc.parts = [op];
+        var ro = checkLocR6(x, oc, who); if (typeof ro !== 'string') { ST.older++; return ro; } cnt(ST.olderRej, ro); return ro; }
+    }
+    return checkLocR6(x, ctx, who);
+  }
+  function checkLocR6(x, ctx, who) {
     var r5 = checkLoc5(x, ctx, who); if (typeof r5 !== 'string' || !ctx || !Array.isArray(ctx.parts) || !ctx.parts.length || !ctx._names) return r5;   /* ★r6: r5 で通ればそのまま */
     if (r5 === 'NOT_OBJ' || r5 === 'BAD_K' || r5 === 'SHORT' || r5 === 'LONG' || r5 === 'BAD_T') return r5;
     var a = a2(x, ctx, who); if (typeof a === 'string') { cnt(ST.a2Rej, a); return r5; }

@@ -37,7 +37,8 @@
     if (!s || off()) return sys;
     if (s.indexOf(MARKER) >= 0) return sys;                  // 既に追記済（冪等）
     if (s.length < 200) return sys;                          // 実sysでない=触らない
-    var out = s + '\n\n' + BLOCK;
+    var B514 = BLOCK; try { var N1 = W.__v292DfixSPKNEW1; if (N1 && typeof N1.blk514 === 'function') B514 = N1.blk514(BLOCK); } catch(eN1){ B514 = BLOCK; }   /* ★SPKNEW1（既定 OFF）: 登録の一覧に無い人物の who の書き方。OFF は同じ文字列 */
+    var out = s + '\n\n' + B514;
     var added = out.length - s.length;
     if (added <= 0 || added > 700) return sys;               // 異常はno-op
     if (out.indexOf(MARKER) < 0) return sys;                 // fail-open

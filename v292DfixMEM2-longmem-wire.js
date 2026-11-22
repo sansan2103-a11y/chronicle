@@ -32,7 +32,7 @@
   var TRIAL_OWNER_ONLY = true, trialSt = {};
   function trialWhy(){ try { var A = window.__v292Dfix893; if (!A || typeof A.serverMe !== 'function') return 'NO_ACCOUNT_API'; var me = A.serverMe();
       if (!me) return 'NO_SERVER_ME'; if (me.entitlement !== 'owner') return 'NOT_OWNER'; if (me.status && me.status !== 'active') return 'NOT_ACTIVE'; return null; } catch(e){ return 'THREW'; } }
-  function trialOk(feat){ if (!TRIAL_OWNER_ONLY) return true; try { var A1 = window.__v292DfixACCT1; if (A1 && typeof A1.all === 'function' && A1.all() === true) return true; } catch(eA1){}   /* ★ACCT1 r3: 全員の旗（acct1all）が ON のときだけ。来ない今は今のまま */ var w = trialWhy(); if (w && feat){ var m = trialSt[feat] || (trialSt[feat] = {}); m[w] = (m[w] || 0) + 1; } return !w; }
+  function trialOk(feat){ if (!TRIAL_OWNER_ONLY) return true; try { var A1m = window.__v292DfixACCT1; if (A1m && typeof A1m.want === 'function' && A1m.want('mem') === true) return true; } catch(eA1m){}   /* ★ALLON-MEM: ACCT1 が mem を ON と答えたアカウント（ログイン中の owner・beta）は通す。kill は ACCT1 の kill・項目の kill */ try { var A1 = window.__v292DfixACCT1; if (A1 && typeof A1.all === 'function' && A1.all() === true) return true; } catch(eA1){}   /* ★ACCT1 r3: 全員の旗（acct1all）が ON のときだけ。来ない今は今のまま */ var w = trialWhy(); if (w && feat){ var m = trialSt[feat] || (trialSt[feat] = {}); m[w] = (m[w] || 0) + 1; } return !w; }
   window.__v292DfixMEMTrial = { ok: function(feat){ return trialOk(feat); }, ownerOnly: function(){ return TRIAL_OWNER_ONLY; }, stats: function(){ return JSON.parse(JSON.stringify(trialSt)); } };
   /* ★MEMTALLY（GPT #127-WF (a)）: 端末の 1 本の鍵 v292DfixMEMTally に、日別（端末の日付）で数だけ足す。
      数えるもの: inj（覚え書きを渡した回数）・skip{理由コード}（見送り）・loss（MEM4 の trusted → untrusted）・inv（印の無効化）・nrej{理由コード}（通知の不採用）。

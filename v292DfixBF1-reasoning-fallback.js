@@ -55,12 +55,12 @@
 
   /* ★r40 (GPT #127-JF): 初回出荷は OFF。localStorage v292DfixBF1On==='1' のときだけ作用。v292DfixBF1Off==='1' は強制停止で常に勝つ。storage 不可 = OFF。
      ★BF1-OWNER (GPT #127-JO): Owner（server 由来 /auth/me で entitlement owner・status active）は既定 ON。呼び出しごとに評価・fail-closed・匿名ヘッダでは見ない。 */
-  function ownerGate(){
+  function ownerGate(){   /* ★ALLON-B: ログイン中のアカウント（owner・beta）は既定 ON（kill v292DfixBF1Off が勝つ） */
     try {
       var A = window.__v292Dfix893;
       if (!A || typeof A.serverMe !== 'function') return false;              /* account API 不在 = fail-closed */
       var me = A.serverMe();                                                  /* server 由来の cache（mark は読まない）。未応答 = null */
-      return !!(me && me.entitlement === 'owner' && me.status === 'active');
+      return !!(me && (me.entitlement === 'owner' || me.entitlement === 'beta') && me.status === 'active');
     } catch(e){ return false; }
   }
   /* 戻り: 'killed' | 'optin' | 'owner' | 'anon' | 'off'。有効 = 'optin' か 'owner'。 */

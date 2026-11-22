@@ -23,10 +23,10 @@
   var VER = 'acct1-20261122-r3';
   var KILL = 'v292DfixACCT1Off';
   var ITEMS = {
-    mem: { off: 'v292DfixACCT1MemOff' },
+    mem: { off: 'v292DfixACCT1MemOff', all: true },   /* ★ALLON-MEM: ログイン中のアカウントなら ON */
     scene1b: { off: 'v292DfixACCT1Scene1bOff' },   /* ★r3: 出荷前の鍵（gate）を外した */
     /* ★r3（Owner の指示「iPhone だけオフはやめて・PC と同じに」）: Owner の PC の端末の鍵のうち、鍵が無い端末では OFF になり、端末の中身を消さないもの */
-    contract1: { off: 'v292DfixACCT1Contract1Off' },   /* CONTRACT1: 今回の場面の契約を user に渡す（v292DfixCONTRACT1On と同じ） */
+    contract1: { off: 'v292DfixACCT1Contract1Off', all: true },   /* ★ALLON-B: ログイン中のアカウントなら ON */   /* CONTRACT1: 今回の場面の契約を user に渡す（v292DfixCONTRACT1On と同じ） */
     heroact1: { off: 'v292DfixACCT1Heroact1Off' },     /* HEROACT1: 入力に無い主人公の発話・行動を数えるだけ（v292DfixHEROACT1On と同じ） */
     sfl1: { off: 'v292DfixACCT1Sfl1Off' },             /* SFL1: 話者の手直し（v292DfixSFL1On と同じ。管理者画面の行 sfl1 があればそちらが勝つ＝ADMF1 のまま） */
     tmpicon1: { off: 'v292DfixACCT1Tmpicon1Off' }      /* TMPICON1: 未登録の話者の仮の胸像（v292DfixTMPICON1On と同じ） */
@@ -44,9 +44,11 @@
     var it = ITEMS[name], off = lsGet(it.off); if (off === undefined) return { on: false, why: 'storage-unreadable' }; if (off === '1') return { on: false, why: 'item-off' };
     if (it.gate && lsGet(it.gate) !== '1') return { on: false, why: 'not-default-yet' };
     var o = ownerOf(); if (o.on) return o;
+    if (it.all === true && memberOf()) return { on: true, why: 'member' };   /* ★ALLON core: all の項目はログイン中のアカウント（owner・beta）なら ON（OWNERON1.member）。未ログインは OFF のまま */
     if (allOn()) return { on: true, why: 'all-flag' };   /* ★r3: 全員の旗（管理者画面の acct1all。Worker に鍵が足されるまでは来ない＝OFF のまま） */
     return o;
   }
+  function memberOf() { try { var O = root.__v292DfixOWNERON1; return !!(O && typeof O.member === 'function' && O.member().on === true); } catch (e) { return false; } }   /* ★ALLON core */
   function allOn() { try { var A = root.__v292DfixADMF1; return !!(A && typeof A.gate === 'function' && A.gate('acct1all', false) === true); } catch (e) { return false; } }
   function want(name) { var j = judge(name); ST.evals++; if (j.on) ST.yes++; var w = String(name) + ':' + j.why; ST.why[w] = (ST.why[w] || 0) + 1; return j.on === true; }
   function status() { var o = ownerOf(), it = {}; for (var n in ITEMS) if (Object.prototype.hasOwnProperty.call(ITEMS, n)) it[n] = judge(n); return { ver: VER, killed: lsGet(KILL) === '1', owner: o, items: it, evals: ST.evals, yes: ST.yes, why: JSON.parse(JSON.stringify(ST.why)) }; }

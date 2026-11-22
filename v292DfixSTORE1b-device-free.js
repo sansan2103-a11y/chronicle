@@ -146,6 +146,7 @@
 (function (root) {
   'use strict';
   var VERSION = 'STORE1b-r2';
+  var MULTI_OFF = 'v292DfixSTORE1MultiOff';   /* ★ALLON-B: まとめて選ぶ（最大 10 件・確認 1 回）は全員の既定 ON。kill v292DfixSTORE1MultiOff='1'（旧 On 鍵 v292DfixSTORE1Multi は読まない） */
   var KILL = 'v292DfixSTORE1Off', DRY = 'v292DfixSTORE1Dry', MULTI = 'v292DfixSTORE1Multi', LOGK = 'v292DfixSTORE1Log', LOG_RUNS = 10;
   var MAX_MULTI = 10;
   var ID_RE = /^s[0-9a-z]{8,10}$/;
@@ -1711,7 +1712,7 @@
   var AC_KILL = 'v292DfixAUTOCLEAN1Off', AC_LOGK = 'v292DfixAUTOCLEAN1Log', AC_GAP_MS = 24 * 3600 * 1000, AC_MAX = 3;
   /* ★AUTOCLEAN1 r3（GPT #127-UN）: 既定 OFF。端末の鍵 v292DfixAUTOCLEAN1On='1' の端末だけで動く（アカウント単位ではない）。kill v292DfixAUTOCLEAN1Off='1'（と DISCARD2 の kill）が優先。
      全員 ON に切り替えるときは、この 1 行の AC_DEFAULT_ON を true にする（ほかは変えない）。 */
-  var AC_DEFAULT_ON = false, AC_ON = 'v292DfixAUTOCLEAN1On';
+  var AC_DEFAULT_ON = true, AC_ON = 'v292DfixAUTOCLEAN1On';   /* ★ALLON-B: 全員の既定 ON（kill v292DfixAUTOCLEAN1Off と DISCARD2 の kill が勝つ） */
   function acOnGet(get) { if (get(AC_KILL) === '1' || get(D2_KILL) === '1') return false; return AC_DEFAULT_ON === true || get(AC_ON) === '1'; }
   function acOn(env) { return acOnGet(function (k) { return g(env, k); }); }
   function acLog(env) { var o = J(g(env, AC_LOGK) || 'null', null); return (o && typeof o === 'object' && isArr(o.runs)) ? o : { v: 1, lastTry: 0, runs: [] }; }
@@ -2049,10 +2050,10 @@
   function benv() {
     var K = null; try { K = root.__v292DfixKEY1; K = (K && typeof K.enabled === 'function' && K.enabled()) ? K : null; } catch (e) { K = null; }
     var pOn = lsg(PURGE_ON) === '1' && lsg(PURGE_OFF) !== '1';
-    return { ls: root.localStorage, ss: root.sessionStorage, now: function () { return Date.now(); }, key1: K, multi: lsg(MULTI) === '1', vg: vgSnap(), vgKill: vgOn() ? undefined : { state: exvSnap().state },   /* ★VAULTGUARD1 ／ ★VGUARD2: kill のときだけ */
+    return { ls: root.localStorage, ss: root.sessionStorage, now: function () { return Date.now(); }, key1: K, multi: lsg(MULTI_OFF) !== '1', vg: vgSnap(), vgKill: vgOn() ? undefined : { state: exvSnap().state },   /* ★VAULTGUARD1 ／ ★VGUARD2: kill のときだけ */
              purge: pOn, purgeVault: pOn && lsg(PURGE_VAULT) === '1',
              stuck1: lsg(STUCK_ON) === '1' && lsg(STUCK_OFF) !== '1', dirtyProof: dirtyProofB, otherTab: otherTabSeq,   /* ★STUCK1 r2: 既定 OFF */
-             zt1: lsg(ZT_ON) === '1' && lsg(ZT_OFF) !== '1',   /* ★ZT1: 既定 OFF */
+             zt1: lsg(ZT_OFF) !== '1',   /* ★ALLON-B: ZT1 は全員の既定 ON（kill v292DfixZT1Off が勝つ。ZT1b〔zt1Dirty〕は今のまま ZT1On と ZT1Dirty の鍵が要る） */   /* ★ZT1: 既定 OFF */
              extra1: lsg(EX_OFF) !== '1', ex1ModelOk: ex1ModelOkB, ex1Vault: exvSnap(), ex1Ctr: { left: EX1_READ_MAX },   /* ★r4 */   /* ★EXTRA1: 既定 ON（r3: モデル名の確かめ） */
              zt1Dirty: lsg(ZT_ON) === '1' && lsg(ZT_OFF) !== '1' && lsg(ZT_DIRTY) === '1', zt1Models: zt1ModelsB(),   /* ★ZT1b（ZT1 OFF のときは ZT_DIRTY を読まない） */
              free2: lsg(F2_OFF) !== '1',   /* ★FREE2c: 既定 ON（kill v292DfixFREE2Off='1'）。v292DfixFREE2On は読まない */
@@ -2276,7 +2277,7 @@
   function openFlow(msg, result) {
     st.opened++;
     var be0 = benv();
-    M = { phase: 'loading', msg: msg || '確認しています…', rep: null, picks: [], multi: lsg(MULTI) === '1', result: result || null, step: null, purge: be0.purge === true, stuck1: be0.stuck1 === true };
+    M = { phase: 'loading', msg: msg || '確認しています…', rep: null, picks: [], multi: lsg(MULTI_OFF) !== '1', result: result || null, step: null, purge: be0.purge === true, stuck1: be0.stuck1 === true };
     render();
     if (!ready()) { M.phase = 'done'; M.msg = 'いまはこの操作を使えません。物語はそのまま残っています。'; render(); return Promise.resolve(false); }
     var mine = M;
@@ -2309,7 +2310,7 @@
   root.__v292DfixSTORE1b = {
     version: VERSION,
     open: function () { return openFlow(); },
-    multi: function () { return lsg(MULTI) === '1'; },
+    multi: function () { return lsg(MULTI_OFF) !== '1'; },
     dryRun: dryRun,
     /* ★STUCK1: その 1 件だけ、シートと同じ確認をして理由コードを返す（何も消さない・書かない。getstory と /api/auth/me を読むだけ） */
     explain: function (id) { if (!ready()) return Promise.resolve({ notReady: true }); var e = benv(); e.only = [String(id)];
