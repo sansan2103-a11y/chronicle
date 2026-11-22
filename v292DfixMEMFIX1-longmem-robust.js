@@ -16,9 +16,19 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixMEMFIX1) return;
-  var VER = 'memfix1-20261122-r1', BOOST = 4000, MAX_FAIL = 5, SUM_CAP = 800;
-  var ST = { on: 0, offWhy: {}, salvaged: 0, salvageNG: 0, wiCut: 0, evCut: 0, fails: 0, boosted: 0, halved: 0, skipped: 0, waited: 0, ok: 0, okAfterFail: 0, sumCut: 0, prompt: 0, promptMiss: 0 };
-  var bySfx = {};   /* このページの間だけ: { lb, fails, lastFailTurn, skipFrom } */
+  var VER = 'memfix1-20261122-r2', BOOST = 4000, MAX_FAIL = 5, SUM_CAP = 800, DAY_MAX = 6;   /* ★r2: DAY_MAX＝失敗の後のやり直しの呼び出しは 1 物語・1 日 6 回まで */
+  var ST = { on: 0, offWhy: {}, salvaged: 0, salvageNG: 0, wiCut: 0, evCut: 0, fails: 0, boosted: 0, halved: 0, skipped: 0, paused: 0, dayCap: 0, retried: 0, waited: 0, ok: 0, okAfterFail: 0, sumCut: 0, prompt: 0, promptMiss: 0, evDup: 0, evOut: 0, wiDup: 0 };   /* ★r2: skipped は使わない（0 のまま）。paused＝この範囲を今回のページでは止めた・dayCap＝1 日の上限で止めた */
+  var bySfx = {};   /* このページの間だけ: { lb, fails, lastFailTurn, paused } */
+  /* ★r2（GPT #127-WV ②）: 5 回失敗した範囲を「処理済み」として飛ばさない。lastBuild（今ある処理位置）は動かさず、このページの間だけ止める＝未処理のまま残り、
+     次に物語を開いたとき（新しいページ）にやり直す。新しい台帳は作らない。
+     費用の上限: 失敗の後のやり直しの呼び出しを、1 物語・1 日あたり DAY_MAX 回まで数える（鍵 v292DfixMEMFIX1Day に {d: 日付, n: {物語の短い hash: 回数}}・その日の分だけ・日が変われば捨てる）。
+     上限に達したら、その日はその物語のやり直しを送らない（物語の本文の生成・保存は止めない・ふつうの作り直しは失敗が無ければ今までどおり）。 */
+  var DAYK = 'v292DfixMEMFIX1Day';
+  function today() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  function hid(s) { var a = 2166136261; s = String(s || ''); for (var i = 0; i < s.length; i++) { a ^= s.charCodeAt(i); a = (a * 16777619) >>> 0; } return 'h' + a.toString(36); }
+  function dayGet() { try { var o = JSON.parse(root.localStorage.getItem(DAYK) || 'null'); if (o && o.d === today() && o.n && typeof o.n === 'object') return o; } catch (e) {} return { d: today(), n: {} }; }
+  function dayUsed(sfx) { return dayGet().n[hid(sfx)] || 0; }
+  function dayAdd(sfx) { try { var o = dayGet(), k = hid(sfx); o.n[k] = (o.n[k] || 0) + 1; root.localStorage.setItem(DAYK, JSON.stringify(o)); } catch (e) {} }
   function cnt(o, k) { o[k] = (o[k] || 0) + 1; }
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return undefined; } }
   function why() { var k = lsg('v292DfixMEMFIX1Off'); if (k === undefined) return 'STORAGE'; if (k === '1') return 'KILLED';
@@ -46,11 +56,20 @@
       summary: String(obj.summary || '').slice(0, 800),
       worldinfo: Array.isArray(obj.worldinfo) ? obj.worldinfo.filter(function (w) { return w && w.name && w.type && w.desc; }).slice(0, 40) : [],
       events: Array.isArray(obj.events) ? obj.events.filter(function (e) { return e && e.event && typeof e.turnIdx === 'number'; }).slice(0, 20) : [],
-      _cut: { wi: wiCut, ev: evCut }
+      _cut: { wi: wiCut, ev: evCut }, _salv: true
     };
   }
   /* 途中で切れた worldinfo・events に、前の版の項目のうち新しい版に無いものを足す（新しい版が優先・壊れた項目は既に捨ててある） */
-  function fill(result, prevWI, prevEv) {
+  /* ★r2（GPT #127-WV ②）: 部分回収で採用するのは、構造が完結した独立の項目だけ（salvage は最後に閉じた項目で切る・名前／種類／説明のそろった人物、出来事と番号のそろった出来事だけ）。
+     未完成の項目は推測で補わない（捨てる）。同じ版の中の同じ名前の人物・同じ元ターンの同じ出来事は 1 つにする。範囲より後の元ターンの出来事は使わない。
+     前の版から足すのは、新しい版に無い名前の人物と、新しい版に無い元ターンの出来事だけ（同じ元ターン・同じ内容を重ねて保存しない）。 */
+  function tidy(result, to) {
+    var seenW = {}; result.worldinfo = (result.worldinfo || []).filter(function (w) { if (seenW[w.name]) { ST.wiDup++; return false; } seenW[w.name] = 1; return true; });
+    var seenE = {}; result.events = (result.events || []).filter(function (e) { if (typeof to === 'number' && e.turnIdx > to) { ST.evOut++; return false; } var k = e.turnIdx + '\u0001' + String(e.event).replace(/\s+/g, ''); if (seenE[k]) { ST.evDup++; return false; } seenE[k] = 1; return true; });
+    return result;
+  }
+  function fill(result, prevWI, prevEv, to) {
+    if (result && result._salv) { tidy(result, to); delete result._salv; }
     if (!result || !result._cut) return result;
     if (result._cut.wi) { var have = {}; (result.worldinfo || []).forEach(function (w) { have[w.name] = 1; }); (prevWI || []).forEach(function (w) { if (w && w.name && !have[w.name] && result.worldinfo.length < 40) result.worldinfo.push(w); }); }
     if (result._cut.ev) { var key = function (e) { return e.turnIdx + '\u0001' + e.event; }, hv = {}; (result.events || []).forEach(function (e) { hv[key(e)] = 1; hv['t' + e.turnIdx] = 1; });
@@ -61,11 +80,13 @@
   function plan(o) {
     if (!on() || !o) return null;
     var key = String(o.sfx || ''), b = bySfx[key];
-    if (!b || b.lb !== o.lb) { b = bySfx[key] = { lb: o.lb, fails: 0, lastFailTurn: -2, skipFrom: b && b.lb === o.lb ? b.skipFrom : -1 }; }
+    if (!b || b.lb !== o.lb) { b = bySfx[key] = { lb: o.lb, fails: 0, lastFailTurn: -2, paused: false }; }
     var from = o.from, to = o.to, tokens = 0;
-    if (b.skipFrom > from && b.skipFrom <= to) from = b.skipFrom;
-    if (!b.fails) return (from !== o.from) ? { from: from, to: to, tokens: 0 } : null;
+    if (b.paused) { ST.waited++; return { wait: true }; }   /* ★r2: このページでは止めた範囲（未処理のまま・次に開いたときにやり直す） */
+    if (!b.fails) return null;
     if (b.lastFailTurn === o.cur) { ST.waited++; return { wait: true }; }   /* 失敗の後は 1 ターンに 1 回まで */
+    if (dayUsed(key) >= DAY_MAX) { ST.dayCap++; return { wait: true }; }   /* ★r2: 1 物語・1 日の上限 */
+    dayAdd(key); ST.retried++;
     if (b.fails >= 2) { tokens = BOOST; ST.boosted++; }
     if (b.fails >= 3) { var n = to - from + 1, half = Math.max(1, Math.floor(n / Math.pow(2, b.fails - 2))); to = from + half - 1; ST.halved++; }
     return { from: from, to: to, tokens: tokens };
@@ -73,9 +94,9 @@
   function fail(o) { if (!on() || !o) return null; var key = String(o.sfx || ''), b = bySfx[key] || (bySfx[key] = { lb: o.lb, fails: 0, lastFailTurn: -2, skipFrom: -1 });
     if (b.lb !== o.lb) { b.lb = o.lb; b.fails = 0; }
     b.fails++; b.lastFailTurn = o.cur; ST.fails++;
-    if (b.fails >= MAX_FAIL) { b.skipFrom = (+o.to) + 1; b.fails = 0; ST.skipped++; return { skipped: true }; }   /* 上限: この範囲は飛ばして先へ（このページの間だけ・保存はしない） */
+    if (b.fails >= MAX_FAIL) { b.paused = true; ST.paused++; return { paused: true }; }   /* ★r2: 飛ばさない。lastBuild はそのまま（未処理）・このページでは止める */
     return { fails: b.fails }; }
-  function ok(o) { if (!o) return; var key = String(o.sfx || ''), b = bySfx[key]; if (b && b.fails) ST.okAfterFail++; if (b) { b.fails = 0; b.skipFrom = -1; } if (on()) ST.ok++; }
+  function ok(o) { if (!o) return; var key = String(o.sfx || ''), b = bySfx[key]; if (b && b.fails) ST.okAfterFail++; if (b) { b.fails = 0; b.paused = false; } if (on()) ST.ok++; }
   /* ---- (c) summary の長さ ---- */
   var SUM_MEM3 = 'Japanese, 500 chars max, in three labelled parts.';
   var SUM_MEM3_NEW = 'Japanese, in three labelled parts, 500 characters in total at most (about 10 short sentences): when the story grows, merge older 経過 items into one sentence each so the whole stays within 500 characters.';
@@ -90,7 +111,9 @@
   function cutSummary(s) {
     s = String(s == null ? '' : s); if (!on() || s.length <= SUM_CAP - 1) return s;   /* fix135 の parse は 800 字で切る＝800 字ちょうどは途中で切れた疑い */
     var head = s.slice(0, SUM_CAP), k = Math.max(head.lastIndexOf('。'), head.lastIndexOf('！'), head.lastIndexOf('？'), head.lastIndexOf('\n'));
-    if (k >= SUM_CAP * 0.5) { ST.sumCut++; return head.slice(0, k + 1).replace(/\s+$/, ''); }
+    if (k >= SUM_CAP * 0.3) { ST.sumCut++; return head.slice(0, k + 1).replace(/\s+$/, ''); }
+    /* ★r2（GPT #127-WV ②）: 文の区切りが遠いときも、途中の節（否定・条件の語が後ろに来る日本語では、途中で切ると意味が反転しうる）は残さない。最後の読点までで切り、句点で閉じる */
+    var c = head.lastIndexOf('、'); if (c >= SUM_CAP * 0.3) { ST.sumCut++; return head.slice(0, c) + '。'; }
     return head;
   }
   function tokens(dflt) { var t = PEND; PEND = 0; return (t && on()) ? t : dflt; }

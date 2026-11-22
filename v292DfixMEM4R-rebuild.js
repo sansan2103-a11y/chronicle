@@ -1,6 +1,7 @@
 /* =====================================================================
  * v292DfixMEM4R-rebuild.js — 長期記憶を、その物語自身の本文から 0 ターン目より分けて作り直して追いつく（MEM4R r2・2026-11-22・LOCAL・出荷しない・既定 ON）
  * ---------------------------------------------------------------------
+ * ■r3（GPT #127-WV ③）: 印の無い古い記憶を先に消さない。新しい記憶（0 から作った最初の 1 回）を保存できたことを確かめてから置き換える。作り直しの途中・失敗・タブを閉じたときは古い記憶が残る（AI には渡さない）。
  * ■なぜ（r1）: MEM4 は印の無い・印の合わない記憶を信用しない（別の物語・別のアカウントの記憶が混ざった事故への備え）。今日より前に作られた記憶は再読み込みの後ずっと渡らない。
  * ■なぜ（r2・レビュー #1 の実測）: 長期記憶は端末ごとで同期されない（F_PAF_DENY）。別の端末・長期記憶が今日 ON になった端末では記憶が空から始まり、
  *   fix135 は直近 12 ターン（FIRST_CAP）からしか作らない＝序盤が永久に入らない。また追いつきの途中で再読み込みすると、残りを fix135 が 1 回の大きな送信で送る。
@@ -20,9 +21,9 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixMEM4R) return;
-  var VER = 'mem4r-20261122-r2', CH = 12, CHARS = 12000, MAX_RESET = 2, INTERVAL = 3;
+  var VER = 'mem4r-20261122-r3', CH = 12, CHARS = 12000, MAX_TRY = 4, INTERVAL = 3;   /* ★r3: MAX_TRY＝印の無い記憶の置き換えの試み（1 物語・1 ページ） */
   var RESET_WHY = { NO_STAMP: 1, BAD_STAMP: 1, ACCT_MISMATCH: 1, SID_MISMATCH: 1, DEV_MISMATCH: 1, LB_MISMATCH: 1, HASH_MISMATCH: 1, M4_SEQ_MISMATCH: 1, M4_SEQ_UNKNOWN: 1, SEQ_MISMATCH: 1, SEQ_UNKNOWN: 1, UNSEEN_WRITER: 1, CHANGED_NO_REBUILD: 1 };
-  var ST = { plans: 0, offWhy: {}, resets: 0, resetWhy: {}, calls: 0, mode: {}, sentTurns: 0, sentChars: 0, retries: 0, done: 0, skipTurn: 0 };
+  var ST = { plans: 0, offWhy: {}, resets: 0, replaced: 0, keptOld: 0, resetWhy: {}, calls: 0, mode: {}, sentTurns: 0, sentChars: 0, retries: 0, done: 0, skipTurn: 0 };
   var bySfx = {};   /* このページの間だけ: { resets, lastCallTurn, lastFrom } */
   function cnt(o, k) { k = String(k || 'X').slice(0, 32); o[k] = (o[k] || 0) + 1; }
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return undefined; } }
@@ -45,7 +46,9 @@
       var s = m4(); if (!s) { cnt(ST.offWhy, 'M4_NONE'); return null; }
       if (s.state === 'untrusted') {
         if (!RESET_WHY[String(s.why || '').replace(/^M4_/, '')]) { cnt(ST.offWhy, 'WHY_' + s.why); return null; }
-        if (b.resets >= MAX_RESET) { cnt(ST.offWhy, 'RESET_CAP'); return null; }
+        /* ★r3（GPT #127-WV ③）: reset は「消せ」ではなく「前の記憶を材料にせず 0 から作れ（保存できたら置き換える）」。古い記憶は、新しい記憶の保存の直前まで残る（渡さない原則は MEM4 のまま）。
+           試みの上限を超えたら null ではなく wait（土台が古い記憶を材料に作り直すのを止める） */
+        if (b.resets >= MAX_TRY) { cnt(ST.offWhy, 'RESET_CAP'); return { wait: true }; }
         b.resets++; ST.resets++; cnt(ST.resetWhy, s.why); out.reset = true; lb = -1;
       } else if (s.state === 'check') { cnt(ST.offWhy, 'M4_CHECK'); return null; }   /* 印の照合待ち: 土台どおり */
     }
@@ -63,7 +66,8 @@
     b.lastCallTurn = cur; b.lastFrom = from; ST.calls++; cnt(ST.mode, mode); ST.sentTurns += to - from + 1; ST.sentChars += chars;
     out.catchup = true; out.from = from; out.to = to; return out;
   }
+  function replaced(ok) { if (ok) ST.replaced++; else ST.keptOld++; }   /* ★r3: fix135 が置き換えの結果を知らせる（件数だけ） */
   function finished(sfx, to, cur) { /* r2: 進み具合は lastBuild で決まる（ここでは何もしない・r1 の呼び出し口を残す） */ }
-  var api = { VER: VER, why: why, plan: plan, finished: finished, CH: CH, CHARS: CHARS, stats: function () { return JSON.parse(JSON.stringify(ST)); } };
+  var api = { VER: VER, why: why, plan: plan, finished: finished, replaced: replaced, CH: CH, CHARS: CHARS, stats: function () { return JSON.parse(JSON.stringify(ST)); } };
   try { Object.defineProperty(root, '__v292DfixMEM4R', { value: Object.freeze(api), configurable: false, enumerable: false, writable: false }); } catch (e) { root.__v292DfixMEM4R = api; }
 })(typeof window !== 'undefined' ? window : globalThis);

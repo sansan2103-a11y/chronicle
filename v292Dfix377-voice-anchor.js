@@ -328,7 +328,8 @@
           body = '一人称「' + fp + '」' + (v.style ? ('・' + v.style) : '');
         }
         var line = name + '=' + body;
-        if (fp){
+        var noEx = false; try { noEx = localStorage.getItem('v292DfixVOICEEX1NoExOn') === '1'; } catch(eNx){}   /* ★VOICEEX1 C（比較用・既定 OFF）: 例文を付けない（一人称と登録の口調の設定だけ） */
+        if (fp && !noEx){
           var ex = exampleFor(String(p.name), fp);
           line += ' 例:「' + (ex || (fp + 'は…')) + '」';
         }

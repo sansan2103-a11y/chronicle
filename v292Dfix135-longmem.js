@@ -306,7 +306,7 @@
     }
     /* ★MEM4R r2（既定 ON・kill v292DfixMEM4ROff）: 印の無い記憶は材料にせず消し、空の記憶・大きく遅れた記憶は、この物語の本文から 0 ターン目（続き）より分けて作り直す。kill・条件外・1 回で届く時は r4 = null（土台どおり） */
     var r4 = null; if (_lmCanWrite()){ try { var R4 = window.__v292DfixMEM4R; if (R4 && typeof R4.plan === 'function') r4 = R4.plan({ curTurn: curTurn, lastBuild: lastBuild, turns: st.turns, sfx: startSfx }); } catch(eR4){ r4 = null; } }
-    if (r4 && r4.reset){ reset(); lastBuild = -1; try { var M2r = window.__v292DfixMEM2; if (M2r && typeof M2r.trust === 'function') M2r.trust(); } catch(eM2r){} }
+    var r4Fresh = !!(r4 && r4.reset && !r4.wait); if (r4 && r4.reset) lastBuild = -1;   /* ★MEM4R r3: 先に消さない。前の記憶を材料にせず 0 から作り、保存できたら置き換える（下） */
     if (r4 && r4.wait) return;
     if (curTurn < 2) return;                                  // need at least 3 turns
     if (!(r4 && r4.catchup) && lastBuild >= 0 && curTurn - lastBuild < REBUILD_INTERVAL) return;
@@ -314,6 +314,7 @@
     var prevSum = loadSummary();
     var prevWI  = loadWorldInfo();
     var prevEv  = loadEvents();
+    if (r4Fresh){ prevSum = ''; prevWI = []; prevEv = []; }   /* ★MEM4R r3: 印の無い古い記憶は材料にしない（今までどおり） */
     var startIdx = lastBuild + 1;
     // fix299: 初回(lastBuild<0)に大量ターンが溜まっていると全要約で巨大プロンプト→タイムアウト永久失敗。
     //   直近FIRST_CAPターンだけに絞り、以降は増分(REBUILD_INTERVAL)で進める。
@@ -337,11 +338,13 @@
       try { var X1 = window.__v292DfixEXP1; if (X1 && typeof X1.merge === 'function') result = X1.merge(result, prevWI, { from: startIdx, to: curTurn, text: newTurns.map(function(t){ return String((t && t.playerText) || '') + '\n' + String((t && t.narrative) || ''); }).join('\n'), parts: newTurns.map(function(t, i){ return { i: startIdx + i, pt: String((t && t.playerText) || ''), nr: String((t && t.narrative) || ''), says: ((t && Array.isArray(t._convSays)) ? t._convSays : []).slice(0, 40).map(function(c){ return { who: String((c && c.who) || ''), say: String((c && c.say) || '').slice(0, 80) }; }) }; }), hero: (st && st.cast && st.cast.hero && st.cast.hero.name) ? String(st.cast.hero.name) : '', gender: (function(){ var g = {}; try { if (st && st.cast){ if (st.cast.hero && st.cast.hero.name) g[st.cast.hero.name] = String(st.cast.hero.gender || ''); (st.cast.npcs || []).forEach(function(n){ if (n && n.name) g[n.name] = String(n.gender || ''); }); } } catch(eG){} return g; })(), older: st.turns.slice(Math.max(0, startIdx - 12), startIdx).map(function(t, k){ return { i: Math.max(0, startIdx - 12) + k, pt: String((t && t.playerText) || ''), nr: String((t && t.narrative) || ''), says: ((t && Array.isArray(t._convSays)) ? t._convSays : []).slice(0, 40).map(function(c){ return { who: String((c && c.who) || ''), say: String((c && c.say) || '').slice(0, 80) }; }) }; }) }) || result; } catch(eX1){}
       try { var MSx = _ms1(); if (MSx && MSx.on()) result = MSx.fix(result) || result; } catch(eMS){}   /* ★MEMSTATE1: EXP1 の検査を通った経験の技について、人物の desc と summary の古い「未経験」の節を落とす。★EXP1 r7: older＝この範囲より前の 12 ターン */   /* ★EXP1 r4: ターンごとの本文と会話のタグ（parts）・主人公の名前（hero）・登録の性（gender）も渡す（ターン番号のずれを本文で直す・本人の「できた」・★r5 代名詞と省略の主語・入力の行の taught）。OFF・kill は merge が何もしない */   /* ★EXP1: 型の検査と引き継ぎ（OFF は何もしない） */
       if (!_lmCanSave()){ try { console.log(TAG, 'rebuild OK but save blocked (stale epoch)'); } catch(_){} }
+      var r4Old = null; if (r4Fresh){ if (!_lmCanSave()){ try { window.__v292DfixMEM4R.replaced(false); } catch(eRk){} return; } try { r4Old = {}; [LSP_SUMMARY, LSP_WORLDINFO, LSP_EVENTS, LSP_LASTBUILD].forEach(function(k){ r4Old[k] = localStorage.getItem(k); }); reset(); var M2f = window.__v292DfixMEM2; if (M2f && typeof M2f.trust === 'function') M2f.trust(); } catch(eRo){} }   /* ★MEM4R r3: 新しい記憶ができた今、保存の直前に古い記憶を外す（MEM4 が空を見てから見届ける） */
       if (result.summary) saveSummary(result.summary);
       if (result.worldinfo && result.worldinfo.length) saveWorldInfo(result.worldinfo);
       if (result.events && result.events.length) saveEvents(result.events);
       saveLastBuild(curTurn);
       try { var m4h = window.__v292DfixMEM4Done; if (typeof m4h === 'function') m4h({ sfx: startSfx, loc: startLoc, lb: curTurn, ok: _lmCanSave(), r: result }); } catch(_){}   /* ★MEM4 r2/r3: 作り直しの完了を知らせるだけ（保存は上で済んでいる・受け手が無ければ何もしない）。r3: 保存しようとした結果 r を渡す（受け手が保存のとおりかを確かめる） */
+      if (r4Fresh && r4Old){ var r4ok = false; try { r4ok = localStorage.getItem(LSP_LASTBUILD) === String(curTurn); } catch(eRv){} if (!r4ok){ try { Object.keys(r4Old).forEach(function(k){ if (r4Old[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, r4Old[k]); }); } catch(eRr){} } try { window.__v292DfixMEM4R.replaced(r4ok); } catch(eRk2){} }   /* ★MEM4R r3: 保存できなければ古い記憶を戻す（両方無い状態を残さない） */
       try { if (r4 && r4.catchup && window.__v292DfixMEM4R) window.__v292DfixMEM4R.finished(startSfx, curTurn, curAll); } catch(eR4f){}   /* ★MEM4R */
       try { var MFk = _mf1(); if (MFk) MFk.ok({ sfx: startSfx }); } catch(eMk){}   /* ★MEMFIX1 */
       try { console.log(TAG, 'rebuilt at turn', curTurn, '— summary:', (result.summary||'').length, 'chars, worldinfo:', result.worldinfo.length, ', events:', result.events.length); } catch(_){}
