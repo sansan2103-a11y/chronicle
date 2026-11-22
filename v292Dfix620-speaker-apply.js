@@ -118,6 +118,8 @@
             stats.turnsSeen++;
             var s = getS();
             var n = applyTurn(turn, castOf(s), (s && s.cast && s.cast.hero && s.cast.hero.name) || '');
+            /* ★SPKCHK1（既定 OFF・鍵 v292DfixSPKCHK1On・kill v292DfixSPKCHK1Off）: 突き合わせ（fix611 の門）の後で 1 回だけ、本文に「話し手は X ではない」の強い根拠がある登録名の札を本文の呼び名へ（who だけ） */
+            try { var _sc1 = window.__v292DfixSPKCHK1; if (_sc1 && typeof _sc1.on === 'function' && _sc1.on()) n += _sc1.applyTurn(turn, castOf(s), (s && s.cast && s.cast.hero && s.cast.hero.name) || ''); } catch (_sc1e) {}
             if (n > 0) {
               /* 変わったときだけ保存と再描画（他の補正器と同じ流儀）。 */
               try { s && s.save && (typeof s.saveC==='function'?s.saveC('fix620.install'):s.save()); } catch (e) {}

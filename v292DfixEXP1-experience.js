@@ -240,6 +240,9 @@
     var subj = body.replace(/<[^>]*>/g, '\n').split(/(?<=[。！？!?\n])/).map(function (z) { return z.trim(); }).filter(function (z) { return z && hit.some(function (k) { return z.indexOf(k) >= 0; }) && !HEDGE_RE.test(z) && !RUMOR_RE.test(z); });
     if (!subj.some(function (z) { return ownClause(z, who) != null; })) return 'A2_NOT_SUBJECT';
     var k = x.k;
+    /* ★SPKCHK1 と同梱（2026-11-22・VX1_B3 の実測）: 句が「…だと話した／言った」＝台詞の申告の写しなら、first・learned にしない（A2 は「」の中も手がかりに数えるので、
+       「糊って触るのも今日が初めてなんですよ」という台詞が first「糊を触るのが今日初めてだと話した」として残った）。kill: v292DfixEXP1SaidOff='1' で r7 のまま */
+    if ((k === 'first' || k === 'learned') && lsg('v292DfixEXP1SaidOff') !== '1' && /(?:と|って)(?:話し|言っ|語っ|答え|打ち明け|明かし|告げ|口にし|漏らし|こぼし)た$/.test(s)) return 'A2_SAID';
     if ((k === 'first' || k === 'learned') && !A2_OK.test(text)) return 'A2_NO_SUCCESS';
     if (k === 'learned' && !live.some(function (z) { return A2_LEARN.test(z); })) { k = 'first'; ST.a2Down++; }
     if (k === 'failed' && !A2_FAIL.test(text.replace(/失敗(を|も)(恐れ|怖が|気にせ|いと)[^。、]*/g, ''))) return 'A2_NO_FAIL';   /* 「失敗を恐れず」は失敗ではない */

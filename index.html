@@ -355,7 +355,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261122-memfix1r2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261122-spkchk1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4562,7 +4562,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ★MEM4R r2（既定 ON・kill v292DfixMEM4ROff）: 長期記憶を、その物語の本文から 0 ターン目より分けて作り直す（印の無い記憶・空の記憶・大きく遅れた記憶） -->
 <script src="v292DfixMEM4R-rebuild.js?cb=20261122-mem4r3"></script>
 <!-- ★EXP1（既定 OFF・鍵 v292DfixEXP1aOn・kill v292DfixEXP1Off）: 長期記憶の人物の欄に「経験と習得」の 1 項目（今の worldinfo の中だけ） -->
-<script src="v292DfixEXP1-experience.js?cb=20261122-exp1r7"></script>
+<script src="v292DfixEXP1-experience.js?cb=20261122-exp1r7said"></script>
 <!-- ★MEMSTATE1（既定 ON・kill v292DfixMEMSTATE1Off）: 長期記憶の人物の状態を、いまの状態に書き換える -->
 <script src="v292DfixMEMSTATE1-longmem-state.js?cb=20261122-memstate1"></script>
 <!-- ★MEMFIX1（既定 ON・kill v292DfixMEMFIX1Off）: 長期記憶の作り直しが止まり続ける穴（途中で切れた応答・やり直しの上限・summary の長さ） -->
@@ -4837,7 +4837,9 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      復元=__v292Dfix620.undoPast() / OFF=v292Dfix620ApplyOff（fix619側のOFFでも止まる）
      ★fix611 の後に置くこと -->
 <script src="v292Dfix957-speaker-cataphora.js?cb=20261022-bundle41-a"></script><!-- v292Dfix957: 独立行の裸「」の後方照応（既定OFF・ON: localStorage v292Dfix957On=1） -->
-<script src="v292Dfix620-speaker-apply.js?cb=20261025-bundle55-sfl-a"></script>
+<script src="v292Dfix620-speaker-apply.js?cb=20261122-spkchk1"></script>
+<!-- ★SPKCHK1（既定 OFF・鍵 v292DfixSPKCHK1On・kill v292DfixSPKCHK1Off）: 名札を本文と照らす（登録名の札に本文の強い反証があるときだけ who を本文の呼び名へ） -->
+<script src="v292DfixSPKCHK1-speaker-check.js?cb=20261122-spkchk1"></script>
 <script src="v292DfixIDSPLIT2-selfname-merge.js?cb=20261108-bundle93-i"></script><!-- v292DfixIDSPLIT2 (★93-i: 管理者画面の機能スイッチ idsplit2。行なし = OFF): 名乗りで記述的な呼び名を登録NPCへ結び付ける（証拠がそろう時だけ・それ以外は観測のみ）。kill: localStorage v292DfixIDSPLIT2Off=1 -->
 <!-- fix616: 話者の由来をターンへ記録（GPT実装順②）。並行配列 turn._convSayMeta に書き、
      _convSays / who / say / DOM は触らない。**新ターンだけ**・自分から保存しない。
