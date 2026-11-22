@@ -28,11 +28,11 @@
 (function () {
   'use strict';
   var root = window;
-  try { if (root.localStorage.getItem('v292DfixVAULTGATE2Off') === '1') return; } catch (e) {}
+  var KILLED = false; try { KILLED = root.localStorage.getItem('v292DfixVAULTGATE2Off') === '1'; } catch (e) {}   /* ★VAULTSEND1: the kill no longer returns to fix889 only (see KILL below) */
   if (root.__v292DfixVAULTGATE2) return;
-  var VER = 'vaultgate2-20261122-r2', TTL = 15000, TIMEOUT = 8000, BACKOFF = [5000, 10000, 20000, 30000], AHEAD = 10000;   /* ★r2b: 答えが古くなる前（10 秒）に読み直しを始める＝読み直しの往復の間も前の確定の答えを使う（確定の窓は今の 15 秒のまま） */   /* ★r2: 読み直しの失敗が続いたら間隔を空ける（上限 30 秒） */
+  var VER = 'vaultgate2-20261122-r3-vaultsend1', TTL = 15000, TIMEOUT = 8000, BACKOFF = [5000, 10000, 20000, 30000], AHEAD = 10000;   /* ★r2b: 答えが古くなる前（10 秒）に読み直しを始める＝読み直しの往復の間も前の確定の答えを使う（確定の窓は今の 15 秒のまま） */   /* ★r2: 読み直しの失敗が続いたら間隔を空ける（上限 30 秒） */
   var V2 = { st: null, at: 0, acct: null, inflight: null, lockedAt: 0, known: {}, n: 0, fails: 0, nextAt: 0 };
-  var stats = { asks: 0, probes: 0, probeFail: 0, blocked: 0, signal: 0, backoff: 0, why: {} };
+  var stats = { asks: 0, probes: 0, probeFail: 0, blocked: 0, signal: 0, change: 0, backoff: 0, auth: 0, why: {} };
   function cnt(k) { k = String(k || 'X').slice(0, 32); stats.why[k] = (stats.why[k] || 0) + 1; }
   function acct() { try { var F = root.__v292Dfix893; var m = (F && typeof F.serverMe === 'function') ? F.serverMe() : null; return (m && m.accountId) ? String(m.accountId) : null; } catch (e) { return null; } }
   function cg() {
@@ -107,9 +107,44 @@
   /* HOME の鍵が動いた合図（LE4 と同じ: BroadcastChannel 'v292DfixLE4' / localStorage 'v292DfixLE4sig'）→ 次に問われたら読み直す（それまでは分からない＝止める） */
   try { if (typeof BroadcastChannel === 'function') { var bc = new BroadcastChannel('v292DfixLE4'); bc.onmessage = function () { drop('signal'); }; } } catch (e) {}
   try { root.addEventListener('storage', function (ev) { if (ev && ev.key === 'v292DfixLE4sig') drop('signal'); }); } catch (e) {}
+  /* ★VAULTSEND1 authorize(id) → Promise 'visible' | 'open' (hidden, unlocked, may be opened) | 'hidden' | 'unknown'. ALWAYS a fresh answer read
+     after the call (vault2status; when locked also vault2visible for this id) — the kept answer of state()/hidden() is never used. For an account
+     without a Vault (CopyGate 'novault') no request is added (as before). fix889 is asked first (as hidden()). */
+  function post(body) { var ac = null; try { ac = new AbortController(); setTimeout(function () { try { ac.abort(); } catch (e) {} }, TIMEOUT); } catch (e) {}
+    return root.fetch('/api/save', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'x-chronicle-csrf': '1' }, body: JSON.stringify(body), signal: ac ? ac.signal : undefined })
+      .then(function (r) { return r.ok ? r.json() : null; }, function () { return null; }).then(function (j) { return j; }, function () { return null; }); }
+  function authorize(id) {
+    id = String(id || ''); stats.auth = (stats.auth || 0) + 1;
+    try { var a = f889(id); if (a.h) return Promise.resolve(a.why ? 'hidden' : 'open'); } catch (e) { return Promise.resolve('unknown'); }
+    var c = cg(); if (c.e === 'novault') return Promise.resolve('visible');
+    if (c.e !== 'vault') return Promise.resolve('unknown');
+    if (c.hidden && c.hidden.indexOf(id) >= 0) return Promise.resolve('hidden');
+    var a0 = acct(), t0 = Date.now(); if (!a0) return Promise.resolve('unknown');
+    var ok = function () { return acct() === a0 && V2.lockedAt <= t0; };
+    return post({ op: 'vault2status' }).then(function (j) {
+      if (!j || j.ok !== true || !ok()) return 'unknown';
+      if (j.hasVault !== true) return 'unknown';   /* CopyGate says vault */
+      if (j.unlocked === true) { if (!Array.isArray(j.hiddenIds) || j.hiddenComplete !== true) return 'unknown'; var ids = j.hiddenIds.map(String); ids.forEach(function (x) { V2.known[x] = 1; }); return ids.indexOf(id) >= 0 ? 'open' : 'visible'; }
+      if (V2.known[id]) return 'hidden';
+      return post({ op: 'vault2visible', ids: [id] }).then(function (k) { if (!k || k.ok !== true || !Array.isArray(k.visible) || !ok()) return 'unknown'; return k.visible.map(String).indexOf(id) >= 0 ? 'visible' : 'hidden'; });
+    }).then(function (x) { stats.why['AUTH_' + x] = (stats.why['AUTH_' + x] || 0) + 1; return x; }, function () { return 'unknown'; });
+  }
+  /* ★VAULTSEND1: a hide / unhide on HOME of this browser (any tab) → drop the kept answer at once (the next question reads again) */
+  try { if (typeof BroadcastChannel === 'function') { var bcv = new BroadcastChannel('v292DvaultChange'); bcv.onmessage = function () { drop('change'); }; } } catch (e) {}
+  try { root.addEventListener('storage', function (ev) { if (ev && ev.key === 'v292DvaultChangeSig') drop('change'); }); } catch (e) {}
   /* ★r2b: 'hidden' | 'visible' | 'unknown'（未確定＝読み直し待ち・失敗・合図の後など）。呼ぶ側は unknown を最終の見送りにせず、上限つきで待てる */
   function state(id) { try { var a = f889(id); if (a.h) return 'hidden'; var b = v2(id); return b.h === false ? 'visible' : (b.h === true ? 'hidden' : 'unknown'); } catch (e) { return 'unknown'; } }
+  /* ★VAULTSEND1 KILL (localStorage v292DfixVAULTGATE2Off='1'): never back to fix889 only. An account without a Vault (CopyGate 'novault') = as before
+     (fix889 only); an account with a Vault or an unknown state = every automatic path stops (hidden / openWhy 'VAULTGATE2_OFF' / state 'hidden' /
+     authorize 'hidden'). Undo = remove the key. */
+  if (KILLED) {
+    var kNov = function () { return cg().e === 'novault'; };
+    hidden = function (id) { try { return kNov() ? f889(id).h : true; } catch (e) { return true; } };
+    openWhy = function (id) { try { if (!kNov()) return 'VAULTGATE2_OFF'; var a = f889(id); return a.h ? (a.why || '') : 'NOT_HIDDEN'; } catch (e) { return 'THREW'; } };
+    state = function (id) { try { return kNov() ? (f889(id).h ? 'hidden' : 'visible') : 'hidden'; } catch (e) { return 'hidden'; } };
+    authorize = function (id) { try { if (!kNov()) return Promise.resolve('hidden'); var a = f889(id); return Promise.resolve(a.h ? (a.why ? 'hidden' : 'open') : 'visible'); } catch (e) { return Promise.resolve('unknown'); } };
+  }
   root.__v292DfixVaultHidden = hidden;
-  root.__v292DfixVAULTGATE2 = { ver: VER, hidden: hidden, openWhy: openWhy, state: state,
+  root.__v292DfixVAULTGATE2 = { ver: VER, killed: KILLED, hidden: hidden, openWhy: openWhy, state: state, authorize: function (id) { return authorize(id); },
     status: function () { return { ver: VER, cg: cg().e, v2: V2.st ? { hasVault: V2.st.hasVault, unlocked: V2.st.unlocked, n: V2.st.ids ? V2.st.ids.length : null, complete: V2.st.complete, age: Date.now() - V2.at } : null, stats: JSON.parse(JSON.stringify(stats)) }; } };
 })();

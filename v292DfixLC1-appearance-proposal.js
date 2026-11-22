@@ -541,9 +541,9 @@
     var pr = buildPrompt({ name: input.name, gender: (ctx.gender === '女性' || ctx.gender === '男性') ? ctx.gender : '', context: input.context, base: base, desc: input.desc, missing: missing, facts: facts, fill: fill3 });   /* ★ICONFIX2 b ② ★ICONFIX3 ③ */
     var done = false; calls++;
     try {
-      F.request({ sys: pr.sys, user: pr.user }, function (err, txt) {
+      F.request({ sys: pr.sys, user: pr.user, purpose: 'img' }, function (err, txt) {   /* ★VAULTSEND1 */
         if (done) return; done = true;                       /* 自動の再試行 0 */
-        if (err) return fallback('AI_FAILED', { detail: (err && err.message) || null });
+        if (err) return fallback((err && err.message === 'VAULT_IMG') ? 'VAULT_IMG' : 'AI_FAILED', { detail: (err && err.message) || null });   /* ★VAULTSEND1 r2 */
         var j = parseJson(F, txt);
         if (!j) return fallback('BAD_JSON');
         var c = compose(base, { add: j.add, gender: j.gender }, ctx);

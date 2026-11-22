@@ -41,7 +41,11 @@
   var MS_MAX = 20;   /* one run handles at most this many stories (GPT #125-FB: 20; 10 stories took about 9 s with remote-like latency) */
   var MS = { on: false, ids: [], pending: null, run: null, note: '', noteKind: '', lockNote: '' }, msBox = null;
 
-  function api(body) {
+  /* ★VAULTSEND1: a hide / unhide is announced to the story pages of this browser (VAULTGATE2 drops its kept answer) before AND after the op */
+  function vchg() { try { if (typeof BroadcastChannel === 'function') { var c = new BroadcastChannel('v292DvaultChange'); c.postMessage({ t: Date.now() }); c.close(); } } catch (e) {} try { if (LS) LS.setItem('v292DvaultChangeSig', String(Date.now())); } catch (e) {} }
+  function api(body) { var chg = !!(body && (body.op === 'vault2hide' || body.op === 'vault2unhide')); if (chg) vchg();
+    return api0(body).then(function (r) { if (chg) vchg(); return r; }); }
+  function api0(body) {
     return fetch('/api/save', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
       headers: { 'Content-Type': 'application/json', 'x-chronicle-csrf': '1' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j || {} }; }, function () { return { s: r.status, j: {} }; }); },

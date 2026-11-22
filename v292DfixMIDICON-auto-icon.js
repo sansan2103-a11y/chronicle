@@ -109,7 +109,7 @@
   /* ★iconx1 B: the nh1 module (its own key nh1 + kill v292DfixNH1Off) */
   function NH() { try { var N = root.__v292DfixNH1; return (N && typeof N.on === 'function' && N.on()) ? N : null; } catch (e) { return null; } }
   function vaultHidden(id) {   /* fail-closed: no fix889 → treat as hidden (do nothing). Worker is strict as well. */
-    try { var G = root.__v292DfixVAULTGATE2; if (G && typeof G.hidden === 'function') return G.hidden(id) !== false; } catch (e) { return true; }   /* ★VAULTGATE2: vault2 と fix889 の両方（1 か所） */
+    try { var G = root.__v292DfixVAULTGATE2; if (G && typeof G.hidden === 'function') { var hv = G.hidden(id); if (hv === false) VGX[id] = 'visible'; return hv !== false; } }   /* r2: remember 'visible' (vgAuth / vgSticky) */ catch (e) { return true; }   /* ★VAULTGATE2: vault2 と fix889 の両方（1 か所） */
     try { if (root.localStorage.getItem('v292DfixVAULTGATE2Off') !== '1') return true; } catch (e) { return true; }   /* ★VAULTGATE2 r2: kill していないのに部品が無い = 隠した物語かもしれない（止める） */
     try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; }
   }
@@ -125,7 +125,7 @@
     if (!loggedIn()) return 'not-logged-in';
     if (!doc2()) return 'not-schema2';
     var id = sid(); if (!id) return 'no-story';
-    if (vaultHidden(id) && mxvWhy(id)) return 'vault';   /* ★MXVAULT1: 隠した物語は VICON1 の鍵 ON・解錠中・扉が開いているときだけ先へ（Worker の名乗りは mx_list の後で確かめる） */
+    if (vaultHidden(id) && !vgSticky(id) && mxvWhy(id)) return 'vault';   /* ★MXVAULT1: 隠した物語は VICON1 の鍵 ON・解錠中・扉が開いているときだけ先へ（Worker の名乗りは mx_list の後で確かめる） */
     var f = F697(); if (!f || typeof f.assetV2Mx !== 'function') return 'no-port';
     return '';
   }
@@ -725,8 +725,19 @@
     });
     return 'started';
   }
+  /* ★VAULTSEND1: right before a send, a FRESH answer (VAULTGATE2.authorize) must match what this module decided (visible, or hidden and open).
+     The kept answer (state / hidden) is for display and for deciding whether to start; never alone for the send. */
+  /* r2 (review): the expected answer is the one this module started with — VGX[id] = 'visible' once VAULTGATE2 said 'not hidden' (it never turns back
+     to visible by itself). While the kept answer is only 'unknown' (a HOME hide / unhide / lock signal, a re-read), a story that was visible goes on (vgSticky);
+     every send still needs the FRESH authorize() === 'visible' (a story hidden meanwhile is stopped there). */
+  var VGX = {};
+  function vgSticky(id) { try { var G = root.__v292DfixVAULTGATE2; return VGX[id] === 'visible' && !!G && typeof G.state === 'function' && G.state(id) === 'unknown'; } catch (e) { return false; } }
+  function vgAuth(id, go, stop) { var exp; try { exp = VGX[id] === 'visible' ? 'visible' : (vaultHidden(id) ? 'open' : 'visible'); } catch (e) { return stop('THREW'); }
+    var G = root.__v292DfixVAULTGATE2; if (!G || typeof G.authorize !== 'function') return stop('NO_VAULT_GATE');
+    Promise.resolve().then(function () { return G.authorize(id); }).then(function (a) { if (a === exp) go(); else stop(String(a || 'unknown').toUpperCase().slice(0, 16)); }, function () { stop('THREW'); }); }
   function ensureSend(id, n, p) {   /* ★W-MXREG: the request 2 of the turn, split out so the registered path uses the same answer handling */
-      if (vaultHidden(id)) {   /* ★MXVAULT1: checked again right before the write; the appearance keeps only the VICON1-clean look phrases (the Worker keeps only those found in the story text) */
+      if (!p.__vgOk) return vgAuth(id, function () { ensureSend(id, n, Object.assign({}, p, { __vgOk: 1 })); }, function (w) { finish('VAULT_GATE', 'AUTH_' + w); });   /* ★VAULTSEND1 */
+      if (vaultHidden(id) && !vgSticky(id)) {   /* ★MXVAULT1: checked again right before the write; the appearance keeps only the VICON1-clean look phrases (the Worker keeps only those found in the story text) */
         var vw = mxvWhy(id) || (X.mxv === id ? '' : 'WORKER_OFF'); if (vw) return finish('VAULT_GATE', vw);
         if (mxvSecret(p.key)) return finish('VAULT_HANDLE');   /* r2: the handle is a name (often katakana), so only the secret marks are checked; it goes to the Worker only, never to a provider */
         var va = mxvClean(p.appearance); if (!va) return finish('VAULT_FEW_VISUAL');

@@ -11387,6 +11387,7 @@
     }
     try {
       var xhr = new XMLHttpRequest();
+      xhr.__chrPurpose = 'img';   /* ★VAULTSEND1: the appearance judge for a picture — SendGate asks VAULTGATE2 first */
       xhr.open('POST', 'https://openrouter.ai/api/v1/chat/completions', true);
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.setRequestHeader('Authorization', 'Bearer ' + cfg.orKey);

@@ -488,7 +488,8 @@
       '<label>性別<select data-lc1-g="' + esc(r.cid) + '"' + (p.genderFixed ? '' : '') + '><option value=""' + (!r.pg ? ' selected' : '') + '>未設定</option><option value="女性"' + (r.pg === '女性' ? ' selected' : '') + '>女性</option><option value="男性"' + (r.pg === '男性' ? ' selected' : '') + '>男性</option></select></label>' +
       '<textarea rows="3" maxlength="400" data-lc1-a="' + esc(r.cid) + '" placeholder="例: 黒髪の短髪、細身、灰色の着物">' + esc(r.pa == null ? p.appearance : r.pa) + '</textarea>';
     var sub = [];
-    if (!p.ok) sub.push('AIの案は作れませんでした。' + (p.original ? 'あなたの設定にある見た目の語だけを入れてあります。' : '') + '外見を直接入力してもかまいません。');
+    if (!p.ok && p.code === 'VAULT_IMG') sub.push('Vault の物語では外見の案は使えません。外見を直接入力してください。');   /* ★VAULTSEND1 r2 */
+    else if (!p.ok) sub.push('AIの案は作れませんでした。' + (p.original ? 'あなたの設定にある見た目の語だけを入れてあります。' : '') + '外見を直接入力してもかまいません。');
     else if (p.aiCalled && !(p.added && p.added.length) && lsg('v292DfixICONFIX3Off') !== '1') sub.push('AIは足せる語を見つけられませんでした（下書きは変わっていません）。欄に髪・服などを書き足せます。');   /* ★ICONFIX3: 何も足されていないのに「足しました」と出していた */
     else if (p.aiCalled) sub.push('あなたが書いた語はそのままで、足りない所だけをAIが足しました。');
     else if (!p.editing) sub.push('設定の説明にある見た目の語をそのまま入れました。');

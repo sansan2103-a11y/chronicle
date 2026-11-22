@@ -185,7 +185,7 @@ try {
   const lm7 = (ls, hidden) => { const L = new Map(Object.entries(Object.assign({ chr6: JSON.stringify({ cfg: { orKey: 'k' } }), v292DfixLORE1On: '1' }, ls))); const sent = [];
     const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, XMLHttpRequest: class { open() {} setRequestHeader() {} send(b) { sent.push(b); } }, addEventListener() {}, document: { hidden: false, addEventListener() {}, readyState: 'complete' },
       localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
-    sb.window = sb; vm.createContext(sb); __mtOwner(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r7s' }) }; sb.__v292Dfix889 = { isHidden: () => !!hidden }; sb.__f379reg = [];
+    sb.window = sb; vm.createContext(sb); __mtOwner(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r7s' }) }; sb.__v292Dfix889 = { isHidden: () => !!hidden }; sb.__v292DfixVAULTGATE2 = { hidden: (id) => !!sb.__v292Dfix889.isHidden(id) };   /* ★ACCT1 r2: MEM3 の Vault 判定は VAULTGATE2 の hidden() を読む */ sb.__f379reg = [];
     sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: 'n' + i })), scene: { loc: 'x', lore: '離島の診療所。鍵はよろず屋の千代が預かる。\n【GM専用】千代は昔の院長の娘で、地下室の鍵も持っている。\nただしこの世界の底には、死者は潮とともに戻る——という隠された理がある。' }, cast: { hero: { name: '朔也', desc: '新任の医師' }, npcs: [{ name: '千代', desc: 'よろず屋の店主。\nGM: 実は院長殺しの犯人。' }, { name: '茂', desc: '漁師。実は千代の兄。無口' }] } };
     vm.runInContext(read('v292DfixLORE1-world-lore.js'), sb); vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); return { p: JSON.parse(sent[0]).messages[0].content, sb }; };
   const on = lm7({ v292DfixMEM3On: '1' }), hid = lm7({ v292DfixMEM3On: '1' }, true), off = lm7({});
@@ -205,7 +205,7 @@ try {
       const self = this; Promise.resolve().then(() => { self.status = 200; self.responseText = JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) } }] }); self.onload(); }); } }
     const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, Promise, XMLHttpRequest: XHR, addEventListener() {}, document: { hidden: false, addEventListener() {}, readyState: 'complete' },
       localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
-    sb.window = sb; vm.createContext(sb); __mtOwner(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r8s' }) }; sb.__v292Dfix889 = { isHidden: () => false }; sb.__f379reg = [];
+    sb.window = sb; vm.createContext(sb); __mtOwner(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r8s' }) }; sb.__v292Dfix889 = { isHidden: () => false }; sb.__v292DfixVAULTGATE2 = { hidden: () => false };   /* ★ACCT1 r2 */ sb.__f379reg = [];
     sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: '朔也は診療所に着いた。千代が診療所の鍵を渡した。' })), scene: { loc: 'x', lore: '離島の診療所。地下室の鍵は井戸の底に沈んでいる。' + SECRETS.join('\n') }, cast: { hero: { name: '朔也', desc: '新任の医師' }, npcs: [{ name: '千代', desc: 'よろず屋の店主。' + NSEC.join('') }] } };
     vm.runInContext(read('v292DfixLORE1-world-lore.js'), sb); vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); for (let i = 0; i < 6; i++) await new Promise(r => setTimeout(r, 2));
     return { prompt, L, saved: [L.get('chr6_v292Dfix135_sum'), L.get('chr6_v292Dfix136_wi'), L.get('chr6_v292Dfix137_ev')].join('\n'), st: sb.__v292DfixMEM3.stats() }; };
@@ -224,7 +224,7 @@ try {
     class XHR { open() {} setRequestHeader() {} send(b) { prompt = JSON.parse(b).messages[0].content; const self = this; Promise.resolve().then(() => { self.status = 200; self.responseText = JSON.stringify({ choices: [{ message: { content: JSON.stringify(out) } }] }); self.onload(); }); } }
     const sb = { console: { log() {}, warn() {} }, setTimeout: () => 0, setInterval: () => 0, JSON, Math, Date, Promise, XMLHttpRequest: XHR, addEventListener() {}, document: { hidden: false, addEventListener() {}, readyState: 'complete' },
       localStorage: { getItem: k => L.has(k) ? L.get(k) : null, setItem: (k, v) => L.set(k, String(v)), removeItem: k => L.delete(k) } };
-    sb.window = sb; vm.createContext(sb); __mtOwner(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r10s' }) }; sb.__v292Dfix889 = { isHidden: () => false }; sb.__f379reg = [];
+    sb.window = sb; vm.createContext(sb); __mtOwner(sb); sb.__CHR_MODEL_REGISTRY = { primary: () => 'm/x' }; sb.__v292Dfix697 = { status: () => ({ storyId: 'r10s' }) }; sb.__v292Dfix889 = { isHidden: () => false }; sb.__v292DfixVAULTGATE2 = { hidden: () => false };   /* ★ACCT1 r2 */ sb.__f379reg = [];
     sb.S = { turns: [0, 1, 2].map(i => ({ playerText: 'p', narrative: narr })), scene: { loc: 'x', lore }, cast: { hero: { name: '朔也' }, npcs: [] } };
     vm.runInContext(read('v292DfixLORE1-world-lore.js'), sb); vm.runInContext(read('v292Dfix135-longmem.js'), sb); sb.__longmem.rebuild(); for (let i = 0; i < 6; i++) await new Promise(r => setTimeout(r, 2));
     return { prompt, L, st: sb.__v292DfixMEM3.stats() }; };

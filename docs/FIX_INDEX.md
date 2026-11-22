@@ -708,6 +708,12 @@
 #### LIM1 — アカウントごとの上限の設定（11-13・GitHub `2361a19`・Worker `v46.45-lim1-fc`・fix893・ADMF1・STARTICON）
 - 管理者画面の「上限の設定」の値（Worker `/auth/me` の accountLimits）を端末が読む（fix893 の写し・in-memory・書き込み 0）。ADMF1 の `limit(key, dflt)`。STARTICON の 1 日の物語数（`starticon_day_stories`）と 1 物語の枚数がアカウントの値になる（-1＝無制限）。行なし・旧 Worker・別アカウント・kill `v292DfixLIM1Off='1'` のときは今までの定数（5 物語・4 枚）。
 
+#### ACCT1 — Owner のアカウントの試し ON（長期記憶の試し 4 つ・SCENE1 b）（11-22・LOCAL・`v292DfixACCT1-owner-account-trial.js`）
+- 対象：項目 mem（MEM2 腕 A・MEM3b・MEM3・MEM4）と項目 scene1b（SCENE1 の b だけ。a・c は端末の鍵のまま）。互いに連動しない。各部品の on() が鍵の OR として聞く（覚えない・読むだけ・書き込み 0）。
+- Owner の判定は OWNERON1 の owner()（fix893 serverMe の entitlement owner・active・flagsSnap と同じアカウント・ログインの印・匿名でない）。未取得・失敗・別アカウント・OWNERON1 が無い → OFF。MEMTRIAL（Owner 以外を止める）はそのまま。
+- 優先順：各部品の Off 鍵 ＞ `v292DfixACCT1Off` ＞ 項目の Off（`v292DfixACCT1MemOff`・`v292DfixACCT1Scene1bOff`）＞（scene1b は出荷まで `v292DfixACCT1Scene1bOn` の端末だけ）＞ Owner 判定。`v292DfixOWNERON1Off` でも OFF。診断 `window.__v292DfixACCT1.status()`。
+- r2：fix135 MEM3 の設定の要点（lore の公開部分）を渡すかの Vault 判定を、凍結した fix889 だけから VAULTGATE2 の hidden()（v2 と v1 の両方・未取得／失敗は隠した側）へ。VAULTGATE2 が無い・kill → 渡さない。ACCT1 と関係なく効く。
+
 #### OWNERON1 — Owner の端末だけ指定の機能を既定 ON（11-15・GitHub `2b3271e`・`v292DfixOWNERON1-owner-defaults.js`）
 - 対象：PLACE1・SPKW1。各機能の on() が呼ぶたびに聞く（覚えない・読むだけ・書き込み 0）。Owner の判定は fix893 の serverMe() が entitlement 'owner' かつ active・accountId が 32 桁・flagsSnap と同じアカウント・ログインの印と同じ・匿名経路でない、が全部そろうときだけ（欠けたら OFF）。
 - 優先順：各機能の Off 鍵 ＞ 全体 kill `v292DfixOWNERON1Off='1'` ＞ 各機能の On 鍵 ＞ Owner 判定。Owner 以外・未ログインは部品が無いのと同じ。診断 `window.__v292DfixOWNERON1.status()`。
@@ -1109,8 +1115,8 @@
 | 61 | fix659 | `v292Dfix659-fork-choice.js` | i61 | `d6e39622` | v292Dfix680 | 保存・同期 | `v292Dfix659Off` |
 | 62 | features | `features.js` | i62 | `6d812ce8` | 20261111-xss1 | 本体（ゲーム中核） | `v292Dfix190Off` `v292Dfix205gOff` `v292Dfix748SaveRefuseOff` `v292Dfix834Off` `v292DfixSAVEUIOff` `v292DfixCLICHE2Off` `v292DfixDEDUPQ1Off` `v292DfixSTATE2Off` |
 | 63 | fixP0 | `v292DfixP0-scenario-blocker.js` | i63 | `7c6d79f0` | v292Dfix680 | シナリオ・ホーム |  |
-| 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `1b5c595f` | 20261121-memtally | 記憶 | `v292Dfix894Off` `v292DfixMEM3On` `v292DfixMEM3Off` |
-| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `e8b86a1a` | 20261121-memtally | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` `v292DfixMEM3bOn` `v292DfixMEM3bOff` `v292DfixMEM4On` `v292DfixMEM4Off` `v292DfixMEMTallyOff` |
+| 64 | fix135 | `v292Dfix135-longmem.js` | i64 | `7f77b62e` | 20261122-acct1r2 | 記憶 | `v292Dfix894Off` `v292DfixMEM3On` `v292DfixMEM3Off` |
+| 64a | MEM2 | `v292DfixMEM2-longmem-wire.js` | fix135 の直後 | `e32272d9` | 20261122-acct1r2 | 記憶 | `v292DfixMEM2aOn` `v292DfixMEM2aOff` `v292DfixMEM2cOn` `v292DfixMEM2cOff` `v292DfixMEM3bOn` `v292DfixMEM3bOff` `v292DfixMEM4On` `v292DfixMEM4Off` `v292DfixMEMTallyOff` |
 | 65 | fix138 | `v292Dfix138-continue.js` | i65 | `db8f5e85` | 20260929-ac18 | 記憶 | `v292Drp1Off` |
 | 66 | fix145 | `v292Dfix145-charlist.js` | i66 | `e7b06fd1` | 20261101-bundle79-npres73d4b-on78c | NPC・キャラ状態 | `v292Dfix410Off` `v292Dfix487ListOff` `v292Dfix529Off` `v292Dfix773Off` |
 | 67 | fix777 | `v292Dfix777-icon-lightbox.js` | i67 | `19adb4d6` | 20261021-laneE-a | アイコン・画像 | `v292Dfix777Off` `v292DfixLE2Off` |
@@ -1480,7 +1486,8 @@
 | 416 | fixGEN1 | `v292DfixGEN1-gen-budget.js` | index：fix228 の直後（GEN1） | `9769f4f2` | 20261116-gen1r4 | 保存・同期 | `v292DfixGEN1On`（既定 OFF） `v292DfixGEN1Off` |
 | 419 | fixRESTYLE1 | `v292DfixRESTYLE1-preset-redo.js` | index：fg3 の直後（RESTYLE1・既定 ON（restyle1on）） | `18a8eea3` | 20261122-vaultgate2r2 | アイコン・画像 | `v292DfixRESTYLE1Off` |
 | 420 | fixVAULTGATE2 | `v292DfixVAULTGATE2-vault-open.js` | index：fix889 の直後（VAULTGATE2・既定 ON・r2: 部品が無いと呼ぶ側が止める／読み直しの後退） | `3c1b3a56` | 20261122-vaultgate2r2 | Vault・非表示 | `v292DfixVAULTGATE2Off` |
-| 421 | fixSCENE1 | `v292DfixSCENE1-cast-presence-input.js` | index：fix192 の直後（SCENE1・GPT #127-WN 優先2・既定 OFF。11-11 の laneSCENE1〔NOW1 等〕とは別） | `46979738` | 20261122-scene1r5 | 生成の中心・プロンプト | `v292DfixSCENE1On`（既定 OFF） `v292DfixSCENE1Off` `v292DfixSCENE1aOff` `v292DfixSCENE1bOff` `v292DfixSCENE1cOff` |
+| 421 | fixSCENE1 | `v292DfixSCENE1-cast-presence-input.js` | index：fix192 の直後（SCENE1・GPT #127-WN 優先2・既定 OFF。11-11 の laneSCENE1〔NOW1 等〕とは別） | `2aa81dda` | 20261122-scene1r6 | 生成の中心・プロンプト | `v292DfixSCENE1On`（既定 OFF） `v292DfixSCENE1Off` `v292DfixSCENE1aOff` `v292DfixSCENE1bOff` `v292DfixSCENE1cOff` |
+| 422 | fixACCT1 | `v292DfixACCT1-owner-account-trial.js` | index：OWNERON1 の直後（ACCT1・GPT #127-WN 優先3・#127-WP） | `a08a13b5` | 20261122-acct1r2 | 認証・アカウント | `v292DfixACCT1Off` `v292DfixACCT1MemOff` `v292DfixACCT1Scene1bOff` `v292DfixACCT1Scene1bOn`（出荷までの鍵） |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
 
@@ -1984,6 +1991,7 @@
 - `v292DfixLSF1Off` — fix697（LSF1）
 - `v292DfixMXREGFIX1Off` — fixMIDICON（MXREGFIX1）
 - `v292DfixNUM1On` / `v292DfixNUM1Off` — fixNUM1（既定 OFF）
+- `v292DfixACCT1Off` / `v292DfixACCT1MemOff` / `v292DfixACCT1Scene1bOff` / `v292DfixACCT1Scene1bOn` — fixACCT1、fixMEM2、fix135、fixSCENE1（Owner のアカウントの試し ON。Off が常に勝つ。Scene1bOn は出荷までの鍵）
 - `v292DfixOWNERON1Off` — fixOWNERON1（Owner の既定 ON を全部やめる）
 - `v292DfixP0BOff` — fix569, fix562（P0-B。既定 ON）
 - `v292DfixPH1Off` / `v292DfixSREP1Off` — fix77, fix192, fix405, features（STATEQ1）

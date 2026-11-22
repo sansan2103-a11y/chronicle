@@ -50,7 +50,7 @@
   function presetKey() { var S = state(); if (!S || !S.cfg) return null; if (!Object.prototype.hasOwnProperty.call(S.cfg, 'artPreset') || S.cfg.artPreset === undefined) return 'dark'; var v = S.cfg.artPreset; return KEYS.indexOf(v) >= 0 ? v : null; }
   function A() { return root.__chronicleAssetV2 || null; }
   function F697() { return root.__v292Dfix697 || null; }
-  function vaultHidden(id) { try { var G = root.__v292DfixVAULTGATE2; if (G && typeof G.hidden === 'function') return G.hidden(id) !== false; } catch (e) { return true; } try { if (root.localStorage.getItem('v292DfixVAULTGATE2Off') !== '1') return true; } catch (e) { return true; }   /* ★VAULTGATE2 r2: kill していないのに部品が無い = 隠した物語かもしれない（止める） */ try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* ★VAULTGATE2: vault2 と fix889 の両方（1 か所） */   /* fail-closed */
+  function vaultHidden(id) { try { var G = root.__v292DfixVAULTGATE2; if (G && typeof G.hidden === 'function') { var hv = G.hidden(id); if (hv === false) VGX[id] = 'visible'; return hv !== false; } }   /* r2: remember 'visible' (vgAuth / vgSticky) */ catch (e) { return true; } try { if (root.localStorage.getItem('v292DfixVAULTGATE2Off') !== '1') return true; } catch (e) { return true; }   /* ★VAULTGATE2 r2: kill していないのに部品が無い = 隠した物語かもしれない（止める） */ try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* ★VAULTGATE2: vault2 と fix889 の両方（1 か所） */   /* fail-closed */
   var VG_WAIT_MS = 60000; function vgUnknown(id) { try { var G = root.__v292DfixVAULTGATE2; return !!(G && typeof G.state === 'function' && G.state(id) === 'unknown'); } catch (e) { return false; } }   /* ★VAULTGATE2 r2b */
   function vaultWhy(id) { if (!vaultHidden(id)) return ''; try { var f = root.__v292DfixVaultOpenWhy; if (typeof f !== 'function') return 'NO_VAULT_GATE'; return f(id) || ''; } catch (e) { return 'THREW'; } }   /* = STARTICON VICON1 の判定（1 か所） */
   function saved(id) {
@@ -115,7 +115,7 @@
     if (sid() !== job.id) return 'STORY_CHANGED';
     if (acct() !== job.a) return 'ACCOUNT_CHANGED';
     if (!doc2()) return 'NOT_SCHEMA2';
-    var vw = vaultWhy(job.id); if (vw) return 'VAULT_' + vw;
+    var vw = vgSticky(job.id) ? '' : vaultWhy(job.id); if (vw) return 'VAULT_' + vw;   /* r2: a visible story goes on while the answer is only being re-read */
     return '';
   }
   function finish(job, why) {
@@ -154,7 +154,18 @@
       });
     })();
   }
+  /* ★VAULTSEND1: right before a send, a FRESH answer (VAULTGATE2.authorize) must match what this module decided (visible, or hidden and open).
+     The kept answer (state / hidden) is for display and for deciding whether to start; never alone for the send. */
+  /* r2 (review): the expected answer is the one this module started with — VGX[id] = 'visible' once VAULTGATE2 said 'not hidden' (it never turns back
+     to visible by itself). While the kept answer is only 'unknown' (a HOME hide / unhide / lock signal, a re-read), a story that was visible goes on (vgSticky);
+     every send still needs the FRESH authorize() === 'visible' (a story hidden meanwhile is stopped there). */
+  var VGX = {};
+  function vgSticky(id) { try { var G = root.__v292DfixVAULTGATE2; return VGX[id] === 'visible' && !!G && typeof G.state === 'function' && G.state(id) === 'unknown'; } catch (e) { return false; } }
+  function vgAuth(id, go, stop) { var exp; try { exp = VGX[id] === 'visible' ? 'visible' : (vaultHidden(id) ? 'open' : 'visible'); } catch (e) { return stop('THREW'); }
+    var G = root.__v292DfixVAULTGATE2; if (!G || typeof G.authorize !== 'function') return stop('NO_VAULT_GATE');
+    Promise.resolve().then(function () { return G.authorize(id); }).then(function (a) { if (a === exp) go(); else stop(String(a || 'unknown').toUpperCase().slice(0, 16)); }, function () { stop('THREW'); }); }
   function send(job, c) {
+      if (!c.__vgOk) return vgAuth(job.id, function () { send(job, Object.assign({}, c, { __vgOk: 1 })); }, function (w) { cnt(stats.skip, 'VAULT_AUTH_' + w); finish(job, 'VAULT_AUTH'); });   /* ★VAULTSEND1 */
       stats.gen++;
       A().newDraw(c.id, { ownerExplicit: true }, function (r) {
         r = r || {};

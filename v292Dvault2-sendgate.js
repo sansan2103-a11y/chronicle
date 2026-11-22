@@ -199,8 +199,8 @@
       return r;
     }, function () { return r; });
   }
-  function withStoryId(body, sid) {
-    try { var b = JSON.parse(body); if (b && typeof b === 'object' && !Array.isArray(b)) { if (sid !== undefined) b.chrStoryId = sid; else delete b.chrStoryId; if (acct.doc) b.chrExpectAcct = acct.doc; else delete b.chrExpectAcct; return JSON.stringify(b); } } catch (e) {}
+  function withStoryId(body, sid, purp) {
+    try { var b = JSON.parse(body); if (b && typeof b === 'object' && !Array.isArray(b)) { if (purp === 'img') b.chrPurpose = 'img'; else delete b.chrPurpose; if (sid !== undefined) b.chrStoryId = sid; else delete b.chrStoryId; if (acct.doc) b.chrExpectAcct = acct.doc; else delete b.chrExpectAcct; return JSON.stringify(b); } } catch (e) {}
     return body;
   }
   /* SG-H2: the document account must be known (or the session proven anonymous) before a proxy send */
@@ -238,24 +238,33 @@
   };
 
   /* ---- K2 XHR ---- */
+  /* ★VAULTSEND1 (GPT #127-WN 優先1): a text-AI request for a picture (xhr.__chrPurpose === 'img') from a story page goes out only after a FRESH
+     answer of VAULTGATE2.authorize(story) === 'visible' (never the kept answer; hidden, unlocked-hidden, unknown, no gate = not sent). HOME ('__none__')
+     and an unresolved story keep their existing rules (a vault account is refused there already). The Worker checks it again (VAULT2_IMG_TEXT_DENIED). */
+  function imgAuth(ident) { if (ident === '__none__' || ident == null) return Promise.resolve(true); var G = window.__v292DfixVAULTGATE2;
+    if (!G || typeof G.authorize !== 'function') return Promise.resolve(false);
+    return Promise.resolve().then(function () { return G.authorize(ident); }).then(function (a) { st.imgAuth = (st.imgAuth || 0) + 1; if (a !== 'visible') { st.imgDenied = (st.imgDenied || 0) + 1; note('blocked', 'img-' + String(a).slice(0, 12)); } return a === 'visible'; }, function () { return false; }); }
   function xhrFail(xhr, reason) { markBlocked(reason); setTimeout(function () { try { xhr.dispatchEvent(new Event('error')); xhr.dispatchEvent(new Event('loadend')); } catch (e) {} }, 0); }
   XMLHttpRequest.prototype.open = function (method, url) { this.__v2url = String(url || ''); return XO.apply(this, arguments); };
   XMLHttpRequest.prototype.send = function (body) {
-    var xhr = this, url = this.__v2url || '', pp = proxyPath(url);
+    var xhr = this, url = this.__v2url || '', pp = proxyPath(url), purp = this.__chrPurpose === 'img' ? 'img' : null;   /* ★VAULTSEND1 */
     if (pp !== null && SEND_PATHS[pp] && typeof body === 'string') {
       if (shut()) return xhrFail(xhr, 'shut-xhr-proxy');
       var ident = sendIdentity();
       try { xhr.addEventListener('load', function () { try { if ((xhr.status === 409 || xhr.status === 503) && /"vault2Send":true/.test(xhr.responseText || '')) { if (/STORY_UNAVAILABLE/.test(xhr.responseText)) kill('xhr-proxy-409', ident); st.expiredHint = true; markBlocked('xhr-proxy-' + xhr.status); } } catch (e) {} }); } catch (e) {}
       if (ident === null) {
-        probe(null).then(function (a) { if (decide(null, a)) XSend.call(xhr, withStoryId(body, undefined)); else xhrFail(xhr, 'xhr-unresolved-story-id'); });
+        probe(null).then(function (a) { if (decide(null, a)) XSend.call(xhr, withStoryId(body, undefined, purp)); else xhrFail(xhr, 'xhr-unresolved-story-id'); });
         return;
       }
-      acctReady().then(function (ok) { if (ok) XSend.call(xhr, withStoryId(body, ident)); else xhrFail(xhr, 'xhr-proxy-acct-unknown'); });
+      acctReady().then(function (ok) { if (!ok) return xhrFail(xhr, 'xhr-proxy-acct-unknown');
+        if (!purp) return XSend.call(xhr, withStoryId(body, ident));
+        imgAuth(ident).then(function (g) { if (g && !shut() && sendIdentity() === ident) XSend.call(xhr, withStoryId(body, ident, purp)); else { xhr.__chrDenied = 'vault'; xhrFail(xhr, 'xhr-img-vault'); } }); });   /* ★VAULTSEND1 */
       return;
     }
     if (isThirdParty(url)) {
       if (shut()) return xhrFail(xhr, 'shut-xhr-direct');
-      gatedDirect().then(function (ok) { if (ok) XSend.call(xhr, body); else xhrFail(xhr, 'xhr-probe-negative'); });
+      gatedDirect().then(function (ok) { if (!ok) return xhrFail(xhr, 'xhr-probe-negative'); if (!purp) return XSend.call(xhr, body);
+        imgAuth(sendIdentity()).then(function (g) { if (g && !shut()) XSend.call(xhr, body); else { xhr.__chrDenied = 'vault'; xhrFail(xhr, 'xhr-img-vault-direct'); } }); });   /* ★VAULTSEND1: the user's own key (no Worker) — the page decides alone */
       return;
     }
     return XSend.apply(xhr, arguments);

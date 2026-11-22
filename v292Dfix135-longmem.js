@@ -106,7 +106,7 @@
   var M3_GMMARK = /(^|[^A-Za-z])(GM|ＧＭ)(?![A-Za-z])|専用】|【\s*(GM|ＧＭ)/;
   var M3_SECRET = /(ただし)?この世界の底には、[^。\n]*という隠された理がある。?/g;
   function m3cut(s, n){ s = String(s == null ? '' : s).replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
-  function m3vaultHidden(){ try { var f = window.__v292Dfix697; var id = f && f.status ? f.status().storyId : null; if (!id) return true; var V = window.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(String(id)); } catch(e){ return true; } }
+  function m3vaultHidden(){ try { var f = window.__v292Dfix697; var id = f && f.status ? f.status().storyId : null; if (!id) return true; var G = window.__v292DfixVAULTGATE2; if (!G || typeof G.hidden !== 'function') return true; return G.hidden(String(id)) !== false; } catch(e){ return true; } }   /* ★ACCT1 r2（レビュー）: 凍結した fix889（v1）だけでなく VAULTGATE2 の hidden()（v2 と v1 の両方・未取得／不完全／失敗は隠した側）で見る。VAULTGATE2 が無い・kill → 渡さない（ACCT1 と関係なく効く） */
   function m3pub(text){ try { var L = window.__v292DfixLORE1; if (!L || typeof L.splitGm !== 'function') return null; var r = L.splitGm('', String(text == null ? '' : text)); return (r && typeof r.pub === 'string') ? r.pub : null; } catch(e){ return null; } }
   /* ★r8 (0): 秘密の印を含む文は外す（「実は」は文の途中でも）。GM と書かれていない秘密（裏設定・【秘密】・【真相】・本当は・正体は・隠している 等）への安全側の網 */
   var M3_SECRETWORD = /裏設定|秘密|真相|本当は|本当の|正体|隠して|隠し事|実は|ネタバレ/;
@@ -163,7 +163,8 @@
     return r;
   }
   var m3Stat = { prompts: 0, applied: 0, mismatch: 0, addedChars: 0, settingsChars: 0, lastAdded: 0, lastSettings: 0, lastSettingsWhy: null, filtered: { summary: 0, worldinfo: 0, events: 0 }, lastFiltered: null, filterErr: 0, discarded: 0, seenKept: { summary: 0, events: 0 }, warnMany: 0, filterStopped: 0, skipWhy: {} };
-  function mem3On(){ try { return localStorage.getItem('v292DfixMEM3Off') !== '1' && localStorage.getItem('v292DfixMEM3On') === '1' && m3trial(); } catch(e){ return false; } }
+  function mem3On(){ try { return localStorage.getItem('v292DfixMEM3Off') !== '1' && (localStorage.getItem('v292DfixMEM3On') === '1' || m3acct()) && m3trial(); } catch(e){ return false; } }
+  function m3acct(){ try { var A = window.__v292DfixACCT1; return !!(A && typeof A.want === 'function' && A.want('mem') === true); } catch(e){ return false; } }   /* ★ACCT1: Owner のアカウントなら端末の鍵が無くても（項目 mem） */
   /* ★MEMTRIAL（GPT #127-WF (3)・試用の間だけの条件）: MEM2 の __v292DfixMEMTrial（Owner の確認・1 か所）を見る。無い・例外 → 働かない（fail-closed） */
   function m3trial(){ try { var G = window.__v292DfixMEMTrial; return !!(G && typeof G.ok === 'function' && G.ok('mem3') === true); } catch(e){ return false; } }
   function mem3Prompt(p){

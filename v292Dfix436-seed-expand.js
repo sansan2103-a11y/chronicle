@@ -365,16 +365,17 @@
       xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.setRequestHeader('Authorization', 'Bearer ' + (cfg.orKey || ''));
       xhr.timeout = TIMEOUT_MS;
+      if (p && p.purpose === 'img') xhr.__chrPurpose = 'img';   /* ★VAULTSEND1: a draft for a picture (LC1prop) — SendGate asks VAULTGATE2 first */
       xhr.onload = function(){
         try {
-          if (xhr.status !== 200) return cb(new Error('HTTP ' + xhr.status));
+          if (xhr.status !== 200) return cb(new Error((xhr.status === 409 && /VAULT2_IMG_TEXT_DENIED/.test(xhr.responseText || '')) ? 'VAULT_IMG' : ('HTTP ' + xhr.status)));   /* ★VAULTSEND1 r2 */
           var j = JSON.parse(xhr.responseText);
           var txt = (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
           if (!txt) return cb(new Error('empty'));
           cb(null, txt);
         } catch(e){ cb(e || new Error('parse')); }
       };
-      xhr.onerror   = function(){ cb(new Error('network')); };
+      xhr.onerror   = function(){ cb(new Error(xhr.__chrDenied === 'vault' ? 'VAULT_IMG' : 'network')); };   /* ★VAULTSEND1 r2: SendGate refused a picture draft for a hidden story */
       xhr.ontimeout = function(){ cb(new Error('timeout')); };
       xhr.send(JSON.stringify(body));
     } catch(e){ cb(e || new Error('send')); }

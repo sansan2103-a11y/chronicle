@@ -53,10 +53,11 @@
       try { localStorage.setItem(TK, JSON.stringify(o)); } catch(eS){}
     } catch(e){}
   }
-  function aKey(){ return lsg('v292DfixMEM2aOff') !== '1' && lsg('v292DfixMEM2aOn') === '1'; }
+  function acct1(n){ try { var A = window.__v292DfixACCT1; return !!(A && typeof A.want === 'function' && A.want(n) === true); } catch(e){ return false; } }   /* ★ACCT1: Owner のアカウントなら端末の鍵が無くても（項目 mem・kill v292DfixACCT1Off / v292DfixACCT1MemOff） */
+  function aKey(){ return lsg('v292DfixMEM2aOff') !== '1' && (lsg('v292DfixMEM2aOn') === '1' || acct1('mem')); }
   function aOn(){ return aKey() && trialOk(); }   /* ★MEMTRIAL: 鍵に加えて Owner の確認（腕 A・MEM3b・MEM4 はここを通る） */
   function cOn(){ return lsg('v292DfixMEM2cOff') !== '1' && lsg('v292DfixMEM2cOn') === '1'; }
-  function m3bOn(){ return lsg('v292DfixMEM3bOff') !== '1' && lsg('v292DfixMEM3bOn') === '1' && trialOk(); }   /* ★MEM3b（既定 OFF・腕 A が ON のときだけ効く） */
+  function m3bOn(){ return lsg('v292DfixMEM3bOff') !== '1' && (lsg('v292DfixMEM3bOn') === '1' || acct1('mem')) && trialOk(); }   /* ★ACCT1 */   /* ★MEM3b（既定 OFF・腕 A が ON のときだけ効く） */
   var st = { a: { calls: 0, applied: 0, chars: 0, skip: {} }, c: { calls: 0, applied: 0, turns: 0 } };
   var lastA = null, lastC = null;
   /* ★r2 (1): この物語の記憶が「このページで空から作られた」かを、メモリだけで追う */
@@ -83,7 +84,7 @@
   var M4K = 'v292DfixMEM4_slot_', M4D = 'v292DfixMEM4Dev', M4Q = 'v292DfixMEM4Seq', M4Q_MAX = 200;
   var t4 = { dk: null, state: 'n/a', why: null, lb: -1, h: null, stamped: false, since: 0, dn: 0 }, m4st = { stamped: 0, restamped: 0, verified: 0, rejected: {}, removed: 0, done: 0, notifyRej: {}, invalidated: 0 };
   var m4done = null, m4dseq = 0;   /* このページで見届けた fix135 の作り直しの完了（最後の 1 件） */
-  function m4On(){ return aOn() && lsg('v292DfixMEM4Off') !== '1' && lsg('v292DfixMEM4On') === '1'; }
+  function m4On(){ return aOn() && lsg('v292DfixMEM4Off') !== '1' && (lsg('v292DfixMEM4On') === '1' || acct1('mem')); }   /* ★ACCT1 */
   function lss(k, v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
   function lsr(k){ try { localStorage.removeItem(k); } catch(e){} }
   function m4acct(){ try { var F = window.__v292Dfix893; var me = (F && typeof F.serverMe === 'function') ? F.serverMe() : null; return (me && me.accountId) ? String(me.accountId) : null; } catch(e){ return null; } }   /* ★r2: サーバーで確かめた値だけ */

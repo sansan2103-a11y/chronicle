@@ -135,7 +135,7 @@
   function storyCap() { var n = limOf('starticon_story_imgs', null); if (n === null) return { hero: true, npcs: CAP.npcs, src: 'const' };   /* = before: hero 1 + NPCs 3 */
     if (n === Infinity) return { hero: true, npcs: Infinity, src: 'row' }; return { hero: n >= 1, npcs: Math.max(0, n - 1), src: 'row' }; }
   function admfOn() { try { var X = root.__v292DfixADMF1; return !!(X && typeof X.gate === 'function' && X.gate('starticon1', false) === true); } catch (e) { return false; } }   /* ★STARTICON2: 自分の鍵 starticon1（管理者画面）。行なし = OFF */
-  function vaultHidden(id) { try { var G = root.__v292DfixVAULTGATE2; if (G && typeof G.hidden === 'function') return G.hidden(id) !== false; } catch (e) { return true; } try { if (root.localStorage.getItem('v292DfixVAULTGATE2Off') !== '1') return true; } catch (e) { return true; }   /* ★VAULTGATE2 r2: kill していないのに部品が無い = 隠した物語かもしれない（止める） */ try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* ★VAULTGATE2: vault2 と fix889 の両方（1 か所） */   /* fail-closed */
+  function vaultHidden(id) { try { var G = root.__v292DfixVAULTGATE2; if (G && typeof G.hidden === 'function') { var hv = G.hidden(id); if (hv === false) VGX[id] = 'visible'; return hv !== false; } }   /* r2: remember 'visible' (vgAuth / vgSticky) */ catch (e) { return true; } try { if (root.localStorage.getItem('v292DfixVAULTGATE2Off') !== '1') return true; } catch (e) { return true; }   /* ★VAULTGATE2 r2: kill していないのに部品が無い = 隠した物語かもしれない（止める） */ try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* ★VAULTGATE2: vault2 と fix889 の両方（1 か所） */   /* fail-closed */
   /* ★VICON1（GPT #127-WH・STARTICON）: 隠した物語でも、Vault が解錠中で、この物語が開かれているときだけ作る。
      判定（どれか 1 つでも欠ければ今までどおり作らない＝fail-closed）: fix889 が本物・状態 ready・解錠のしるし（unlocked）・扉が開いている（status().open）・その物語が隠した物語。
      既定は下の VICON1_DEFAULT_ON（1 か所）。kill: localStorage v292DfixVICON1Off='1'（隠した物語では今までどおり作らない）。VICON1_DEFAULT_ON を false にしたときは v292DfixVICON1On='1' の端末だけ。 */
@@ -145,6 +145,16 @@
       if (!V.isHidden(id)) return 'NOT_HIDDEN'; if (V.state() !== 'ready') return 'NOT_READY'; if (V.unlocked() !== true) return 'LOCKED'; var s = V.status(); if (!s || s.open !== true) return 'NOT_OPEN'; return ''; } catch (e) { return 'THREW'; } }
   function vcount(m, k) { k = String(k || 'X').slice(0, 32); m[k] = (m[k] || 0) + 1; }
   /* ★RESTYLE1: 隠した物語で動いてよいかの判定を 1 か所から出す（VICON1 の ON/OFF と、解錠中で扉が開いていること）。'' = 動いてよい */
+  /* ★VAULTSEND1: right before a send, a FRESH answer (VAULTGATE2.authorize) must match what this module decided (visible, or hidden and open).
+     The kept answer (state / hidden) is for display and for deciding whether to start; never alone for the send. */
+  /* r2 (review): the expected answer is the one this module started with — VGX[id] = 'visible' once VAULTGATE2 said 'not hidden' (it never turns back
+     to visible by itself). While the kept answer is only 'unknown' (a HOME hide / unhide / lock signal, a re-read), a story that was visible goes on (vgSticky);
+     every send still needs the FRESH authorize() === 'visible' (a story hidden meanwhile is stopped there). */
+  var VGX = {};
+  function vgSticky(id) { try { var G = root.__v292DfixVAULTGATE2; return VGX[id] === 'visible' && !!G && typeof G.state === 'function' && G.state(id) === 'unknown'; } catch (e) { return false; } }
+  function vgAuth(id, go, stop) { var exp; try { exp = VGX[id] === 'visible' ? 'visible' : (vaultHidden(id) ? 'open' : 'visible'); } catch (e) { return stop('THREW'); }
+    var G = root.__v292DfixVAULTGATE2; if (!G || typeof G.authorize !== 'function') return stop('NO_VAULT_GATE');
+    Promise.resolve().then(function () { return G.authorize(id); }).then(function (a) { if (a === exp) go(); else stop(String(a || 'unknown').toUpperCase().slice(0, 16)); }, function () { stop('THREW'); }); }
   root.__v292DfixVaultOpenWhy = function (id) { try { if (!viconOn()) return 'VICON1_OFF'; return vaultOpenWhy(id); } catch (e) { return 'THREW'; } };
   /* 隠した物語の説明文に、外見以外の秘密が混ざっている印（GM・秘密・正体・隠している 等）があれば、その人物は自動では作らない（安全に分けられないとみなす） */
   var VICON1_SECRET = /(^|[^A-Za-z])(GM|ＧＭ)(?![A-Za-z])|専用】|【\s*(GM|ＧＭ)|裏設定|秘密|真相|本当は|本当の|ほんとう|正体|隠して|隠し事|隠れて|実は|ネタバレ|ネタばれ|誰にも|知らせない|知られて|明かす|明かさ|伏線|黒幕|犯人|偽名|本名|真の姿|裏では|表向き|化けて|化けた|見た目は人間|ふりを|振りを|偽って|偽り|内緒|極秘|機密|〔|〕|（GM|\(GM/;
@@ -258,7 +268,7 @@ var VSAFE1 = (function () {
   function lc1Busy() { try { var x = LC1(); var s = x && x.status ? x.status() : null; return !!(s && s.busyOp); } catch (e) { return true; } }
   function quiet() { return !inFlight() && av2Idle() && !lc1Busy() && !xtabStale(); }
   function ready(id) { return canonicalNow(id) && prepSettled() && saveClean(id) && quiet(); }
-  function same(id, a0) { return sid() === id && acct() === a0 && doc2() && (!vaultHidden(id) || (viconOn() && !vaultOpenWhy(id))); }   /* ★VICON1: 途中で施錠されたら止める（隠していない物語では今までと同じ） */
+  function same(id, a0) { return sid() === id && acct() === a0 && doc2() && (!vaultHidden(id) || vgSticky(id) || (viconOn() && !vaultOpenWhy(id))); }   /* ★VICON1: 途中で施錠されたら止める（隠していない物語では今までと同じ） */
   function waitFor(pred, ms, cb) { var t0 = Date.now(); (function poll() { var ok = false; try { ok = pred(); } catch (e) {} if (ok) return cb(true); if (Date.now() - t0 > ms) return cb(false); setTimeout(poll, 500); })(); }
   function genderOf(v) { return (v === '女性' || v === '男性') ? v : ''; }
   /* ★STARTICON2: when the story was created = the ms timestamp in its id ('s' + Date.now().toString(36) + 1–2 random base-36 chars:
@@ -477,7 +487,8 @@ var VSAFE1 = (function () {
     };
     /* ★ICONFIX2 c: before the chain ends, the characters held after an unknown outcome are looked up again (read only, never re-sent) */
     var endB2 = function (why, hold) { if (!fx2cOn() || why === 'RECHECK') return endB(why, hold); reconcileUnknown(id, a0, function () { endB(why, hold); }); };
-    var send = function (c, h, again) {   /* the one billable request for this character (again = the ONE retry after IN_FLIGHT) */
+    var send = function (c, h, again) { vgAuth(id, function () { send0(c, h, again); }, function (w) { stats.vgAuthStop = (stats.vgAuthStop || 0) + 1; note({ kind: 'VG_AUTH_STOP', why: w }); finish('VAULT_AUTH'); }); };   /* ★VAULTSEND1 */
+    var send0 = function (c, h, again) {   /* the one billable request for this character (again = the ONE retry after IN_FLIGHT) */
       soSet(id, function (s) { if (again) { s.r = s.r || {}; s.r[h] = 1; } s.b[h] = 'SENT'; });
       if (X.promo && !again) promoSent(id);   /* ★LIM1b: 昇格の絵も物語の枠に数える（送る前に） */   /* written BEFORE the call: a page closed mid-call never resends (and never retries twice) */
       stats.ef++; if (again) stats.ifRetry++; if (inFlight()) stats.sentWhileInFlight++; note({ kind: again ? 'EF_RETRY' : 'EF', hero: c.hero });
