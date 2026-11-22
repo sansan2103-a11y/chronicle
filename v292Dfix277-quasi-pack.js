@@ -997,7 +997,7 @@
        新しい保存のキーは 0 本。 */
   var NM1_TAIL = /(少女|少年|女|男|子供|子ども|娘|息子|影|人影|老人|老婆|青年|婦人|女の子|男の子|女性|男性)$/;   /* DESCRIPTIVE_TAIL＋女の子・男の子・女性・男性（「子」だけの語尾は人名〔景子〕を巻き込むので足さない） */
   var nm1Last = { turns: 0, wrote: 0, last: 'init', drops: {} };
-  function nm1On(){ try { if (localStorage.getItem('v292DfixNAMING1Off') === '1') return false; return localStorage.getItem('v292DfixNAMING1On') === '1'; } catch(e){ return false; } }
+  function nm1On(){ try { return localStorage.getItem('v292DfixNAMING1Off') !== '1'; } catch(e){ return false; } }   /* 20261123: 全員 既定 ON（r2・実 AI 16 本で誤結合 0）。止めるのは kill v292DfixNAMING1Off='1' */
   function nm1Drop(r){ nm1Last.drops[r] = (nm1Last.drops[r] || 0) + 1; nm1Last.last = r; }
   function nm1Plain(t){ return String(t || '').replace(/「[^」]*」/g, '。').replace(/『[^』]*』/g, '。'); }
   function nm1Esc(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }

@@ -489,8 +489,9 @@
       if (hit){ drops.allTogether = (drops.allTogether || 0) + people.length; people.length = 0; } }
     for (var i = 0; i < turns.length; i++){
       var t = turns[i] || {}, typ = str(t.inputType).toUpperCase(), pt = str(t.playerText);
-      if ((typ === 'DO' || typ === 'STORY') && pt && !isCont(pt)){ var ev1 = pin6(parseInput(pt, hero, ctx, typ === 'STORY')); noteInput(pt, ev1); heroMoved(typ, pt, ev1); feed(ev1, i + 1, '入力'); allTogether(pt); }
+      if ((typ === 'DO' || typ === 'STORY') && pt && !isCont(pt)){ var ev1 = pin6(parseInput(pt, hero, ctx, typ === 'STORY')); try { var _p2 = root.__v292DfixPLACE2; if (_p2 && typeof _p2.on === 'function' && _p2.on()) ev1 = _p2.fixInput(ev1, pt, typ, ctx, hero) || ev1; } catch(eP2){}   /* ★PLACE2（既定 OFF）: STORY の同行・主語が主人公の移動 */ noteInput(pt, ev1); heroMoved(typ, pt, ev1); feed(ev1, i + 1, '入力'); allTogether(pt); }
       if (nOn){ feed(parseNarr(t.narrative, ctx), i + 1, '本文'); staleDrop(t.narrative, i + 1); }
+      if (nOn){ try { var _p2n = root.__v292DfixPLACE2; if (_p2n && typeof _p2n.on === 'function' && _p2n.on()){ var _p2h = _p2n.narrHero(t.narrative, ctx, hero, !!(heroAt && heroAt.turn === i + 1)); if (_p2h && _p2h.length) feed(_p2h, i + 1, '本文'); } } catch(eP2n){} }   /* ★PLACE2（既定 OFF）: そのターンの本文で主人公が移動を言い切った文（入力で決まった回は動かさない） */
       if (nOn){ try { var Z1 = root.__v292DfixSCENE1, z1 = (Z1 && typeof Z1.narrExits === 'function') ? Z1.narrExits(t.narrative, ctx.names, hero, i + 1) : null; if (z1 && z1.length) feed(z1, i + 1, '本文'); } catch(eZ1){} }   /* ★SCENE1 b: 本文で確認できた退出（OFF は null） */   /* 先に読める文で行を作り直し、残った古い行だけを「動きの語」で落とす */
       g7snap = people.slice();   /* ★r7 */
       for (var p = people.length - 1; p >= 0; p--){ var pe = people[p];
@@ -498,7 +499,7 @@
         if (i + 1 <= pe.turn) continue;
         if ((typ === 'SAY' && vocative(pt, pe.who)) || (nOn && cameBack(t.narrative, pe.who, pe))) people.splice(p, 1); }
     }
-    if (curInput && curInput.text && !isCont(curInput.text)){ var ct = str(curInput.type).toUpperCase(); if (ct === 'DO' || ct === 'STORY'){ var ev2 = pin6(parseInput(curInput.text, hero, ctx, ct === 'STORY')); noteInput(curInput.text, ev2); heroMoved(ct, curInput.text, ev2); feed(ev2, turns.length + 1, '入力'); allTogether(curInput.text);
+    if (curInput && curInput.text && !isCont(curInput.text)){ var ct = str(curInput.type).toUpperCase(); if (ct === 'DO' || ct === 'STORY'){ var ev2 = pin6(parseInput(curInput.text, hero, ctx, ct === 'STORY')); try { var _p2 = root.__v292DfixPLACE2; if (_p2 && typeof _p2.on === 'function' && _p2.on()) ev2 = _p2.fixInput(ev2, curInput.text, ct, ctx, hero) || ev2; } catch(eP2){}   /* ★PLACE2（既定 OFF）: STORY の同行・主語が主人公の移動 */ noteInput(curInput.text, ev2); heroMoved(ct, curInput.text, ev2); feed(ev2, turns.length + 1, '入力'); allTogether(curInput.text);
         /* ★r5 案 2: この回の入力で「残った／別の場所へ行った」と決まった人が、直前の本文ではこの場で主語として動いていた（主人公はこの回に動いていない）→ 行に橋渡しの一言を頼む */
         if (r5On() && nOn && turns.length && !ev2.some(function(e){ return e.kind === 'hero'; })){ var pn = turns[turns.length - 1].narrative; people.forEach(function(pe){ if (pe.turn === turns.length + 1 && (pe.mode === 'left' || pe.mode === 'gone' || (r6On() && pe.mode === 'sent')) && cameBack(pn, pe.who, null)) pe.bridge = true; }); } }
       else if (ct === 'SAY'){ for (var q = people.length - 1; q >= 0; q--) if (vocative(curInput.text, people[q].who)) people.splice(q, 1); } }

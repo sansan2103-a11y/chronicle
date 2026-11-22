@@ -184,6 +184,7 @@
     var newText = newTurns.map(function(t, i){
       var pt = (t.playerText || '').slice(0, 80);
       var nr = (t.narrative || '').slice(0, 1500);
+      try { var _msp1 = window.__v292DfixMEMSPK1; if (_msp1 && typeof _msp1.on === 'function' && _msp1.on()) nr = _msp1.tag(nr, t); } catch(_msp1e){}   /* ★MEMSPK1（既定 OFF・鍵 v292DfixMEMSPK1On・kill v292DfixMEMSPK1Off）: 台詞の「」の前に会話カードの話し手を付けて渡す（保存・本文は変えない） */
       return '[Turn ' + (startIdx + i) + '] PLAYER: ' + pt + '\nNARR: ' + nr;
     }).join('\n\n');
     // v292Dfix245: セリフのタグ(_convSays.who)で既に確定している話者名を権威名として渡す。
@@ -204,6 +205,7 @@
       'KNOWN WORLD INFO:\n' + (prevWorldInfo.length ? prevWorldInfo.map(function(w){var _b = '- ' + w.name + ' (' + w.type + '): ' + w.desc; try { var X = window.__v292DfixEXP1; if (X && typeof X.wiLine === 'function') return X.wiLine(w, _b); } catch(eX){} return _b;}).join('\n') : '(none)') + '\n\n' +
       'KEY EVENTS:\n' + (prevEvents.length ? prevEvents.map(function(e){return '- T' + e.turnIdx + ' (importance ' + e.importance + '): ' + e.event;}).join('\n') : '(none)') + '\n\n' +
       'NEW TURNS:\n' + newText + '\n\n' +
+      (function(){ try { var _mf = window.__v292DfixMEMSPK1; return (_mf && typeof _mf.factLine === 'function') ? _mf.factLine() : ''; } catch(_mfe){ return ''; } })() +   /* ★MEMSPK1 Fact（既定 OFF・鍵 v292DfixMEMSPK1FactOn）: 台詞は申告・事実は地の文の 1 句。OFF は '' */
       'Produce a FRESH analysis as JSON with these fields:\n' +
       '{\n' +
       '  "summary": "Japanese, 300 chars max. The story so far — plot, current situation, character states. Replace the previous summary.",\n' +

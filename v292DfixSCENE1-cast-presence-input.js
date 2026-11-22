@@ -468,6 +468,7 @@
     begin: begin, end: end, kind: kind, skipPush: skipPush, tenkaiCut: tenkaiCut, markCont: markCont, retryKind: retryKind,
     appearance: appearance, attrBlock: attrBlock, speakerList: speakerList, lockSplit: lockSplit, noteDelta: noteDelta,
     exitHit: exitHit, stillOut: stillOut, narrExits: narrExits, fgFilter: fgFilter, exited: function () { return Object.keys(exited(getS())).length; },
+    heroMoveRe: HERO_MOVE, groupRe: GROUP, inRoomRe: INROOM,   /* ★PLACE2: 移動の語・連れの語・部屋の中の行き先の語を読むだけで渡す（辞書を増やさない） */
     status: function () { return { ver: VER, on: on(), a: aOn(), b: bOn(), c: cOn(), stats: JSON.parse(JSON.stringify(ST)) }; }
   };
 })(typeof window !== 'undefined' ? window : globalThis);
