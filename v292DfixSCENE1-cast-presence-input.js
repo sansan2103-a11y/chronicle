@@ -262,11 +262,15 @@
   /* sent の中のその人の退出 → { route } | null。next = 次の文（留まる・戻るの確認用。無ければ ''） */
   function gazeOff(g, hf) {   /* ★r7: 「湊を見てから」「湊のほうをちらりと見て」「湊に会釈して」は主人公を見ただけ（一緒に動いていない） */
     var s = str(g); (hf || []).forEach(function (h) { if (!h) return; s = s.replace(new RegExp(esc(h) + HON + '(?:のほう|の方|の顔)?(?:を|に)(?:ちらりと|ちらと|じっと|一度|一瞬|軽く|もう一度)?(?:見|一瞥|振り返|会釈|目礼|一礼|頭を下げ)', 'g'), ''); }); return s; }
+  function r9On() { return bOn() && ls('v292DfixSCENE1bR9Off') !== '1' && ls('v292DfixSCENE1bR9On') === '1'; }   /* ★EXIT2 (1a): 既定 OFF */
+  var RSN9 = /[^、。]{0,14}を思い出し(?:て)?[、，]/g;   /* ★EXIT2 (1a): 「用事を思い出し、」＝退出の理由の節（回想ではない） */
   function exitIn(sent, forms, next, hero, isInput) {
-    if (!sent || IRREAL.test(sent) || PAST.test(sent) || (isInput && (IRREAL_IN.test(sent) || Q_END.test(sent)))) return null;   /* r5: 入力の「〜のか」も疑問 */
+    var rsnEnd = -1; if (sent && r9On() && IRREAL.test(sent)) { var st9 = String(sent).replace(RSN9, ''); if (st9 !== String(sent) && !IRREAL.test(st9)) { RSN9.lastIndex = 0; var mr9; while ((mr9 = RSN9.exec(sent))) rsnEnd = mr9.index + mr9[0].length; RSN9.lastIndex = 0; } }   /* ★EXIT2 (1a): 理由の節を除くと仮定・回想の印が無い文だけ */
+    if (!sent || (rsnEnd < 0 && IRREAL.test(sent)) || PAST.test(sent) || (isInput && (IRREAL_IN.test(sent) || Q_END.test(sent)))) return null;   /* r5: 入力の「〜のか」も疑問 */
     var hf = hero || heroForms(); if (GROUP.test(sent)) return null;   /* 主語がその人物だけ（二人・一緒 等があれば退出にしない） */
     for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (!f || sent.indexOf(f) < 0) continue;
       var re = new RegExp(esc(f) + HON + '(?:の背中|の後ろ姿|の姿)?(?:は|が|も)(' + GAPX + ')(' + (isInput ? EXIT_V + '|' + EXIT_V_IN : EXIT_V) + ')'), m = re.exec(sent), hit = null;
+      if (m && rsnEnd >= 0 && m.index + m[0].length - m[2].length < rsnEnd) m = null;   /* ★EXIT2 (1a): 退出の動詞が理由の節より前（「出ていった兄を思い出し、」）は数えない */
       if (m) { var pre = m.index > 0 ? sent.charAt(m.index - 1) : ''; if (/[とや・]/.test(pre) || KANJI_PRE.test(pre) || hasAny(gazeOff(m[1], hf), hf)) continue;   /* 「湊と灯里は」「灯里は湊と…」は主人公と一緒。r5: 「大茂は」は別の名前 */
         if (/^(?:へ|に|の方へ)/.test(m[2])) { var dst = /([^、\s]{1,12})$/.exec(str(m[1])); if (!dst || (INROOM.test(dst[1]) && !/^(?:へ|に|の方へ)(?:消え|引っ込|上がって)/.test(m[2]))) continue;   /* r7: 「奥へ消えた」は奥の語でも退出 */   /* 「席に戻った」「仕事に戻った」は退出ではない */
           if (/^(?:へ|に|の方へ)(?:戻|帰)/.test(m[2]) && retDest(m[1]) !== 'exit') continue;

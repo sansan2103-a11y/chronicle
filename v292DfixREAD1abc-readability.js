@@ -147,7 +147,7 @@
       if (!S || !Array.isArray(S.turns) || !S.turns.length) return '';
       var P = root.__v292DfixPLACE1, L = null;
       try { if (P && typeof P.on === 'function' && P.on() && typeof P.build === 'function') L = P.build(S, curIn || null);   /* 送信のときはこの回の入力も当てる（PLACE1 の whereNow と同じ） */ } catch (e) { L = null; }
-      var place = (L && L.heroAt && L.heroAt.place) ? str(L.heroAt.place) : str(S.scene && S.scene.loc);
+      var place = (L && L.heroAt && L.heroAt.place) ? str(L.heroAt.place) + (L.heroAt.pend ? 'へ向かう途中' : '') : str(S.scene && S.scene.loc);   /* ★EXIT2 (2): PLACE1 Pend が ON のときだけ pend が立つ */
       var away = [];
       if (L && Array.isArray(L.people)) L.people.forEach(function (pe) { if (/^(?:left|sent|gone|ahead)$/.test(str(pe.mode))) { var w = str(pe.who); if (w && away.indexOf(w) < 0) away.push(w); } });
       var here = present(S).filter(function (c) { return !away.some(function (a) { return nrm(a) === nrm(c) || nrm(c).indexOf(nrm(a)) >= 0; }); }).slice(0, 5);
