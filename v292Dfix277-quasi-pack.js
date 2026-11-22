@@ -976,6 +976,123 @@
       }
     } catch(e){ ptLast = 'threw'; }
   }
+  /* ============ ★NAMING1（2026-11-23・既定 OFF・鍵 v292DfixNAMING1On='1'・kill v292DfixNAMING1Off='1'） ============
+     なぜ: 実 AI の記録（spknew1/realai_out SPK_a_ON1・ON2・ON3）で、新しい女の子が名乗った後も、キャラ一覧が
+       「見知らぬ女の子」と「ミオ」／「宮原」のように 2〜3 行に分かれたまま残った。fix537（detectSelfNaming）が効かない理由は 3 つ（spkchk1 README §3）:
+         (1) 名乗りの台詞の札が登録名（本条ひなた）だと、条件 (4) で飛ばされる（SPKCHK1 が直しても、fix537 は AI の生の本文を読む）
+         (2) 仮の呼称の語尾の一覧 DESCRIPTIVE_TAIL に「女の子・男の子・女性・男性」が無い
+         (3) namingOf が「ミオだよ。……塾の」のように名乗りの後に台詞が続くと落とす
+       さらに AI が名乗りの台詞にも呼び名の札（見知らぬ女の子）を付け続ける型（ON1「……みお。三田みお。」・ON2「わたし、宮原っていいます」）がある。
+     やること（新ターンの確定時・fix620 の突き合わせと SPKCHK1 の後に 1 回。読むのは確定後の会話カード＝SPKCHK1 が替えた後の札）:
+       A. 呼び名 L（記述的な仮の呼称）の札のカードの中身が、名前 W の名乗りのとき → W の別名に L を足す（その呼び名の人物の台詞として名乗りが確定した）。
+          見るのはこのターンと直前のターンのカードだけ。
+       B. 札が W のカードの中身が W の名乗りのとき → fix537 と同じ規則（直近 3 ターンの記述的な仮の呼称がちょうど 1 つ）で L を決めて足す。
+          語尾の一覧だけ「女の子・男の子・女性・男性」を足した NM1_TAIL を使う。
+       名乗りの判定（A・B 共通）: 一人称＋名前＋（です・だよ・っていいます…）／名前＋（っていいます・と申します…）／名前は〜／
+         名前だけで始まる答え（「……みお。三田みお。」「み、美咲。」）。どれも、W がそのターン（か直前のターン）の地の文に人として出ること
+         （「W は／が／の／も…」「W と名乗った」）を要る。呼びかけ（W ちゃん・W さん）・問い（W？・W だよね）・打ち消し（W じゃない）・
+         他人の名前を伝える文（この子・あの子・だって・らしい・を探して）は名乗りにしない。
+       登録人物は L にも W にもしない。1 つの L につき 1 つの W（もう別名になっている L は足さない）。
+       出力は fix537 と同じ: 台帳 ent.ali.push(L)・hot log v292Dfix537_log・saveQ・normalizeConvWho（fix538 の過去カードの統一に乗る）。
+       新しい保存のキーは 0 本。 */
+  var NM1_TAIL = /(少女|少年|女|男|子供|子ども|娘|息子|影|人影|老人|老婆|青年|婦人|女の子|男の子|女性|男性)$/;   /* DESCRIPTIVE_TAIL＋女の子・男の子・女性・男性（「子」だけの語尾は人名〔景子〕を巻き込むので足さない） */
+  var nm1Last = { turns: 0, wrote: 0, last: 'init', drops: {} };
+  function nm1On(){ try { if (localStorage.getItem('v292DfixNAMING1Off') === '1') return false; return localStorage.getItem('v292DfixNAMING1On') === '1'; } catch(e){ return false; } }
+  function nm1Drop(r){ nm1Last.drops[r] = (nm1Last.drops[r] || 0) + 1; nm1Last.last = r; }
+  function nm1Plain(t){ return String(t || '').replace(/「[^」]*」/g, '。').replace(/『[^』]*』/g, '。'); }
+  function nm1Esc(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function nm1IsLabel(L){ var s = String(L || ''); return !!validName(s) && (NM1_TAIL.test(s) || GENERIC_HUB.test(s)) && !BAD.test(s) && !PLACEHOLDER.test(s); }
+  function nm1NameOk(W, cast){
+    W = String(W || ''); if (!validName(W)) return false;
+    if (NM1_TAIL.test(W) || GENERIC_HUB.test(W) || BAD.test(W)) return false;
+    if (/(ちゃん|さん|くん|君|様|先輩|です|だよ|だけど|って)$/.test(W)) return false;
+    if (/^(?:わたし|あたし|ぼく|おれ|うち|わし|あたい|こっち|そっち|あっち|ここ|そこ|あそこ|はい|いいえ|うん|ええ|ごめん|ありがとう|だめ|まだ|もう)$/.test(W)) return false;   /* 一人称・指示語・相づち */
+    if (cast.indexOf(W) >= 0 || f830AutoMatch(W, cast) || castPartOwner(W)) return false;
+    return true;
+  }
+  /* 本文（地の文）で W が人として出るか */
+  function nm1InNarr(W, plain){ return new RegExp('(?:^|[^ぁ-んァ-ヶー一-龥々])' + nm1Esc(W) + '(?:は|が|の|も|と名乗|と言った|ちゃん|さん)').test(plain) || new RegExp('^' + nm1Esc(W) + '(?:は|が|の|も)').test(plain); }
+  /* 台詞の中身から名乗りの名前の候補を取り出す（地の文に出ることは呼び出し側で確かめる） */
+  function nm1Names(body){
+    var b = String(body || '').replace(/『[^』]*』/g, ''), out = [], m;
+    if (/(この子|あの子|その子|あの人|その人|彼女|彼は|だって|って言って|らしい|を探し|を知って|を見なかった)/.test(b)) return out;   /* 他人の名前を伝える文 */
+    function add(w, why){ w = String(w || '').replace(/^[\s　…‥・、。ー—―]+|[\s　…‥・、。！!]+$/g, ''); if (w && out.every(function(o){ return o.w !== w; })) out.push({ w: w, why: why }); }
+    var NM = '([^\\s　、。！？!?…‥「」『』（）()]{2,8}?)';
+    var re1 = new RegExp('(?:わたし|私|僕|ぼく|俺|おれ|あたし|うち)(?:は|、|の名前は)?[\\s　]*' + NM + '(?:っていいます|って言います|といいます|と申します|っていうの|です|だよ)(?![かね？?])', 'g');
+    while ((m = re1.exec(b))) add(m[1], 'first-person');
+    var re2 = new RegExp('(?:^|[、。…！？!?\\s　])' + NM + '(?:っていいます|って言います|といいます|と申します|っていうの)', 'g');
+    while ((m = re2.exec(b))) add(m[1], 'teiu');
+    var re3 = new RegExp('名前は[\\s　、]*' + NM + '(?:です|だよ|。|、|！)', 'g');
+    while ((m = re3.exec(b))) add(m[1], 'namae-wa');
+    /* 名前だけで始まる答え: 先頭の間投・どもり（1 字＋読点）を外し、最初の区切りまでの語（と、続く 1 区切り） */
+    var lead = b.replace(/^[\s　…‥・、。ー—―]+/, '').replace(/^(?:うん|ええ|はい|あの|えっと)[、。…\s　]+/, '').replace(/^[^、。…\s　]、/, '');
+    var parts = lead.split(/[。、！!…‥\s　]+/).filter(Boolean).slice(0, 2);
+    parts.forEach(function(p){ var q = p.replace(/(?:だよ|です)$/, ''); if (/[？?]$/.test(p) || /(ちゃん|さん|くん|君|様)$/.test(p) || /(じゃな|ではな)/.test(p)) return; if (q.length >= 2 && q.length <= 8 && !/[をにがはでへと]$/.test(q)) add(q, 'name-leading'); });
+    return out.filter(function(o){
+      var i = b.indexOf(o.w), tail = i >= 0 ? b.slice(i + o.w.length, i + o.w.length + 6) : '';
+      if (/^(?:じゃな|ではな|じゃなくて|だよね|ですか|なの[？?]|[？?])/.test(tail)) return false;   /* 打ち消し・問い */
+      if (/^(?:ちゃん|さん|くん|君|様)/.test(tail)) return false;                                 /* 呼びかけ */
+      return true;
+    });
+  }
+  function nm1Link(qs, L, W, turnIdx, why){
+    var ent = qs[W] || { seen: [], ali: [] }; ent.ali = ent.ali || [];
+    if (ent.ali.indexOf(L) >= 0){ nm1Drop('duplicate-edge'); return false; }
+    ent.ali.push(L);
+    var le = qs[L]; if (le && Array.isArray(le.seen)){ ent.seen = ent.seen || []; le.seen.forEach(function(x){ if (ent.seen.indexOf(x) < 0) ent.seen.push(x); }); if ((ent.last || 0) < (le.last || 0)) ent.last = le.last; }
+    if (!Array.isArray(ent.seen)) ent.seen = []; if (ent.seen.indexOf(turnIdx) < 0) ent.seen.push(turnIdx); if ((ent.last || 0) < turnIdx) ent.last = turnIdx;
+    qs[W] = ent; qDirty = true; aliasCache = null;
+    if (hlsOn()){ try { hlsWrite(turnIdx, L, W); } catch(e2h){} } else
+    try { var lg = JSON.parse(localStorage.getItem('v292Dfix537_log') || '[]'); lg.push({ ts: Date.now(), turn: turnIdx, alias: L, canonical: W }); localStorage.setItem('v292Dfix537_log', JSON.stringify(lg.slice(-30))); } catch(e2){}
+    nm1Last.wrote++; nm1Last.last = 'written:' + why;
+    try { console.log(TAG, 'NAMING1: 名乗りで同一性確定:', L, '=', W, '(' + why + ')'); } catch(e3){}
+    return true;
+  }
+  function nm1AliasedTo(qs, L){ var ks = Object.keys(qs); for (var i = 0; i < ks.length; i++){ var a = qs[ks[i]] && qs[ks[i]].ali; if (Array.isArray(a) && a.indexOf(L) >= 0) return ks[i]; } return ''; }
+  function naming1Turn(turn, turnIdx){
+    try {
+      if (!nm1On() || off537() || offQ()) return 0;
+      var S = getS(); if (!S || !Array.isArray(S.turns) || !turn) return 0;
+      if (typeof turnIdx !== 'number' || turnIdx < 0) turnIdx = S.turns.indexOf(turn);
+      if (turnIdx < 0) return 0;
+      nm1Last.turns++;
+      var cast = castNames(), qs = loadQ(), wrote = 0, done = {};
+      var prev = turnIdx > 0 ? S.turns[turnIdx - 1] : null;
+      var plain = nm1Plain(turn.narrative) + '\n' + nm1Plain(prev && prev.narrative);
+      var sets = [{ t: turn, i: turnIdx }]; if (prev) sets.push({ t: prev, i: turnIdx - 1 });
+      sets.forEach(function(st){
+        ((st.t && st.t._convSays) || []).forEach(function(c){
+          if (!c || !c.who) return;
+          var who = String(c.who), cands = nm1Names(c.say);
+          cands.forEach(function(o){
+            var W = o.w;
+            if (!nm1NameOk(W, cast)){ nm1Drop('invalid-or-cast-name'); return; }
+            if (!nm1InNarr(W, plain)){ nm1Drop('name-not-in-narration'); return; }
+            if (who === W){
+              /* B: 札が W（AI の札か SPKCHK1 が替えた後）。fix537 と同じく直近 3 ターンの仮の呼称がちょうど 1 つ */
+              if (done[W]) return;
+              var cands2 = [];
+              Object.keys(qs).forEach(function(L){ if (L === W || cast.indexOf(L) >= 0 || !nm1IsLabel(L)) return; var le = qs[L]; if (!le) return; if (turnIdx - (le.last || 0) > 3) return; if ((le.ali || []).indexOf(W) >= 0) return; if (nm1AliasedTo(qs, L)) return; cands2.push(L); });
+              if (cands2.length !== 1){ nm1Drop(cands2.length ? 'label-ambiguous' : 'no-label'); return; }
+              if (nm1Link(qs, cands2[0], W, turnIdx, 'B-' + o.why)){ wrote++; done[W] = 1; }
+              return;
+            }
+            /* A: 札が呼び名 L のカードで W を名乗った */
+            if (cast.indexOf(who) >= 0){ nm1Drop('card-who-registered'); return; }
+            if (!nm1IsLabel(who)){ nm1Drop('card-who-not-label'); return; }
+            var to = nm1AliasedTo(qs, who); if (to){ nm1Drop(to === W ? 'already' : 'label-already-linked'); return; }
+            if (done[W]){ nm1Drop('one-edge-per-canonical'); return; }
+            if (nm1Link(qs, who, W, turnIdx, 'A-' + o.why)){ wrote++; done[W] = 1; }
+          });
+        });
+      });
+      if (wrote){ try { saveQ(); normalizeConvWho('naming1'); } catch(e4){} }
+      return wrote;
+    } catch(e){ nm1Last.last = 'threw'; return 0; }
+  }
+  try { window.__v292Dfix277Naming1 = { on: nm1On, turn: naming1Turn, names: nm1Names, isLabel: nm1IsLabel, diag: function(){ return JSON.parse(JSON.stringify(nm1Last)); } }; } catch(_nm1){}
+  /* ============ /NAMING1 ============ */
+
   function ptDiag(){ return { version: 'PRENAME_WHO_TRANSITION/v1.4', on: ptOn(), killed: ptKilled(),
                               wrote: ptWrote, last: ptLast, drops: ptDrops.slice(), persistentKeysAdded: 0 }; }
   /* ============ /PRENAME_WHO_TRANSITION ============ */

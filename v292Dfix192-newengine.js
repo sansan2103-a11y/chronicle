@@ -254,15 +254,16 @@
              待つ以外の中身がある値・関係・未解決・【この場面の種】・利用者が設定した人物像は対象外）。 */
         if(dr1 && !isHeroA1(hkA1, n)){ try { if(ho && C2.drive(ho, hero2)) ho=''; if(mo && C2.drive(mo, hero2)) mo=''; } catch(_dr){} }
         function p1(f, lb, v, pose){ var a = (ac1 && (!pose || AGE1_POSE.test(v))) ? age1Of(ac1, n, f, v, s.turn) : 0; if(sev1 && f === 'ka' && C2.sevClass(v, '')) a = 0; if(a >= 2) (old1[a] = old1[a] || []).push(lb+v); else parts.push(lb+v); }
+        var _r1aMo = '目的:', _r1aMi = '未解決:'; try { var _r1a = window.__v292DfixREAD1abc; if (!legacyStore && _r1a && _r1a.aOn() && !isHeroA1(hkA1, n)){ var _r1ar = _r1a.aItems(n, mo, mi, getS()); mo = _r1ar.mo; mi = _r1ar.mi; _r1aMo = _r1ar.moLb; _r1aMi = _r1ar.miLb; } } catch(_r1ae){}   /* ★READ1a（既定 OFF・鍵 v292DfixREAD1aOn・kill v292DfixREAD1aOff）: 目的・未解決に古さの印／直近 2 ターンに同じ問いを出していたら渡さない */
         if(ki && st2On() && st2Generic(ki)) ki='';   /* ★STATE2: 部位も原因も無い「負傷している」等は載せない（保存値はそのまま） */
         if(c930 && ki) parts.push('傷:'+ki);
         if(ka) p1('ka', 'からだ:', ka);
         if(ko) p1('ko', 'こころ:', ko);
         if(ho) p1('ho', '本能:', ho);
-        if(mo) p1('mo', '目的:', mo);
+        if(mo) p1('mo', _r1aMo, mo);
         if(!c930 && ki) parts.push('傷:'+ki);
         if(kn) p1('kn', '関係:', kn, true);
-        if(mi){ if(ac1 && st2On()){ var am = age1Of(ac1, n, 'mi', mi, s.turn); if(am >= 3) (old1[am] = old1[am] || []).push('未解決:'+mi); else parts.push('未解決:'+mi); } else parts.push('未解決:'+mi); }   /* ★STATE2: 3 ターン以上書き直されていない未解決に古さの印 */
+        if(mi){ if(ac1 && st2On()){ var am = age1Of(ac1, n, 'mi', mi, s.turn); if(am >= 3) (old1[am] = old1[am] || []).push(_r1aMi+mi); else parts.push(_r1aMi+mi); } else parts.push(_r1aMi+mi); }   /* ★STATE2: 3 ターン以上書き直されていない未解決に古さの印 */
         Object.keys(old1).map(Number).sort(function(a, b){ return a - b; }).forEach(function(a){ parts.push('（'+a+' ターン前の様子・今も同じとは限らない）'+old1[a].join(' ／ ')); stale1 = true; });
         if(parts.length) lines.push('・'+n+'｜'+parts.join(' ／ '));
         try{ if(npcqOwner192() && !legacyStore && !isHeroA1(hkA1, n) && localStorage.getItem('v292Dfix192LicOff')!=='1' && localStorage.getItem('v292Dfix414Off')!=='1'){ var X414=window.__v292Dfix414x; if(X414 && X414.deriveFor && X414.deriveFor(n,{karada:ka,kokoro:ko,kizu:ki}).length && licN.length<3){ if(!st3On192()) licN.push(n); else if(X414.deriveFor(n,{karada:ka,kokoro:ko,kizu:ki,turn:s.turn}).some(function(c){ return c && c.rank < 6; })) licN.push(n); } } }catch(_l){}   /* ★NPCQ1 ／ ★STATE3 1a: 体の制約（rank<6）がある人だけ除く（心理の制約 rank 6 だけの人は除かない） */
@@ -296,7 +297,8 @@
         if (cur && s.turn!=null && (cur - s.turn) > 3) return; /* 在場=直近に状態が動いたキャラ */
         if (_npg && _npg.out(n, s)) return;   /* ★NPRES */
         var mi=clean223(s.mikaiketsu||s['未解決']), ki=clean223(s.kizu||s['傷']), kn=clean223(s.kankei||s['関係']);
-        if (isHeroA1(hkA1, n)){ mi=''; kn=''; }   /* ★v292DfixA1 r2: 主人公の 未解決・関係 は種にしない（傷は従来どおり） */
+        if (isHeroA1(hkA1, n)){ mi=''; kn=''; }
+        try { var _r1s = window.__v292DfixREAD1abc; if (mi && _r1s && _r1s.aOn() && _r1s.aSeedDrop(n, mi, getS())) mi=''; } catch(_r1se){}   /* ★READ1a: 直近 2 ターンに同じ問いを出した未解決は、この回の種にしない */   /* ★v292DfixA1 r2: 主人公の 未解決・関係 は種にしない（傷は従来どおり） */
         try { var Q1s = window.__v292DfixSTATEQ1; if (Q1s && !Q1s.offPH1()){ if (Q1s.isPlaceholder(mi)) mi=''; if (Q1s.isPlaceholder(ki)) ki=''; if (Q1s.isPlaceholder(kn)) kn=''; } } catch(_q1s){}   /* ★STATEQ1 PH1 */
         if (mi) cands.push({n:n, w:3, t:n+'の未解決「'+mi.slice(0,40)+'」が、今ターンの言動の下に流れている'});
         if (ki && /未治療|重|中/.test(ki)) cands.push({n:n, w:2, t:n+'の傷('+ki.slice(0,30)+')が行動を縛り、周囲の目と空気を変える'});

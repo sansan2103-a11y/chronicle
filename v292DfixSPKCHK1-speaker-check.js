@@ -31,7 +31,7 @@
   var VER = 'spkchk1-20261122-r1';
   var ST = { turns: 0, flipped: 0, kept: {}, errors: 0, guard: 0 };
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
-  function on() { return lsg('v292DfixSPKCHK1Off') !== '1' && lsg('v292DfixSPKCHK1On') === '1'; }
+  function on() { return lsg('v292DfixSPKCHK1Off') !== '1'; }   /* 20261123: 全員 既定 ON（実 AI 10 本で誤った付け替え 0）。止めるのは kill v292DfixSPKCHK1Off='1' */
   function g611() { try { return root.__v292Dfix611 || null; } catch (e) { return null; } }
   function esc(s) { return String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
   function nrm(s) { return String(s == null ? '' : s).replace(/[\s　・]/g, ''); }
