@@ -95,17 +95,25 @@
     return (bn >= 2) ? { fp: best, n: bn } : null;
   }
   // 実例1行: 本人の過去セリフから fp を含む短い断片（指示より実例が声を安定させる）
+  /* ★VOICEEX1（試作・v3・kill v292DfixVOICEEX1Off）: 口調の見本の台詞が、物語の後で古くなる状態の申告（教わる前の「一度も触ったことない」など）を
+     毎ターン sys に送り続け、AI がそれを写していた（selfcopy の rig・実 AI の E2 T12／K2 T15）。見本の選び方だけを変える（文言・置き場所は同じ） */
+  var VX_CLAIM = /一度も|初めて|はじめて|ことな[くいか]|ことがな|知らな|しらな|分から|わから|持ってな|もってな|覚えてな|見たことな|会ったことな|聞いたことな|できな|でき(ませ|ず)|苦手|下手/;
   function exampleFor(name, fp){
-    var out = '';
-    eachSay(function(w, tx){
-      if (out || w !== name) return;
+    var vx = true; try { vx = localStorage.getItem('v292DfixVOICEEX1Off') !== '1'; } catch(eVx){}
+    var out = '', cand = [], S0 = getS(), nT = (S0 && Array.isArray(S0.turns)) ? S0.turns.length : 0;
+    eachSay(function(w, tx, ti){
+      if (w !== name) return;
       if (tx.indexOf(fp) < 0) return;
       var s = tx.replace(/[\n\r「」『』]/g, '').trim();
       var i = s.indexOf(fp);
       s = s.slice(Math.max(0, i), i + 20);
-      if (s.length >= fp.length + 2) out = s;
+      if (s.length >= fp.length + 2){ if (!out) out = s; cand.push({ s: s, ti: ti }); }
     });
-    return out;
+    if (!vx) return out;
+    var ok = cand.filter(function(c){ return !VX_CLAIM.test(c.s); });
+    var old = ok.filter(function(c){ return c.ti < nT - 2; });
+    if (old.length) return old[old.length - 1].s;
+    return ok.length ? ok[0].s : '';
   }
 
   // ---------- A: 声の錨（登録キャラの自動学習・人間入力が勝つ） ----------

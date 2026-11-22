@@ -1245,7 +1245,7 @@
 | 190 | fix372 | `v292Dfix372-gender-radio-guard.js` | i190 | `867ce977` | v292Dfix372 | NPC・キャラ状態 | `v292Dfix372Off` |
 | 191 | fix374 | `v292Dfix374-default-style-guard.js` | i191 | `635abe5a` | 20260901-fix783 | UI・画面 | `v292Dfix374Off` `v292Dfix783Off` |
 | 192 | fix376 | `v292Dfix376-speaker-guard.js` | i192 | `c282fa65` | 20260902-fix800 | 話者・会話ログ | `v292Dfix376Off` `v292Dfix469Off` |
-| 193 | fix377 | `v292Dfix377-voice-anchor.js` | i193 | `442efa8b` | 20261010-gq1 | 話者・会話ログ | `v292Dfix377COff` `v292Dfix377Off` `v292DfixGQ1aOff` `v292DfixGQ1bOff` |
+| 193 | fix377 | `v292Dfix377-voice-anchor.js` | i193 | `a03e15ea` | 20261122-voiceex1 | 話者・会話ログ | `v292Dfix377COff` `v292Dfix377Off` `v292DfixGQ1aOff` `v292DfixGQ1bOff` `v292DfixVOICEEX1Off`（VOICEEX1・11-22＝口調の見本を「いちばん古い台詞」から「状態の申告を除いた、直近 2 ターンより前でいちばん新しい台詞」へ。古い台詞の写しによる矛盾への直し・実 AI は未確認） |
 | 194 | fix378 | `v292Dfix378-species-judge.js` | i194 | `c0e2fa1f` | v292Dfix378 | NPC・キャラ状態 | `v292Dfix378Off` |
 | 195 | fix379 | `v292Dfix379-wrap-keeper.js` | i195 | `a1a9b68e` | 20261122-scene1 | 文章品質・プロンプト | `v292Dfix363Off` `v292Dfix366Off` `v292Dfix376Off` `v292Dfix377Off` |
 | 196 | fix822 | `v292Dfix822-start-rules-block.js` | i196 | `45f8e559` | 20260906-fix822 | 文章品質・プロンプト | `v292Dfix822Off` |
