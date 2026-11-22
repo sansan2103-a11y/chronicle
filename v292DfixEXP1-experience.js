@@ -24,10 +24,10 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261122-r3';
+  var VER = 'exp1-20261122-r5';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
-  var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0 };
+  var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0 };   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
   function cnt(o, k) { o[k] = (o[k] || 0) + 1; }
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return undefined; } }
   function sid() { try { var f = root.__v292Dfix697; var id = f && f.status ? f.status().storyId : null; return id ? String(id) : null; } catch (e) { return null; } }
@@ -48,8 +48,9 @@
   function cleanS(s) { s = String(s == null ? '' : s).replace(/[<>\[\]【】{}]/g, '').replace(/[\r\n\t]+/g, ' ').trim(); return s; }
   /* ---- (1) 指示の文字列 ---- */
   var WI_OLD = '"desc": "1 sentence Japanese: who/what" }';
-  var WI_NEW = '"desc": "1 sentence Japanese: who/what", "exp": [ { "k": "taught|first|learned|failed", "s": "Japanese, 24 chars max: what this character was taught, did for the first time, can now do, or failed at", "t": turn number } ] }';
-  var EXP_RULE = ' For "exp" (character entries only; [] if none): record only what the NEW TURNS text shows — k=taught when the text only shows the character being taught or shown, first when the character did it once successfully for the first time, learned only when the text says the character can now do it, failed when the character could not do it in a situation; never upgrade k beyond what the text says, and never infer an ability the text does not show.';
+  /* ★r4（実 AI 2 本で kept 0: 人物でない項目に exp・ターン番号の範囲外）: 書く場所と形を、形式の説明としてはっきりさせる（禁止文は足さない） */
+  var WI_NEW = '"desc": "1 sentence Japanese: who/what", "exp": [ { "k": "taught|first|learned|failed", "s": "Japanese, 24 chars max: what this character was taught, did for the first time, can now do, or failed at", "t": N of the [Turn N] marker } ] }';
+  var EXP_RULE = ' Format of "exp": it is a field of a character entry (type "character") and lists that character\'s own experiences, so place/object/concept entries have no "exp" field and a character with nothing to record has "exp": []. "t" is the number N written in the [Turn N] marker of the turn where it happens (a plain number). k: taught when the text only shows the character being taught or shown, first when the character did it once successfully for the first time (for example the character succeeds and says できた), learned only when the text says the character can now do it, failed when the character could not do it in a situation. Record only what the NEW TURNS text shows; k is never higher than what the text says, and never infer an ability the text does not show.';
   function prompt(p) {
     if (typeof p !== 'string' || !on()) return p;
     if (p.split(WI_OLD).length !== 2) { cnt(ST.rej, 'PROMPT_MISMATCH'); return p; }
@@ -137,6 +138,95 @@
     }
     return found ? why : 'NOT_IN_TEXT';
   }
+  /* ---- ★r4: ターン番号の数え方のずれと、本人の「できた」 ----
+     ctx.parts（fix135 が渡す・ターンごとの { i, pt, nr, says }）があるときだけ使う。無いとき（前の呼び方）は r3 と同じ。
+     ・t は数か、数の文字列か「T3」「Turn 3」の形を読む。
+     ・各ターンの本文だけで r3 の検査（checkItem）を通す。通ったターンの中から、t（そのまま）→ t−1（1 始まり）→ from＋t → from＋t−1（送った範囲の相対）の順に合うものを選ぶ。
+       どれにも合わなければ、通ったターンが 1 つだけのときそのターンに直す。2 つ以上なら決められないので捨てる（T_AMBIG）。どのターンも通らなければ、r3 の検査の理由で捨てる。
+     ・first だけ、本人の台詞で決める道を足す（selfFirst）: そのターンの会話のタグがその人で、台詞の頭（最初の … 。？ 、 までの部分）が できた・うまくいった・成功 で、
+       打ち消し・言い切らない語（HEDGE）が無く、本文でその台詞の直前か直後の文がその人を主語にしていて、句がそのターンの本文（入力か地の文）にある。 */
+  function parseT(t) { if (typeof t === 'number') return Math.floor(t) === t ? t : NaN; var m = /^\s*(?:T|Turn\s*)?(\d{1,4})\s*$/i.exec(String(t == null ? '' : t)); return m ? +m[1] : NaN; }
+  function partText(p) { return String((p && p.pt) || '') + '\n' + String((p && p.nr) || ''); }
+  function selfFirst(x, p, who) {
+    if (!p || !Array.isArray(p.says)) return false; var f = forms(who); if (!f.length) return false;
+    var s = cleanS(x.s); if (!phraseIn(s, unquote(partText(p)))) return false;
+    var said = p.says.some(function (c) { if (!c || f.indexOf(String(c.who || '')) < 0) return false; var head = String(c.say || '').replace(/^[\s…‥・、。]+/, '').split(/[…‥。？?！!、，,]/)[0];
+      return /^(できた|でき(まし)?た|うまくいった|上手くいった|成功し(た|ました))$/.test(head) && !NEG_RE.test(head) && !HEDGE_RE.test(head); });
+    if (!said) return false;
+    var nr = String(p.nr || ''), re = /「([^「」]*)」/g, m;
+    while ((m = re.exec(nr))) { var q = m[1].replace(/^[\s…‥・、。]+/, '').split(/[…‥。？?！!、，,]/)[0]; if (!/^(できた|でき(まし)?た|うまくいった|上手くいった|成功し(た|ました))$/.test(q)) continue;
+      var before = unquote(nr.slice(0, m.index)).split(/(?<=[。！？!?\n])/).map(function (z) { return z.trim(); }).filter(Boolean).pop() || '';
+      var after = (unquote(nr.slice(m.index + m[0].length)).split(/(?<=[。！？!?\n])/).map(function (z) { return z.trim(); }).filter(Boolean)[0]) || '';
+      if ((ownClause(before, who) != null && !HEDGE_RE.test(before)) || (ownClause(after, who) != null && !HEDGE_RE.test(after))) return true; }
+    return false; }
+  /* ---- ★r5: 実 AI の本文の書き方（主語が「彼女は」・省略）でも、根拠を確かめる ----
+     そのターンの地の文（「」の中は外す）を文ごとに見て、代名詞（彼女・彼）か省略の主語を、次のすべてがそろうときだけ「その人は」に置き換えた本文を作り、
+     その本文で r3 の検査（打ち消し・伝聞・願望・他人が主語・段階の語）をそのまま通す（検査は緩めない）。
+       ・その文より前で、最後に名前で主語になった登録の人物（主人公を含む）がその人（間に別の人物が名前で主語になっていない）
+       ・代名詞の文: 代名詞の性（彼女＝女性・彼＝男性）が、登録の性（fix135 が渡す ctx.gender）と合う（性が分からなければ置き換えない）。そのうえで、
+         すぐ前の文（台詞を除く）の主語がその人か、そのターンの地の文に名前の出る登録の人物が主人公を除いてその人だけで、主人公の性が代名詞と違う
+       ・省略の文（人の主語も「名詞＋が／は」も無い文）: すぐ前の文（台詞を除く）の主語がその人（置き換えた後の主語を含む）
+       ・その人が主人公なら置き換えない（主人公の習得を推しはからない）
+     要約 AI がその人の欄に付けたことは、ここに来る前提（弱い根拠）で、それだけでは通さない。 */
+  var PRON_RE = /^(彼女|彼)(は|が|も)/;
+  function gOf(ctx, nm) { var g = ctx && ctx.gender ? String(ctx.gender[nm] || '') : ''; return /女/.test(g) ? 'F' : (/男/.test(g) ? 'M' : null); }
+  function namedSubj(sent, names) { var best = null, at = -1; names.forEach(function (nm) { var re = subjRe(nm); if (!re) return; var g = new RegExp(re.source, 'g'), m; while ((m = g.exec(sent))) { if (m.index > at) { at = m.index; best = nm; } } }); return best; }
+  function hasOtherSubj(sent) { if (PRON_RE.test(sent)) return true; var re2 = /([一-鿿々ァ-ヶー]{1,6})(さん|ちゃん|くん|君)?(が|は)/g, m; while ((m = re2.exec(sent))) { if (!/^(今日|今|今度|今回|最後|最初|結局|本当|実際|次)$/.test(m[1])) return true; } return false; }   /* 物の主語（糊が・指先が）も別の主語とみる（r3 の NOT_SUBJ_NOUN より狭い除外） */
+  function resolveText(p, who, ctx) {
+    var names = (ctx && ctx._names) || [], hero = ctx && ctx.hero ? String(ctx.hero) : '';
+    if (!names.length || names.indexOf(who) < 0 || (hero && (who === hero || forms(hero).indexOf(who) >= 0))) return null;
+    var nr = unquote(String((p && p.nr) || '')), ss = nr.replace(/<[^>]*>/g, '\n').split(/(?<=[。！？!?\n])/).map(function (z) { return z.trim(); }).filter(Boolean);
+    var npcs = names.filter(function (nm) { return nm !== hero && forms(nm).some(function (f) { return nr.indexOf(f) >= 0; }); });
+    var last = null, prevSubj = null, changed = false, out = [];
+    ss.forEach(function (sent) {
+      if (/^[「『][」』]$/.test(sent)) { out.push(sent); return; }   /* 台詞（中身は外した）: 主語の流れを変えない */
+      var nm = namedSubj(sent, names), w = sent;
+      if (nm) { last = nm; prevSubj = nm; }
+      else if (PRON_RE.test(sent)) {
+        var pg = /^彼女/.test(sent) ? 'F' : 'M', gw = gOf(ctx, who), gh = hero ? gOf(ctx, hero) : null;
+        var ok = last === who && gw === pg && (prevSubj === who || (npcs.length === 1 && npcs[0] === who && gh && gh !== pg));
+        if (ok) { w = sent.replace(PRON_RE, who + '$2'); changed = true; prevSubj = who; } else prevSubj = null;
+      } else if (!hasOtherSubj(sent)) {
+        if (prevSubj === who && last === who) { w = who + 'は' + sent; changed = true; }
+      } else prevSubj = null;
+      out.push(w); });
+    return changed ? out.join('\n') : null;
+  }
+  /* ★r5: 主人公（または登録の人物）が入力の行で「A は B に…教える／教えた」と書いた回は、B が教わった（taught）の根拠にする。
+     入力の行のその節に、打ち消し・言い切らない語が無いこと・句がそのターンの入力か地の文にあること・B の名前がそのターンの地の文に出ることが要る */
+  function inputTaught(x, p, who, ctx) {
+    if (!x || x.k !== 'taught' || !p) return false; var names = (ctx && ctx._names) || [], pt = unquote(String(p.pt || '')); if (!pt) return false;
+    var f = forms(who); if (!f.length) return false; var others = names.filter(function (nm) { return nm !== who; }); if (ctx && ctx.hero && others.indexOf(String(ctx.hero)) < 0 && String(ctx.hero) !== who) others.push(String(ctx.hero)); if (!others.length) return false;
+    var of = []; others.forEach(function (nm) { of = of.concat(forms(nm)); });
+    var re = new RegExp('(^|[、。\\s])(' + of.map(esc).join('|') + ')(さん|ちゃん|くん|君)?(は|が)[、，,]?\\s*(' + f.map(esc).join('|') + ')(さん|ちゃん|くん|君)?に[、，,]?([^。！？!?]{0,40}?)(教え(る|た)|教えて(やる|あげる|くれる|やった|あげた|くれた)|手ほどきす|手ほどきし(た)?)([^。！？!?]*)');
+    var m = re.exec(pt); if (!m) return false;
+    var clause = m[0]; if (HEDGE_RE.test(clause) || RUMOR_RE.test(clause) || /教えな|教えず|教えられな/.test(clause)) return false;
+    if (!f.some(function (z) { return String(p.nr || '').indexOf(z) >= 0; })) return false;
+    return phraseIn(cleanS(x.s), pt + '\n' + unquote(String(p.nr || '')));
+  }
+  function checkLoc(x, ctx, who) {
+    if (!ctx || !Array.isArray(ctx.parts) || !ctx.parts.length) return checkItem(x, ctx, who);
+    if (!x || typeof x !== 'object') return 'NOT_OBJ';
+    var t0 = parseT(x.t); if (x.t != null && x.t !== '' && isNaN(t0)) return 'BAD_T';
+    var pass = {}, n = 0, firstWhy = null, via = {};
+    ctx.parts.forEach(function (p) { var y = {}; for (var k in x) if (Object.prototype.hasOwnProperty.call(x, k)) y[k] = x[k]; y.t = p.i;
+      var r = checkItem(y, { from: p.i, to: p.i, text: partText(p) }, who);
+      if (typeof r === 'string' && x.k === 'first' && (r === 'FIRST_NOT_SAID' || r === 'NOT_SUBJECT' || r === 'NOT_IN_TEXT') && selfFirst(x, p, who)) { r = { k: 'first', s: cleanS(x.s), t: p.i }; via[p.i] = 'self'; }
+      if (typeof r === 'string' && (r === 'NOT_SUBJECT' || r === 'NOT_IN_TEXT' || r === 'NOT_TAUGHT') && x.k !== 'taught') { var rt = resolveText(p, who, ctx);   /* ★r5: 代名詞・省略の主語 */
+        if (rt != null) { var r2 = checkItem(y, { from: p.i, to: p.i, text: String(p.pt || '') + '\n' + rt }, who); if (typeof r2 !== 'string') { r = r2; via[p.i] = 'pron'; } else if (r === 'NOT_SUBJECT' || r === 'NOT_IN_TEXT') r = r2; } }
+      if (typeof r === 'string' && x.k === 'taught' && inputTaught(x, p, who, ctx)) { r = { k: 'taught', s: cleanS(x.s), t: p.i }; via[p.i] = 'input'; }   /* ★r5 */
+      if (typeof r === 'string') { if (!firstWhy || (firstWhy === 'NOT_IN_TEXT' && r !== 'NOT_IN_TEXT')) firstWhy = r; return; }
+      pass[p.i] = r; n++; });
+    if (!n) { var z = {}; for (var kz in x) if (Object.prototype.hasOwnProperty.call(x, kz)) z[kz] = x[kz]; z.t = ctx.from;   /* 理由は r3 の検査（全文・t は範囲の頭に置いて t 以外の理由を見る） */
+      var w = checkItem(z, { from: ctx.from, to: ctx.to, text: ctx.text }, who); return typeof w === 'string' ? (firstWhy && firstWhy !== 'NOT_IN_TEXT' ? firstWhy : w) : 'CROSS_TURN'; }
+    var tries = isNaN(t0) ? [] : [[t0, 'same'], [t0 - 1, 'one_based'], [ctx.from + t0, 'relative'], [ctx.from + t0 - 1, 'relative_one_based']];
+    for (var i = 0; i < tries.length; i++) if (pass[tries[i][0]]) { var c = pass[tries[i][0]]; if (tries[i][1] !== 'same') cnt(ST.tFixed, tries[i][1]); countVia(via[c.t]); return c; }
+    if (n === 1) { var only = pass[Object.keys(pass)[0]]; cnt(ST.tFixed, isNaN(t0) ? 'no_t' : 'by_text'); countVia(via[only.t]); return only; }
+    return 'T_AMBIG';
+  }
+  function countVia(v) { if (v === 'self') ST.selfFirst++; else if (v === 'pron') ST.pron++; else if (v === 'input') ST.inputTaught++; }
+  /* ★r5: 教えた側に付いた taught の句から、教わった側の名前（「B に」）と「を教えた」を外す */
+  function taughtPhrase(s, to) { var f = forms(to), t = cleanS(s); f.forEach(function (z) { t = t.replace(new RegExp('^' + esc(z) + '(さん|ちゃん|くん|君)?に[、，,]?'), ''); }); return t.replace(/(を|の)?(教えた|教える|教えてあげた|教えてやった|手ほどきした|見せた)$/, '').trim(); }
   /* ---- (3) 引き継ぎ（★r2: 段階の優先で入れ替える・同じ話題は 1 件・戻すのは経験を持つ人だけ・30 件の内側） ----
      1 人の枠: 主の枠 3 件（learned > first > taught の順に大事）と、failed の別枠 1 件。
      同じ件: 句が同じ／片方が片方を含む／先頭の漢字の語（話題）が同じ → 重ねない。段階が上がるか同じなら、新しい方の段階とターンに置き換える（下がる知らせは無視）。
@@ -154,25 +244,45 @@
     if (c.k === 'failed' && low && c.t >= low.t) { list.splice(list.indexOf(low), 1, c); ST.swapped++; return; }
     ST.full++;
   }
-  var lastAsked = false;
+  var lastAsked = false, LAST = [];
   function merge(result, prevWI, ctx) {
     var asked = lastAsked; lastAsked = false;
     if (!result || !Array.isArray(result.worldinfo)) return result;
     var live = on();
     if (!live && !asked) return result;   /* 頼んでいない・OFF: 土台と同じ（触らない） */
     var prevBy = {}; (prevWI || []).forEach(function (w) { if (w && w.type === 'character' && w.name && Array.isArray(w.exp)) prevBy[w.name] = w; });
-    var names = {};
+    var names = {}, routed = {}, chars = result.worldinfo.filter(function (w) { return w && typeof w === 'object' && w.type === 'character' && typeof w.name === 'string' && w.name; }).map(function (w) { return w.name; });
+    var diag = { at: Date.now(), from: ctx && ctx.from, to: ctx && ctx.to, items: [] };
+    if (ctx && typeof ctx === 'object') { var cx = {}; for (var kc in ctx) if (Object.prototype.hasOwnProperty.call(ctx, kc)) cx[kc] = ctx[kc]; cx._names = chars.slice(); ctx = cx; }   /* ★r5: 人物の名前（代名詞の読みと入力の行の taught に使う） */
+    /* ★r4: 人物でない項目に付いた exp は、句の主語がこの版の人物の項目のだれか 1 人と確かめられるときだけ、その人の経験として検査に回す（確かめられなければ捨てる） */
+    if (live) result.worldinfo.forEach(function (w) {
+      if (!w || typeof w !== 'object' || w.type === 'character' || w.exp === undefined) return;
+      if (!Array.isArray(w.exp) || !w.exp.length) { ST.emptyNonChar++; return; }
+      w.exp.forEach(function (x) { ST.got++; var hit = [];
+        chars.forEach(function (nm) { var c = checkLoc(x, ctx, nm); if (typeof c !== 'string') hit.push([nm, c]); });
+        var v = hit.length === 1 ? 'ROUTED' : (hit.length ? 'NOT_CHARACTER_AMBIG' : 'NOT_CHARACTER');
+        diag.items.push({ on: String(w.type || '').slice(0, 12), name: String(w.name || '').slice(0, 24), k: x && x.k, s: x && String(x.s || '').slice(0, 30), t: x && x.t, v: v, to: hit.length === 1 ? hit[0][0] : null, ft: hit.length === 1 ? hit[0][1].t : null });
+        if (hit.length !== 1) { cnt(ST.rej, v); return; }
+        ST.routed++; (routed[hit[0][0]] = routed[hit[0][0]] || []).push(hit[0][1]); }); });
     result.worldinfo = result.worldinfo.map(function (w) {
       if (!w || typeof w !== 'object') return w;
       var raw = w.exp, o = {}; for (var k in w) if (Object.prototype.hasOwnProperty.call(w, k) && k !== 'exp') o[k] = w[k];
-      if (w.type !== 'character') { if (raw !== undefined) cnt(ST.rej, 'NOT_CHARACTER'); return o; }
+      if (w.type !== 'character') { if (raw !== undefined && !live) cnt(ST.rej, 'NOT_CHARACTER'); return o; }
       names[w.name] = 1;
       var list = (prevBy[w.name] ? prevBy[w.name].exp : []).filter(function (x) { return x && KINDS[x.k] && typeof x.s === 'string'; }).map(function (x) { return { k: x.k, s: x.s, t: +x.t || 0 }; });
       if (!live) { if (raw !== undefined) cnt(ST.rej, 'OFF_AT_MERGE'); if (list.length) o.exp = list; return o; }   /* ★r2: 頼んだ後に OFF になった回は、受けた exp を保存しない（前の版だけ残す） */
-      (Array.isArray(raw) ? raw : []).forEach(function (x) { ST.got++; var c = checkItem(x, ctx, w.name); if (typeof c === 'string') { cnt(ST.rej, c); return; } addTo(list, c); });
+      (Array.isArray(raw) ? raw : []).forEach(function (x) { ST.got++; var c = checkLoc(x, ctx, w.name);
+        if (typeof c === 'string' && x && x.k === 'taught') {   /* ★r5: 教えた側に付いた taught は、教わった側（ほかの人物 1 人）の経験として検査し直す */
+          var hit = []; chars.forEach(function (nm) { if (nm === w.name) return; var y = {}; for (var ky in x) if (Object.prototype.hasOwnProperty.call(x, ky)) y[ky] = x[ky]; y.s = taughtPhrase(x.s, nm); if (y.s === cleanS(x.s) && !forms(nm).some(function (z) { return cleanS(x.s).indexOf(z) >= 0; })) return; var cc = checkLoc(y, ctx, nm); if (typeof cc !== 'string') hit.push([nm, cc]); });
+          if (hit.length === 1) { ST.taughtTo++; diag.items.push({ on: 'character', name: String(w.name || '').slice(0, 24), k: x.k, s: String(x.s || '').slice(0, 30), t: x.t, v: 'TAUGHT_TO', to: hit[0][0], ft: hit[0][1].t }); (routed[hit[0][0]] = routed[hit[0][0]] || []).push(hit[0][1]); return; } }
+        diag.items.push({ on: 'character', name: String(w.name || '').slice(0, 24), k: x && x.k, s: x && String(x.s || '').slice(0, 30), t: x && x.t, v: typeof c === 'string' ? c : 'KEPT', ft: typeof c === 'string' ? null : c.t });
+        if (typeof c === 'string') { cnt(ST.rej, c); return; } addTo(list, c); });
+      (routed[w.name] || []).forEach(function (c) { addTo(list, c); }); delete routed[w.name];   /* ★r4 */
       if (list.length) o.exp = list;
       return o;
     });
+    if (live) Object.keys(routed).forEach(function (nm) { var e = null; result.worldinfo.forEach(function (w) { if (!e && w && w.type === 'character' && w.name === nm) e = w; }); if (!e) return; var list = Array.isArray(e.exp) ? e.exp : []; routed[nm].forEach(function (c) { addTo(list, c); }); if (list.length) e.exp = list; });   /* ★r5: 後から回した分（並びの前の人物へ） */
+    if (live) { LAST.unshift(diag); if (LAST.length > 4) LAST.length = 4; }   /* ★r4: 診断（このページの間だけ・保存しない） */
     if (live) Object.keys(prevBy).forEach(function (n) { if (!names[n] && result.worldinfo.length < 30) { result.worldinfo.push(prevBy[n]); ST.restored++; } });   /* ★r2: 経験を持つ人だけ・30 件の内側。戻す項目は前の版そのまま */
     return result;
   }
@@ -193,7 +303,7 @@
     if (!lines.length) return '';
     var t = HEAD + lines.join(''); ST.notes++; ST.noteChars += t.length; return t;
   }
-  var api = { VER: VER, on: on, why: why, prompt: prompt, wiLine: wiLine, merge: merge, section: section, checkItem: checkItem, KINDS: KINDS, NOTE_MAX: NOTE_MAX, PER: PER,
+  var api = { VER: VER, on: on, why: why, prompt: prompt, wiLine: wiLine, merge: merge, section: section, checkItem: checkItem, checkLoc: checkLoc, parseT: parseT, last: function () { return JSON.parse(JSON.stringify(LAST)); }, KINDS: KINDS, NOTE_MAX: NOTE_MAX, PER: PER,
     stats: function () { return JSON.parse(JSON.stringify(ST)); } };
   try { Object.defineProperty(root, '__v292DfixEXP1', { value: Object.freeze(api), configurable: false, enumerable: false, writable: false }); } catch (e) { root.__v292DfixEXP1 = api; }
 })(typeof window !== 'undefined' ? window : globalThis);
