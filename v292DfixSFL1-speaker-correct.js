@@ -91,7 +91,8 @@
 
   /* ---------- flag ---------- */
   function lsGet(k) { try { var ls = root.localStorage; return ls ? ls.getItem(k) : null; } catch (e) { return null; } }
-  function enabled() { if (lsGet('v292DfixSFL1Off') === '1') return false; return admfGate(lsGet('v292DfixSFL1On') === '1'); }
+  function enabled() { if (lsGet('v292DfixSFL1Off') === '1') return false; var v = lsGet('v292DfixSFL1On'); return admfGate(v === '1' || (v !== '0' && acct1('sfl1'))); }   /* ★ACCT1 r3: 端末で '0'（明示の OFF）なら Owner でも OFF */
+  function acct1(n){ try { var A = root.__v292DfixACCT1; return !!(A && typeof A.want === 'function' && A.want(n) === true); } catch(e){ return false; } }   /* ★ACCT1 r3: Owner のアカウントなら端末の鍵が無くても PC と同じ */
   function admfGate(dev) { try { var A = root.__v292DfixADMF1; return !!(A && typeof A.gate === 'function' && A.gate('sfl1', dev) === true); } catch (e) { return false; } }   /* ★ADMF-1 r3 (GPT #127-OM): kill が常に勝つ。管理者画面の値（A）／未設定（B）／不明・待ち（C = OFF）を ADMF1 が答える。ADMF1 が無い・読めない・ADMF1Off のときは OFF */
   function edit01On() { try { var E = root.__v292DfixEDIT01; return !!(E && typeof E.enabled === 'function' && E.enabled()); } catch (e) { return false; } }
   function uiEnabled() { return enabled() && edit01On(); }

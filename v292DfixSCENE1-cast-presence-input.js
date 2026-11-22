@@ -31,12 +31,12 @@
 (function (root) {
   'use strict';
   if (root.__v292DfixSCENE1) return;
-  var VER = 'scene1-20261122-r6';
+  var VER = 'scene1-20261122-r7';
   var CONT_TEXT = '続きを自然に進めてください。';
   function ls(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function on() { return ls('v292DfixSCENE1Off') !== '1' && ls('v292DfixSCENE1On') === '1'; }
   function aOn() { return on() && ls('v292DfixSCENE1aOff') !== '1'; }
-  function bOn() { return ls('v292DfixSCENE1Off') !== '1' && ls('v292DfixSCENE1bOff') !== '1' && (ls('v292DfixSCENE1On') === '1' || acct1b()); }
+  function bOn() { return ls('v292DfixSCENE1Off') !== '1' && ls('v292DfixSCENE1bOff') !== '1'; }   /* ★r7（Owner の方針「全員どの機器でも ON」）: b は全員の既定 ON。kill v292DfixSCENE1Off・v292DfixSCENE1bOff が勝つ。a・c は今までどおり v292DfixSCENE1On の端末だけ */
   function acct1b() { try { var A = root.__v292DfixACCT1; return !!(A && typeof A.want === 'function' && A.want('scene1b') === true); } catch (e) { return false; } }   /* ★ACCT1: Owner のアカウントなら b だけ（a・c は端末の鍵のまま）。kill v292DfixACCT1Off / v292DfixACCT1Scene1bOff・出荷までは v292DfixACCT1Scene1bOn の端末だけ */
   function cOn() { return on() && ls('v292DfixSCENE1cOff') !== '1'; }
   function getS() { try { return root.__chronicleGetState ? root.__chronicleGetState('scene1') : (root.S || null); } catch (e) { return null; } }
@@ -201,19 +201,24 @@
      どれも当たらないまま 6 ターンたったら、行を外す（「いない」と言い切らない・前面の人物の扱いは今の判定に戻す）。 */
   var STALE_TURNS = 6;
   var HON = '(?:先輩|せんぱい|さん|くん|君|ちゃん|様|さま|氏|先生)?';
-  var GAPX = '[^。！？!?\\n「」『』\u0001はがも]{0,40}?';
+  var GAPX = '(?:[^。！？!?\\n「」『』\u0001はがも]|[上下曲転繋]が|何も|誰も|一度も|少しも|いつも|もう|もの|もっと){0,40}?';   /* ★r7: 「立ち上がると」の「上が」は主語の「が」ではない */
   /* ★r6（実 AI の再比較 ab2 Q8: 入力「茂は不機嫌そうに店の外へ出ていき、戸が閉まる。」が拾われなかった。真因は 2 つ（実測）:
      ①連用中止形「出ていき、」が動詞の形に無い ②IRREAL の「そうに」が様子の語「不機嫌そうに」に当たり、文ごと退出にしなかった）:
      退出の動詞の連用中止形（読点か文末が続くときだけ）を、入力と本文の両方で今の除外の規則のまま拾う。「そうに」は動詞の形に付いたとき（出ていきそうに）だけ仮定とする。 */
   var RENYO = '(?:(?:へ|に|の方へ)(?:戻り|帰り|引き上げ|引き揚げ)|(?:帰って|戻って|下りて|降りて)(?:行き|いき)|出て(?:行き|いき)|立ち去り|去り|去っていき|退出し|退室し|席を外し|姿を消し|(?:追い出され|追放され|締め出され|放り出され|連れ出され))(?=[、，]|$)';
-  var EXIT_V = '(?:(?:へ|に|の方へ)(?:戻っ|帰っ|引き上げ|引き揚げ)(?!て(?:き|来|く|こ))(?:た|て)|(?:帰って|戻って|下りて|降りて)(?:行っ|いっ)(?:た|て)|出て(?:行っ|いっ)(?:た|て|てしまっ)|(?:部屋|自室|店|家|外|廊下|裏口|玄関|戸口|屋敷|教室|事務所)(?:を|から)出(?:た|て)(?!き|来|い(?:か|け))|立ち去(?:った|って)|去っ(?:た|て)(?!き|来)|去っていっ(?:た|て)|退出し(?:た|て)|退室し(?:た|て)|席を外し(?:た|て)|姿を消し(?:た|て)|(?:追い出され|追放され|締め出され|放り出され|連れ出され)(?:た|て)|' + RENYO + ')';
+  /* ★r7（Owner の補足: 本文の中で部屋を出ていった人。監査 NARR_EXIT_AUDIT: 本文だけの退出 27 のうち r6 が拾えたのは 2）:
+     「（奥・扉の向こう・裏口・二階・外 など）へ消えた／消えていった」「奥へ引っ込んだ」「二階へ上がっていった」とその連用中止形を、入力と本文の両方で拾う（行き先の語が VANISH_DST のときだけ）。
+     足さないもの（誤検知が増える）: 「〜へ歩いていった・向かった・回っていった・下がっていく」「出るところで」・推量・「見送った」。 */
+  var VANISH = '(?:へ|に|の方へ)(?:消えた|消えていった|消えて行った|消えていく|消えて行く|消えていき(?=[、，]|$)|消え(?=[、，]|$)|消えると|消える(?=$|と)|引っ込んだ|引っ込んでいった|引っ込んで行った|引っ込んでいく|引っ込み(?=[、，]|$)|引っ込んでいき(?=[、，]|$)|引っ込む(?=$|と)|上がっていった|上がって行った|上がっていく|上がって行く|上がっていき(?=[、，]|$))';
+  var VANISH_DST = /(?:奥|向こう|裏口|裏|裏手|勝手口|二階|三階|階上|上の階|屋上|外|表|廊下|自室|部屋|寝室|台所|厨房|扉|戸口|ドア|暖簾|暗がり|闇|路地)$/, VANISH_UP = /(?:二階|三階|階上|上の階|屋上|自室|部屋|寝室)$/;
+  var EXIT_V = '(?:(?:へ|に|の方へ)(?:戻っ|帰っ|引き上げ|引き揚げ)(?!て(?:き|来|く|こ))(?:た|て)|(?:帰って|戻って|下りて|降りて)(?:行っ|いっ)(?:た|て)|出て(?:行っ|いっ)(?:た|て|てしまっ)|(?:部屋|自室|店|家|外|廊下|裏口|玄関|戸口|屋敷|教室|事務所)(?:を|から)出(?:た|て)(?!き|来|い(?:か|け))|立ち去(?:った|って)|去っ(?:た|て)(?!き|来)|去っていっ(?:た|て)|退出し(?:た|て)|退室し(?:た|て)|席を外し(?:た|て)|姿を消し(?:た|て)|(?:追い出され|追放され|締め出され|放り出され|連れ出され)(?:た|て)|' + RENYO + '|' + VANISH + ')';
   var OBJ_V = '(?:追い出し|追放し|締め出し|放り出し|押し出し|追い返し|外へ出し|外に出し)(?:た|て|、|$)';
   var INROOM = /(?:席|レジ|机|椅子|カウンター|ソファ|窓辺|窓際|壁際|隅|奥|そば|脇|横|前|後ろ|元の場所|元の位置|定位置|持ち場|作業|仕事|話|本題|手元|視線|顔|調子|笑顔|表情|自分|正気|我|意識)$/;
   /* ★r4（実 AI の比較 42 本で b が一度も働かなかった真因: 退出の検出が AI の本文だけを読み、利用者の DO・STORY 入力に書かれた退出を読んでいなかった）:
      利用者の DO・STORY 入力も、本文と同じ規則（主語がその人だけ・否定／仮定／回想／かっこの中は除く・同じ文と次の文で戻る・留まるなら除く）で読む。
      入力は「戻る・出ていく・立ち去る」のような言い切りの形でも書かれるので、その形を足す。SAY は読まない（台詞の中身は命令や希望であり得る）。
      依頼・希望・意思（〜よう頼む・〜てほしい・〜たい・〜させる 等）は退出にしない。 */
-  var EXIT_V_IN = '(?:(?:へ|に|の方へ)(?:戻る|帰る|引き上げる|引き揚げる)|(?:帰って|戻って|下りて|降りて)(?:行く|いく)|出て(?:行く|いく)|(?:部屋|自室|店|家|外|廊下|裏口|玄関|戸口|屋敷|教室|事務所)(?:を|から)出る|立ち去る|去る|去っていく|退出する|退室する|席を外す|姿を消す|(?:追い出され|追放され|締め出され|放り出され|連れ出され)る|(?:部屋|自室|店|家|外|廊下|裏口|玄関|戸口|屋敷|教室|事務所)(?:を|から)出て(?!き|来|い(?:か|け))(?=[、，]|$)|' + RENYO + ')';   /* ★r6: 入力の「店を出て、」も */
+  var EXIT_V_IN = '(?:(?:へ|に|の方へ)(?:戻る|帰る|引き上げる|引き揚げる)|(?:帰って|戻って|下りて|降りて)(?:行く|いく)|出て(?:行く|いく)|(?:部屋|自室|店|家|外|廊下|裏口|玄関|戸口|屋敷|教室|事務所)(?:を|から)出る|立ち去る|去る|去っていく|退出する|退室する|席を外す|姿を消す|(?:追い出され|追放され|締め出され|放り出され|連れ出され)る|(?:部屋|自室|店|家|外|廊下|裏口|玄関|戸口|屋敷|教室|事務所)(?:を|から)出て(?!き|来|い(?:か|け))(?=[、，]|$)|' + RENYO + '|' + VANISH + ')';   /* ★r6: 入力の「店を出て、」も ★r7: VANISH も */
   var OBJ_V_IN = '(?:追い出す|追放する|締め出す|放り出す|押し出す|追い返す|外へ出す|外に出す)';
   var IRREAL_IN = /よう(?:に)?(?:頼|言|促|告|伝|お願|命じ)|てほしい|て欲しい|てもらう|させる|させて|たい|たがる|ようとする|しようと|かどうか|ないか|[？?]/;
   /* ★r5（レビュー REVIEW_r4「全員 ON の前に要る直し」）:
@@ -230,7 +235,8 @@
   var REMOTE_IN = /呼ぶ|呼び|呼ん|叫|探|捜|電話|メール|手紙|連絡|メッセージ|思い出|思い浮|考え|待つ|待っ|見送|後を追|追いかけ|追って|噂|話題|について|のこと|夢|写真|遠く|窓の外|向こう|上へ|下へ|二階へ|階上へ|階下へ|上に向|下に向|階段の上|階段の下/;
   var SAY_AWAY = /電話|もしもし|どこ(?:に|へ|だ|です|なの|にいる)?|いる[？?の]|いますか|いるか|降りてき|下りてき|戻ってき|来てくれ|来てください|出てき|聞こえ(?:ない|ます|ますか|てない)/;
   var EXCOUNT = {};   /* 退出を確定した (人, ターン) を 1 回だけ数える（メモリだけ・保存しない） */
-  var IRREAL = /かもしれ|だろう|ような|ように|ようと|[きりいちしにびみぎけせてねべめれえげ]そうに|そうだ|ふり|つもり|たら|なら|れば|はず|夢|想像|回想|思い出|電話|画面/;
+  /* ★r7（レビュー REVIEW_r6）: 「〜そうに」を仮定とするのは、退出の動詞の形に付いたとき（出ていきそうに・帰りそうに）だけ。様子の語（寂しそうに・嬉しそうに・不機嫌そうに）は仮定にしない */
+  var IRREAL = /かもしれ|だろう|ような|ように|ようと|(?:出ていき|出て行き|出てき|いき|行き|戻り|帰り|去り|立ち去り|引き上げ|引き揚げ|外し|消し|出)そうに|そうだ|ふり|つもり|たら|なら|れば|はず|夢|想像|回想|思い出|電話|画面/;
   var PAST = /昔|かつて|以前|その頃|あの頃|あの日|あの時|当時|幼い頃|子供の頃|子どもの頃|若い頃|年前|ヶ月前|か月前|カ月前|ことがある|ことがあった|ていた頃|だった頃/;
   var NEG_AFTER = /^[^。、]{0,6}(?:ず|ずに|ない|なかった|ません|まい)/;
   var GROUP = /二人|ふたり|三人|みんな|全員|一緒|共に|ともに|揃って|そろって|連れ立|並んで|一同|皆で/;
@@ -252,14 +258,18 @@
   function heroForms() { try { var S = getS(); var h = S && S.cast && S.cast.hero && S.cast.hero.name; return h ? [str(h).trim(), sp(h)].concat(rawForms(h)) : []; } catch (e) { return []; } }
   function hasAny(sent, fs) { for (var i = 0; i < fs.length; i++) if (fs[i] && sent.indexOf(fs[i]) >= 0) return true; return false; }
   /* sent の中のその人の退出 → { route } | null。next = 次の文（留まる・戻るの確認用。無ければ ''） */
+  function gazeOff(g, hf) {   /* ★r7: 「湊を見てから」「湊のほうをちらりと見て」「湊に会釈して」は主人公を見ただけ（一緒に動いていない） */
+    var s = str(g); (hf || []).forEach(function (h) { if (!h) return; s = s.replace(new RegExp(esc(h) + HON + '(?:のほう|の方|の顔)?(?:を|に)(?:ちらりと|ちらと|じっと|一度|一瞬|軽く|もう一度)?(?:見|一瞥|振り返|会釈|目礼|一礼|頭を下げ)', 'g'), ''); }); return s; }
   function exitIn(sent, forms, next, hero, isInput) {
     if (!sent || IRREAL.test(sent) || PAST.test(sent) || (isInput && (IRREAL_IN.test(sent) || Q_END.test(sent)))) return null;   /* r5: 入力の「〜のか」も疑問 */
     var hf = hero || heroForms(); if (GROUP.test(sent)) return null;   /* 主語がその人物だけ（二人・一緒 等があれば退出にしない） */
     for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (!f || sent.indexOf(f) < 0) continue;
-      var re = new RegExp(esc(f) + HON + '(?:は|が|も)(' + GAPX + ')(' + (isInput ? EXIT_V + '|' + EXIT_V_IN : EXIT_V) + ')'), m = re.exec(sent), hit = null;
-      if (m) { var pre = m.index > 0 ? sent.charAt(m.index - 1) : ''; if (/[とや・]/.test(pre) || KANJI_PRE.test(pre) || hasAny(m[1], hf)) continue;   /* 「湊と灯里は」「灯里は湊と…」は主人公と一緒。r5: 「大茂は」は別の名前 */
-        if (/^(?:へ|に|の方へ)/.test(m[2])) { var dst = /([^、\s]{1,12})$/.exec(str(m[1])); if (!dst || INROOM.test(dst[1])) continue;   /* 「席に戻った」「仕事に戻った」は退出ではない */
-          if (/^(?:へ|に|の方へ)(?:戻|帰)/.test(m[2]) && retDest(m[1]) !== 'exit') continue; }   /* ★r5: 主人公のいる所へ戻る・〜から戻る・分からない は退出にしない */
+      var re = new RegExp(esc(f) + HON + '(?:の背中|の後ろ姿|の姿)?(?:は|が|も)(' + GAPX + ')(' + (isInput ? EXIT_V + '|' + EXIT_V_IN : EXIT_V) + ')'), m = re.exec(sent), hit = null;
+      if (m) { var pre = m.index > 0 ? sent.charAt(m.index - 1) : ''; if (/[とや・]/.test(pre) || KANJI_PRE.test(pre) || hasAny(gazeOff(m[1], hf), hf)) continue;   /* 「湊と灯里は」「灯里は湊と…」は主人公と一緒。r5: 「大茂は」は別の名前 */
+        if (/^(?:へ|に|の方へ)/.test(m[2])) { var dst = /([^、\s]{1,12})$/.exec(str(m[1])); if (!dst || (INROOM.test(dst[1]) && !/^(?:へ|に|の方へ)(?:消え|引っ込|上がって)/.test(m[2]))) continue;   /* r7: 「奥へ消えた」は奥の語でも退出 */   /* 「席に戻った」「仕事に戻った」は退出ではない */
+          if (/^(?:へ|に|の方へ)(?:戻|帰)/.test(m[2]) && retDest(m[1]) !== 'exit') continue;
+          if (/^(?:へ|に|の方へ)(?:消え|引っ込)/.test(m[2]) && !VANISH_DST.test(dst[1])) continue;   /* ★r7: 行き先が出ていく先の語のときだけ（「棚の陰へ引っ込んだ」は外す） */
+          if (/^(?:へ|に|の方へ)上がって/.test(m[2]) && !VANISH_UP.test(dst[1])) continue; }   /* ★r5: 主人公のいる所へ戻る・〜から戻る・分からない は退出にしない */
         hit = { route: route(m[1], m[2]), end: m.index + m[0].length }; }
       else { var o = new RegExp(esc(f) + HON + 'を' + GAPX + (isInput ? '(?:' + OBJ_V + '|' + OBJ_V_IN + ')' : OBJ_V)).exec(sent); if (o && !(o.index > 0 && KANJI_PRE.test(sent.charAt(o.index - 1)))) hit = { route: '', end: o.index + o[0].length }; }
       if (!hit) continue;
@@ -268,6 +278,7 @@
       var tc = tail.replace(/^(?:いく|行く|いった|行った|いこう|しまう|しまった)/, '');
       if (SAY_TAIL.test(tc) || STOP_TAIL.test(tc)) continue;              /* ★r5: 「〜と言う」「〜のを止める」（「出て｜いくのを」の形も） */
       if (BACK.test(tail) || /すぐ/.test(tail)) continue;                  /* 同じ文の中で戻る */
+      { var kt = /[てで](?:き|来)(?:た|て|る)/.exec(tail); if (kt && !/(?:が|は)/.test(tail.slice(0, kt.index))) continue; }   /* ★r7: 同じ文の後ろに「〜てきた」（運んできた・抱えて戻ってきた）があり、間に別の主語が無い＝戻ってきた */
       if (next && hasAny(next, forms) && (BACK.test(next) || STAY.test(next))) continue;   /* 次の文で留まる・戻る */
       if (next && BACK.test(next) && !/(?:ない|なかった)/.test(next) && !/^[^、。]{1,12}?(?:は|が)/.test(next.replace(/^(?:だが|でも|しかし|けれど(?:も)?|けど|ところが|そして|それから|すると|が)、?/, ''))) continue;   /* ★r5: 主語の無い次の文で戻る（「だがすぐに降りてくる」） */
       if (next && /^(?:今は|いまは)?[^。]{0,8}(?:ここに|この場に)(?:いる|居る)/.test(next)) continue;
@@ -308,24 +319,31 @@
   function route(gap, verb) {   /* 本文に書かれた経路だけ。行き先「〜へ戻った」・出口「〜から出た」。無ければ '' */
     var g = str(gap).replace(/^[、\s]+/, ''), v = str(verb);
     var dest = /([^、\s]{1,12})$/.exec(g);
-    if (/^(?:へ|に|の方へ)/.test(v)) { var p = dest ? dest[1].replace(/^.*(?:て|で|、)/, '') : ''; return p ? p + v.replace(/(?:戻り|帰り)$/, function (x) { return x.charAt(0) + 'った'; }).replace(/(?:た|て)$/, 'た').replace(/る$/, 'った').replace(/っった$/, 'った').replace(/^(?:の方へ|に)/, 'へ').replace(/引き上げった$/, '引き上げた').replace(/引き揚げった$/, '引き揚げた') : ''; }
+    if (/^(?:へ|に|の方へ)/.test(v)) { var p = dest ? dest[1].replace(/^.*(?:て|で|、)/, '').replace(/^(?:から|に|小走りに|足早に|静かに)/, '') : ''; return p ? p + v.replace(/(?:消えていき|消えていく|消えて行く|消えると|消える|消え)$/, '消えた').replace(/(?:引っ込み|引っ込んでいき|引っ込んでいく|引っ込む)$/, '引っ込んだ').replace(/(?:上がっていき|上がっていく|上がって行く)$/, '上がっていった').replace(/(?:戻り|帰り)$/, function (x) { return x.charAt(0) + 'った'; }).replace(/(?:た|て)$/, 'た').replace(/る$/, 'った').replace(/っった$/, 'った').replace(/^(?:の方へ|に)/, 'へ').replace(/引き上げった$/, '引き上げた').replace(/引き揚げった$/, '引き揚げた') : ''; }
     var fr = /([^、\s]{1,12})から$/.exec(g); if (fr && /^出て/.test(v)) return fr[1].replace(/^.*(?:て|で)/, '') + 'から出た';
     var ex = /^((?:部屋|自室|店|家|外|廊下|裏口|玄関|戸口|屋敷|教室|事務所)(?:を|から))出/.exec(v); if (ex) return ex[1] + '出た';   /* 入力の「店を出る」も「店を出た」と書く */
     if (fr) return fr[1].replace(/^.*(?:て|で)/, '') + 'から出た';
     return '';
   }
-  function backIn(sent, forms) { if (!sent || /(?:ない|なかった)/.test(sent) || !BACK.test(sent) || NOT_BACK.test(sent)) return false; return hasAny(sent, forms); }
+  function backIn(sent, forms) { if (!sent || /(?:ない|なかった|ではなく|でなく|じゃなく)/.test(sent) || !BACK.test(sent) || NOT_BACK.test(sent)) return false; return hasAny(sent, forms); }
   /* その人が主語で、この場で動作している（移動・退出・声だけ・話題・回想でない） */
   function actsHere(sent, forms) {
-    if (!sent || IRREAL.test(sent) || PAST.test(sent) || REMOTE.test(sent) || /(?:ない|なかった|ず[、。]|ずに)/.test(sent)) return false;
+    if (!sent || IRREAL.test(sent) || PAST.test(sent) || REMOTE.test(sent) || /(?:ない|なかった|ず[、。]|ずに|ではなく|でなく|じゃなく)/.test(sent)) return false;   /* ★r7: 「茂ではなく、配達の…」で戻さない */
     for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (!f) continue; var m = new RegExp(esc(f) + HON + '(?:は|が|も)').exec(sent); if (!m) continue;
       var rest = sent.slice(m.index + m[0].length); if (MOVE_OUT.test(rest) && !BACK.test(rest)) continue;
-      if (/が$/.test(m[0]) && (/^[^、]{1,20}?(?:た|る|ている|ていた)[^、。]{0,12}?は/.test(rest) || /^[^、]{1,20}?(?:た|る|ている|ていた)(?:理由|わけ|訳|こと|事|の(?:は|が|を|か)|ところ|所|時|とき|後|あと|跡|ため|せい)/.test(rest))) continue;   /* ★r6: 「茂が席を立った理由を…」も連体の節（ab2 Q8_B2 T3） */   /* ★r4: 「灯里が閉めた二階の扉は…」＝名前は連体の節の主語（場で動いているとは言えない） */
+      if (/が$/.test(m[0]) && (/^[^、]{1,20}?(?:た|る|ている|ていた)[^、。]{0,12}?は/.test(rest) || /^[^、]{1,20}?(?:た|る|ている|ていた)(?:理由|わけ|訳|こと|事|の(?:は|が|を|か)|ところ|所|時|とき|後|あと|跡|ため|せい)/.test(rest) || /^[^、]{1,20}?(?:た|る|ている|ていた)[一-鿿ァ-ヶ]{1,4}(?:が|を|は|に|の|も)/.test(rest))) continue;   /* ★r7: 「茂が置いていった湯呑みが…」も連体の節 */   /* ★r6: 「茂が席を立った理由を…」も連体の節（ab2 Q8_B2 T3） */   /* ★r4: 「灯里が閉めた二階の扉は…」＝名前は連体の節の主語（場で動いているとは言えない） */
       return true; }
     return false;
   }
   function withHero(sent, forms, hf) { if (!sent || !hasAny(sent, hf) || !hasAny(sent, forms)) return false; for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (f && new RegExp('(?:と|、)' + esc(f) + HON + '(?:は|が|も)|' + esc(f) + HON + '(?:と|、)').test(sent)) return true; } return /一緒|共に|ともに|二人|ふたり|揃って|並んで/.test(sent); }
   function formsOf(name) { var n = str(name).trim(), f = [n], s = sp(n); if (s && s !== n) f.push(s); return f; }
+  function exitForms(n, S) {   /* ★r7: 退出は登録名そのまま＋「姓 名」（空白で分かれる）か 4 字の名の後ろ 2 字で、他の人物・主人公の呼び名と重ならない形（「氷室灯里」の「灯里」） */
+    var f = formsOf(n), k = str(n).trim(), parts = k.split(/[\s　・]+/).filter(Boolean), cand = [];
+    if (parts.length === 2) cand = parts.filter(function (p) { return p.length >= 2; }); else if (k.length === 4 && parts.length === 1) cand = [k.slice(2)];
+    if (!cand.length) return f;
+    var others = []; try { npcNames(S).forEach(function (m) { if (m !== k) others = others.concat(rawForms(m)); }); var h = S.cast && S.cast.hero && S.cast.hero.name; if (h) others = others.concat(rawForms(h)); } catch (e) {}
+    cand.forEach(function (c) { if (f.indexOf(c) < 0 && others.every(function (o) { return o.indexOf(c) < 0 && c.indexOf(o) < 0; })) f.push(c); });
+    return f; }
   function npcNames(S) { var out = []; try { var r = root.__v292Dfix95Roster, L = Array.isArray(r) && r.length ? r : (S.cast.npcs || []); L.forEach(function (n) { if (n && n.name) out.push(str(n.name).trim()); }); } catch (e) {} return out; }
   var HERO_MOVE = /(?:を出て|を出る|を出た|へ向か|に向か|へ行く|へ行っ|に行く|に行っ|へ移|に移|へ入る|へ入っ|に入る|に入っ|へ戻る|へ戻っ|に戻る|に戻っ|へ帰る|へ帰っ|に帰る|に帰っ|へ下り|へ降り|へ上が)/;
   function heroMovedAt(S, t) {
@@ -355,7 +373,7 @@
       S = S || getS(); if (!S || !Array.isArray(S.turns)) return out;
       var hf = heroForms(), L = S.turns.length, hp = heroPlaceSeq(S), cin0 = curInput(S); HP = heroPlaceNow(S, cin0);
       npcNames(S).forEach(function (n) {
-        var fs = formsOf(n), fb = fs.concat(rawForms(n)), st = null;   /* 退出は登録名そのまま（確かな側）・戻りは姓・名の形でも（戻す側） */
+        var fs = exitForms(n, S), fb = fs.concat(rawForms(n)), st = null;   /* 退出は登録名そのまま（確かな側）・戻りは姓・名の形でも（戻す側） */
         var TT = S.turns.slice(), cin = curInput(S); if (cin) TT.push(cin);   /* ★r4: 組み立て中の入力も 1 つのターンとして読む（その回の送信から効く） */
         for (var i = 0; i < TT.length; i++) { var t = TT[i] || {}, ty = str(t.inputType).toUpperCase(), tn = i + 1;
           if (st && tn > st.turn) {
@@ -372,11 +390,11 @@
               if (st && tn > st.turn && actsHere(ins[q], fb)) { st = null; ST.bBacks++; ST.bBackWhy.input++; } } }
           var ss = sents(plain(t.narrative));
           for (var j = 0; j < ss.length; j++) {
-            var x = exitIn(ss[j], fs, ss[j + 1] || '', hf); if (x) { st = { turn: tn, route: x.route }; noteExit(n, tn, 'narr'); continue; }
+            var x = exitIn(ss[j], fs, ss[j + 1] || '', hf); if (x) { if (!(st && st.src === 'input' && st.turn === tn)) st = { turn: tn, route: x.route, j: j }; noteExit(n, tn, 'narr'); continue; }   /* ★r7: 同じ回の入力の退出の言い直しは、入力の退出のまま（同じ回の取り消しは本文の退出だけ） */
             if (!st) continue;
             if (backIn(ss[j], fb)) { st = null; ST.bBacks++; ST.bBackWhy.back++; }
             else if (withHero(ss[j], fb, hf)) { st = null; ST.bBacks++; ST.bBackWhy.withHero++; }
-            else if (tn > st.turn && actsHere(ss[j], fb)) { st = null; ST.bBacks++; ST.bBackWhy.acts++; } }
+            else if ((tn > st.turn || (st.j !== undefined && st.turn === tn && j > st.j)) && actsHere(ss[j], fb)) { st = null; ST.bBacks++; ST.bBackWhy.acts++; } }   /* ★r7: 本文の退出は、同じ回のその後の文でその人が主語で動けば取り消す（使いに行って同じ回に戻る型） */
         }
         if (st && TT.length - st.turn >= STALE_TURNS) { st = null; ST.bStale++; }   /* 6 ターン何も分からない → 言い切らずに外す */
         if (st) out[n] = st;

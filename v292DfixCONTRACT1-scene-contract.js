@@ -25,7 +25,8 @@
   var TAG = '[v292DfixCONTRACT1]', VER = 'contract1-20261116-r2';
   function r2on(){ return ls('v292DfixCONTRACT1R2Off') !== '1'; }   /* ★r2（GPT #127-UR）: '1' で r1 と同じ規則に戻す。毎回評価 */
   function ls(k){ try { return G.localStorage.getItem(k); } catch(e){ return '__ERR__'; } }
-  function on(){ var o = ls('v292DfixCONTRACT1Off'); if (o === '__ERR__' || o === '1') return false; return ls('v292DfixCONTRACT1On') === '1'; }
+  function on(){ var o = ls('v292DfixCONTRACT1Off'); if (o === '__ERR__' || o === '1') return false; return ls('v292DfixCONTRACT1On') === '1' || acct1('contract1'); }
+  function acct1(n){ try { var A = G.__v292DfixACCT1; return !!(A && typeof A.want === 'function' && A.want(n) === true); } catch(e){ return false; } }   /* ★ACCT1 r3: Owner のアカウントなら端末の鍵が無くても PC と同じ */
 
   var RULE = 'sceneContract は、直前の会話の順番と、設定で確定した事実の控え。食い違わせないためだけに使い、本文や台詞に写さない。';
   var MAXQ = 30, MAXLINE = 90, MAXITEMS = 6, MAXCHARS = 320;

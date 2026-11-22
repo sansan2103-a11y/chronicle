@@ -84,7 +84,9 @@
      置き換え: 正式な絵（控えの絵・登録後の絵）が来れば pictureFor が別の state を返すので、次の sweep でそのまま正式な絵になる（仮は常にいちばん弱い）。
      生成・通信・保存はしない（data: の SVG を端末のメモリで作るだけ）。 */
   var tmpCache = {}, tmpStats = { shown: 0, skipGeneric: 0, skipCast: 0, replaced: 0 };
-  function tmpOn(){ return lsg('v292DfixTMPICON1Off') !== '1' && lsg('v292DfixTMPICON1On') === '1'; }
+  var tmpOn0A = tmpOn; tmpOn = function(){ return lsg('v292DfixTMPICON1Off') !== '1' && (TMP_DEFAULT_ON_A || tmpOn0A()); }; var TMP_DEFAULT_ON_A = true;   /* ★ALLON-A: 全員の既定 ON（kill v292DfixTMPICON1Off が勝つ） */
+  function tmpOn(){ return lsg('v292DfixTMPICON1Off') !== '1' && (lsg('v292DfixTMPICON1On') === '1' || acct1('tmpicon1')); }
+  function acct1(n){ try { var A = window.__v292DfixACCT1; return !!(A && typeof A.want === 'function' && A.want(n) === true); } catch(e){ return false; } }   /* ★ACCT1 r3: Owner のアカウントなら端末の鍵が無くても PC と同じ */
   var TMP_GEN = /^([?？\s]+|謎の(人物|声|存在|影)|正体不明.*|誰か|何者か|何か|人影|人の(影|形)|不明(の.*)?|名も無き.*|彼|彼女|それ|あれ|これ|自分|私|僕|俺|あなた|君|お前|奴|やつ|(異形|化け?物|怪物|怪異|妖怪|亡霊|幽鬼|得体の知れない|人ならぬ).*)$/;
   function tmpGeneric(label){ var k = key(label); if (!k) return true; try { var g = window.__v292Dfix487; if (g && typeof g.isGeneric === 'function' && g.isGeneric(k)) return true; } catch(e){} if (TMP_GEN.test(k)) return true; if (/）\s*$/.test(k) && /(未確認|正体不明)/.test(k)) return true; return false; }
   function tmpIsCast(m, label){ var k = key(label); if (!k) return true; for (var i = 0; i < m.ents.length; i++){ var n = m.ents[i].name; if (n && (k === n || k.indexOf(n) === 0)) return true; } return false; }

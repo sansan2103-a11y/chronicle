@@ -20,7 +20,9 @@
   if (!root || root.__v292DfixHEROACT1) return;
   var VER = 'heroact1-20261116-a', LOGK = 'v292DfixHEROACT1Log_v1', LOG_MAX = 200;
   function ls(k){ try { return root.localStorage ? root.localStorage.getItem(k) : null; } catch(e){ return null; } }
-  function on(){ return ls('v292DfixHEROACT1Off') !== '1' && ls('v292DfixHEROACT1On') === '1'; }
+  var on0A = on; on = function(){ return ls('v292DfixHEROACT1Off') !== '1' && (DEFAULT_ON_A || on0A()); }; var DEFAULT_ON_A = true;   /* ★ALLON-A: 全員の既定 ON（kill v292DfixHEROACT1Off が勝つ） */
+  function on(){ return ls('v292DfixHEROACT1Off') !== '1' && (ls('v292DfixHEROACT1On') === '1' || acct1('heroact1')); }
+  function acct1(n){ try { var A = root.__v292DfixACCT1; return !!(A && typeof A.want === 'function' && A.want(n) === true); } catch(e){ return false; } }   /* ★ACCT1 r3: Owner のアカウントなら端末の鍵が無くても PC と同じ */
   function str(v){ return v == null ? '' : String(v); }
   function ns(s){ return str(s).replace(/[\s　]/g, ''); }
   function core(s){ return ns(s).replace(/[「」『』。、，,.！？!?…‥・ー〜~―—\-]/g, ''); }
