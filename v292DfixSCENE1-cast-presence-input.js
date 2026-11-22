@@ -134,11 +134,11 @@
     return s;
   }
   /* { appeared: {name:1}, list: [npc...] } または null（判定できない＝呼ぶ側は今のまま） */
-  function appearance(S) {
+  function appearance(S, curText) {   /* ★UNSEEN1: curText＝今回の入力（SCENE1 が OFF で CUR が無いときだけ使う） */
     try {
       S = S || getS(); if (!S || !S.cast || !Array.isArray(S.turns)) { ST.aUnknown++; return null; }
       var roster = root.__v292Dfix95Roster; var npcs = Array.isArray(roster) && roster.length ? roster : (Array.isArray(S.cast.npcs) ? S.cast.npcs : []);
-      var sc = S.scene || {}, ctx = [str(sc.startCondition), str(sc.startRules), str(sc.lore), str(sc.obj), str(sc.loc), CUR ? CUR.t : ''].join('\n'), whos = {};
+      var sc = S.scene || {}, ctx = [str(sc.startCondition), str(sc.startRules), str(sc.lore), str(sc.obj), str(sc.loc), CUR ? CUR.t : str(curText)].join('\n'), whos = {};
       for (var i = 0; i < S.turns.length; i++) { var t = S.turns[i]; ctx += '\n' + turnText(t); if (t && Array.isArray(t._convSays)) t._convSays.forEach(function (c) { if (c && c.who) { whos[str(c.who).trim()] = 1; whos[sp(c.who)] = 1; } }); }
       var ap = {};
       npcs.forEach(function (n) { if (!n || !n.name) return; var nm = str(n.name).trim(); var why = n.appeared === true ? 'mark' : maybeAppeared(nm, ctx, whos); if (why) { ap[nm] = 1; if (why === 'part' || why === 'who') ST.aMaybe++; } });

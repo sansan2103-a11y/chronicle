@@ -21,7 +21,7 @@
   if (!root || root.__v292DfixMEMSPK1) return;
   var VER = 'memspk1-20261123-r2', ST = { turns: 0, tagged: 0, skipped: 0, notFound: 0, added: 0, why: {} };
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
-  function on() { return lsg('v292DfixMEMSPK1Off') !== '1' && lsg('v292DfixMEMSPK1On') === '1'; }
+  function on() { return lsg('v292DfixMEMSPK1Off') !== '1'; }   /* 20261123: 既定 ON（長期記憶が ON の人だけ働く。実 AI 9 本: 害なし・誤った話し手の固定 OFF 1 → 0）。区別の 1 句（FactOn）は既定 OFF のまま。止めるのは kill v292DfixMEMSPK1Off='1' */
   var NO = /^(?:\?+|？+|不明な声|不明|群衆)$/;
   var FACT_LINE = 'Dialogue lines are what the speaker claims, not confirmed facts: write a claim found only in dialogue as 「AはXと言った」, and record as fact only what the narration shows.\n\n';
   function factOn() { return lsg('v292DfixMEMSPK1Off') !== '1' && lsg('v292DfixMEMSPK1FactOn') === '1'; }

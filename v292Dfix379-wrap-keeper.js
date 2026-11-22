@@ -42,6 +42,7 @@
   function genderBlock(){
     try {
       var S = getS(); if (!S || !S.cast) return '';
+      try { var U1 = window.__v292DfixUNSEEN1; var u1 = (U1 && typeof U1.attrBlock === 'function') ? U1.attrBlock(S) : null; if (typeof u1 === 'string') return u1; } catch(eU1){}   /* ★UNSEEN1（既定 OFF）: 未登場の登録人物を見出し 1 つの後ろに分ける（OFF は null） */
       try { var Z1 = window.__v292DfixSCENE1; var z1 = (Z1 && typeof Z1.attrBlock === 'function') ? Z1.attrBlock(S) : null; if (typeof z1 === 'string') return z1; } catch(eZ1){}   /* ★SCENE1 a: 未登場の登録 NPC を後ろに分ける（OFF は null） */
       var parts = [];
       var h = S.cast.hero;

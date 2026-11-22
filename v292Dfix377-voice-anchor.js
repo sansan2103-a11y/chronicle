@@ -312,6 +312,7 @@
   function buildBlock(){
     var S = getS(); if (!S || !S.cast) return '';
     var lines = [];
+    var _U1 = window.__v292DfixUNSEEN1, _u1 = null, _u1L = []; try { _u1 = (_U1 && typeof _U1.voiceSplit === 'function') ? _U1.voiceSplit(S) : null; } catch(eU1){}   /* ★UNSEEN1（既定 OFF）: 未登場の登録人物は例文を付けず後ろへ */
     var all = [{ p: S.cast.hero, hero: true }];
     (S.cast.npcs || []).forEach(function(n){ all.push({ p: n }); });
     all.forEach(function(o){
@@ -327,6 +328,7 @@
         } else {
           body = '一人称「' + fp + '」' + (v.style ? ('・' + v.style) : '');
         }
+        if (_u1 && !o.hero && _u1[String(p.name).trim()]){ _u1L.push(name + (fp ? '=一人称「' + fp + '」' : '')); return; }   /* ★UNSEEN1 */
         var line = name + '=' + body;
         var noEx = false; try { noEx = localStorage.getItem('v292DfixVOICEEX1NoExOn') === '1'; } catch(eNx){}   /* ★VOICEEX1 C（比較用・既定 OFF）: 例文を付けない（一人称と登録の口調の設定だけ） */
         if (fp && !noEx){
@@ -334,6 +336,7 @@
           line += ' 例:「' + (ex || (fp + 'は…')) + '」';
         }
         lines.push(line);
+      } else if (_u1 && !o.hero && _u1[String(p.name).trim()]){ _u1L.push(name);   /* ★UNSEEN1 */
       } else if (g === '女性'){
         lines.push(name + '=一人称は女性のもの(私/あたし等)で固定。「俺」「僕」は使わない');
       } else if (g === '男性'){
@@ -375,6 +378,7 @@
     }
     if (!lines.length) return '';
     var block = '\n【口調】' + lines.join('、') + '。各人の一人称と話し方は毎ターンこれに従い、地の文の代名詞も一致させる。';
+    try { if (_u1L.length && _U1 && typeof _U1.voiceTail === 'function') block += _U1.voiceTail(_u1L); } catch(eU1t){}   /* ★UNSEEN1 */
     return (block.length > 600) ? (block.slice(0, 597) + '…。') : block;
   }
 

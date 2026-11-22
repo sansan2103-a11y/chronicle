@@ -23,7 +23,7 @@
   if (!root || root.__v292DfixPLACE2) return;
   var VER = 'place2-20261123-r1', ST = { inFixed: 0, inDropped: 0, inHero: 0, narrHero: 0, narrSkipInput: 0, narrNoPlace: 0 };
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
-  function on() { return lsg('v292DfixPLACE2Off') !== '1' && lsg('v292DfixPLACE2On') === '1'; }
+  function on() { return lsg('v292DfixPLACE2Off') !== '1'; }   /* 20261123: 全員 既定 ON（実 AI 18 本: 同行の人を誤って「いない」にする誤り OFF 6 ターン → ON 0・誤って場所を動かした 0）。止めるのは kill v292DfixPLACE2Off='1' */
   function str(v) { return String(v == null ? '' : v); }
   function P1() { try { return root.__v292DfixPLACE1 || null; } catch (e) { return null; } }
   function Z1() { try { return root.__v292DfixSCENE1 || null; } catch (e) { return null; } }

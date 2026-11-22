@@ -271,7 +271,7 @@
     }
     var t = '\n【話者】\n'
       + '・<say>/<react>/<state> の who は、登録キャラなら登録名の表記そのまま（空白も含めて）書く'
-      + (function(){ try { var Z1 = window.__v292DfixSCENE1, z1 = (Z1 && typeof Z1.speakerList === 'function' && cast.length) ? Z1.speakerList(cast) : null; if (typeof z1 === 'string') return z1; } catch(eZ1){} return cast.length ? '：' + cast.join('／') : ''; })() + '。\n'   /* ★SCENE1 a */
+      + (function(){ try { var U1 = window.__v292DfixUNSEEN1, u1 = (U1 && typeof U1.speakerList === 'function' && cast.length) ? U1.speakerList(cast) : null; if (typeof u1 === 'string') return u1; } catch(eU1){} try { var Z1 = window.__v292DfixSCENE1, z1 = (Z1 && typeof Z1.speakerList === 'function' && cast.length) ? Z1.speakerList(cast) : null; if (typeof z1 === 'string') return z1; } catch(eZ1){} return cast.length ? '：' + cast.join('／') : ''; })() + '。\n'   /* ★SCENE1 a */
       + '・登録キャラを「女」「男」「老人」「民俗学者」などの役割名・属性名や、名字だけ・空白を抜いた表記で who に書かない（地の文でそう呼ぶのは自由）。\n'
       + '・主人公が話しかけた直後の返答は、返答した本人の<say>で書く（主人公のタグに入れない）。\n';
     var rm = roleMap();

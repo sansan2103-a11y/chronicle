@@ -356,7 +356,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261123-memspk1b';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261123-unseen1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4568,7 +4568,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixMEMSTATE1-longmem-state.js?cb=20261122-memstate1"></script>
 <!-- ★MEMFIX1（既定 ON・kill v292DfixMEMFIX1Off）: 長期記憶の作り直しが止まり続ける穴（途中で切れた応答・やり直しの上限・summary の長さ） -->
 <script src="v292DfixMEMFIX1-longmem-robust.js?cb=20261122-memfix1r2"></script>
-<script src="v292DfixMEMSPK1-memory-speaker.js?cb=20261123-memspk1"></script><!-- ★MEMSPK1（既定 OFF・鍵 v292DfixMEMSPK1On・kill v292DfixMEMSPK1Off）: 要約 AI へ渡す台詞に話し手の札 -->
+<script src="v292DfixMEMSPK1-memory-speaker.js?cb=20261123-unseen1"></script><!-- ★MEMSPK1（既定 OFF・鍵 v292DfixMEMSPK1On・kill v292DfixMEMSPK1Off）: 要約 AI へ渡す台詞に話し手の札 -->
 <script src="v292Dfix135-longmem.js?cb=20261123-memspk1"></script>
 <script src="v292DfixMEM2-longmem-wire.js?cb=20261122-allonmem"></script>
 <script src="v292Dfix138-continue.js?cb=20260929-ac18"></script>
@@ -4629,7 +4629,8 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
   <script src="v292Dfix796-memory-retrieve.js?cb=20261021-bundle38-b"></script>
   <script src="v292Dfix192-newengine.js?cb=20261123-read1abc"></script>
-  <script src="v292DfixSCENE1-cast-presence-input.js?cb=20261123-place2"></script><!-- ★SCENE1（GPT #127-WN 優先2・既定 OFF）: 未登場の登録 NPC を既出から分ける・退出の判定・入力の種類。ON v292DfixSCENE1On=1・kill v292DfixSCENE1Off=1 -->
+  <script src="v292DfixSCENE1-cast-presence-input.js?cb=20261123-unseen1"></script><!-- ★SCENE1（GPT #127-WN 優先2・既定 OFF）: 未登場の登録 NPC を既出から分ける・退出の判定・入力の種類。ON v292DfixSCENE1On=1・kill v292DfixSCENE1Off=1 -->
+  <script src="v292DfixUNSEEN1-unseen-cast.js?cb=20261123-unseen1"></script><!-- ★UNSEEN1（既定 OFF・鍵 v292DfixUNSEEN1On・kill v292DfixUNSEEN1Off）: 未登場の登録人物を【キャラ属性】【口調】【話者】で場にいる人と分ける -->
   <script src="v292DfixAGENCY1-player-intent.js?cb=20261110-agency1c"></script><!-- ★AGENCY1 (GPT #127-RS ②): SAY/DO の入力説明の行に「入力されていない主人公の意図・発話内容を確定しない」1 文（fix192 が呼ぶ）。既定は影（足さない）。ON = 管理者画面の鍵 agency1 または localStorage v292DfixAGENCY1On=1。Vault は足さない。kill: localStorage v292DfixAGENCY1Off=1 -->
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
        無ければ正方形アバターをDiceBearに差替。img描画後スイープ方式で全箇所一括対応。 -->
@@ -4752,9 +4753,9 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix372-gender-radio-guard.js?cb=v292Dfix372"></script>
 <script src="v292Dfix374-default-style-guard.js?cb=20260901-fix783"></script>
 <script src="v292Dfix376-speaker-guard.js?cb=20260902-fix800"></script>
-<script src="v292Dfix377-voice-anchor.js?cb=20261122-voiceex1c"></script>
+<script src="v292Dfix377-voice-anchor.js?cb=20261123-unseen1"></script>
 <script src="v292Dfix378-species-judge.js?cb=v292Dfix378"></script>
-<script src="v292Dfix379-wrap-keeper.js?cb=20261122-scene1"></script>
+<script src="v292Dfix379-wrap-keeper.js?cb=20261123-unseen1"></script>
 <!-- v292Dfix822: START_RULES_V1（GPT 裁定 2026-09-06(20)(21)）。keeper prio1 で【開始ルール】(毎turn)・【開始時の状況】(T0のみ) を
      S.scene.startRules / S.scene.startCondition から注入。両 field を持つ Story が無ければ sys は 1 バイトも変わらない（dormant）。
      MARKER_SAFE render / fix444 の law 意味論は不使用 / S.scene への書込 0。kill = v292Dfix822Off='1'。 -->
@@ -4816,7 +4817,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix453-src-coalesce.js?cb=v292Dfix453"></script>
 <script src="v292Dfix454-dash.js?cb=v292Dfix457"></script>
 <script src="v292Dfix458-dash-post.js?cb=20260901-fix784"></script>
-<script src="v292Dfix459-sys-v2.js?cb=20261123-nameown1"></script>
+<script src="v292Dfix459-sys-v2.js?cb=20261123-unseen1"></script>
 <script src="v292Dfix462-bare-speaker.js?cb=20260829-fix748"></script>
 <script src="v292Dfix463-human-guard.js?cb=v292Dfix463"></script>
 <script src="v292Dfix464-say-promote.js?cb=v292Dfix465"></script>
@@ -5029,7 +5030,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixLEAK1-nonstory-lines.js?cb=20261117-leak3r3"></script><script src="v292DfixLEAK3-internal-lines.js?cb=20261117-leak3r3"></script><!-- ★LEAK3 (GPT #127-VV ■4・既定 OFF): sys 見出しの復唱・内部 JSON の断片の行だけを取り除く（On=v292DfixLEAK3On='1'・kill=v292DfixLEAK3Off='1'）。既定は数えるだけ。--><script src="v292DfixHEROACT1-hero-act-shadow.js?cb=20261122-acct1r3-allona"></script><!-- ★HEROACT1（GPT #127-VB 2(1)・shadow・既定 OFF・On v292DfixHEROACT1On=1・kill v292DfixHEROACT1Off=1）: 入力に無い主人公の発話・行動を数えるだけ（書き換えない・sys 0 字・件数だけ記録） --><!-- ★LEAK1 (laneLEAK1・GPT #127-SW 2): 本文に混ざる物語でない行の検査。影は常時（件数だけ・本文は記録しない）。適用 v292DfixLEAK1Apply='1'（既定 OFF）／kill v292DfixLEAK1Off='1'。保存・sys・送信は変えない。 -->
 <script src="v292DfixOWNERON1-owner-defaults.js?cb=20261122-allonb-mem"></script><!-- ★OWNERON1 (laneOWNERON1): Owner（/auth/me の entitlement owner かつ active）でログイン中の端末だけ、PLACE1・SPKW1 を既定 ON。各機能の on() が呼ぶたびに聞く（読むだけ・書き込み 0）。各機能の Off 鍵が常に優先・全体 kill v292DfixOWNERON1Off=1。Owner 以外・未ログイン・不明 = 従来と同じ -->
 <script src="v292DfixACCT1-owner-account-trial.js?cb=20261122-allonb-mem"></script><!-- ★ACCT1（GPT #127-WN 優先3・#127-WP）: Owner のアカウントでログイン中なら、長期記憶の試し 4 つ（mem）と SCENE1 の b（scene1b・r3 から鍵なし）を端末の鍵なしで ON。kill v292DfixACCT1Off・v292DfixACCT1MemOff・v292DfixACCT1Scene1bOff。Owner の判定は OWNERON1 -->
-<script src="v292DfixPLACE2-hero-move.js?cb=20261123-place2"></script><!-- ★PLACE2（既定 OFF・鍵 v292DfixPLACE2On・kill v292DfixPLACE2Off）: 主人公の現在地（STORY の入力・本文）と同行 -->
+<script src="v292DfixPLACE2-hero-move.js?cb=20261123-unseen1"></script><!-- ★PLACE2（既定 OFF・鍵 v292DfixPLACE2On・kill v292DfixPLACE2Off）: 主人公の現在地（STORY の入力・本文）と同行 -->
 <script src="v292DfixPLACE1-where-now.js?cb=20261123-place2"></script><!-- ★PLACE1 (lanePLACE1): 物のいまの持ち主・置き場所と、その場にいない人の控えを user の whereNow に渡す。純関数だけ（fix58 が呼ぶたびに探す）。鍵 v292DfixPLACE1On=1（既定 OFF＝送信バイト同一）・kill v292DfixPLACE1Off=1 -->
 <script src="v292DfixNUM1-input-ledger.js?cb=20261113-num2"></script><!-- ★NUM1 (laneLEAK1・GPT #127-SW 3): 序盤のプレイヤー入力の数・約束を earlierFacts の先頭に最大 5 行・200 字で残す純関数（fix58 が呼ぶ）。鍵 v292DfixNUM1On='1'（既定 OFF）／kill v292DfixNUM1Off='1'。保存なし・sys 0 字。 -->
 </body>
