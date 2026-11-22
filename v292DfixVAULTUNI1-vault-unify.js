@@ -26,7 +26,7 @@
   var VER = 'vaultuni1-20261123-r1', POLL = 2000, HOLD_MAX = 120000;
   var stats = { send: 0, sendOk: 0, sendStop: {}, del: 0, delOk: 0, delVault: 0, delHold: 0, waits: 0, holds: 0, reruns: 0, expired: 0 };
   function cnt(o, k) { k = String(k || 'X').slice(0, 32); o[k] = (o[k] || 0) + 1; }
-  function on() { try { return root.localStorage.getItem('v292DfixVAULTUNI1Off') !== '1'; } catch (e) { return true; } }
+  function on() { try { return root.localStorage.getItem('v292DfixVAULTUNI1Off') !== '1' && root.localStorage.getItem('v292DfixVAULTUNI1On') === '1'; } catch (e) { return false; } }   /* 20261123: 既定 OFF へ戻した（実機で空き容量シートの削除が全部 保留になり 0 件になった）。ON は v292DfixVAULTUNI1On='1' */
   function G() { try { var g = root.__v292DfixVAULTGATE2; return (g && typeof g.hidden === 'function') ? g : null; } catch (e) { return null; } }
   function iso(id) { try { var I = root.__v292DfixISO1; if (!I || typeof I.verdict !== 'function') return null; return I.verdict(id); } catch (e) { return 'threw'; } }
   function send(id) {
