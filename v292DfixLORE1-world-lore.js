@@ -45,7 +45,7 @@
   function cps(s) { try { return Array.from(s); } catch (e) { return String(s).split(''); } }
   function hk(s) { var h = 2166136261; s = String(s); for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; } return 'h' + h.toString(36); }
   function sid() { try { var f = window.__v292Dfix697; var s = f && f.status ? f.status().storyId : null; return s ? String(s) : null; } catch (e) { return null; } }
-  function vaultHidden(id) { try { var V = window.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* KN1 と同じ・fail-closed */
+  function vaultHidden(id) { try { var U = window.__v292DfixVAULTUNI1; if (U && U.on()) return U.send(id) !== ''; } catch (eU) { return true; }   /* ★VAULTUNI1: VAULTGATE2 の共通判定（解錠中の本人の物語は通常どおり・施錠中・分からないは送らない） */ try { var V = window.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* KN1 と同じ・fail-closed */
   function admfOn() { try { var X = window.__v292DfixADMF1; if (!X || typeof X.keys !== 'function' || typeof X.gate !== 'function') return false; if (X.keys().indexOf('lore1') < 0) return false; return X.gate('lore1', false) === true; } catch (e) { return false; } }
 
   /* ---- GM 専用部分（fix444g／fix951 r2 の sectionsOf と同じ規則・節単位） ---- */

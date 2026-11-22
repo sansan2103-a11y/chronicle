@@ -52,6 +52,7 @@
   function genKeys() { var out = []; try { var L = ls(); for (var i = 0; i < L.length; i++) { var k = L.key(i); if (k && k.indexOf('__gen_') === 0) out.push(k); } } catch (e) {} return out; }
 
   function vaultWhy(id) {
+    try { var U = W.__v292DfixVAULTUNI1; if (U && U.on()) { var uv = U.del(id, 'gen1'); if (uv === 'vault') return 'vault'; if (uv === 'hold') return 'vault-v2-pending'; } } catch (eU) { return 'vault-check-threw'; }   /* ★VAULTUNI1 */
     var vh = g('chr6_vault_hidden');
     if (vh != null) { var v = J(vh, null); if (!v || typeof v !== 'object' || isArr(v)) return 'vault-cache-unreadable'; if (v.hidden !== undefined && !isArr(v.hidden)) return 'vault-cache-unreadable'; if (isArr(v.hidden) && v.hidden.map(String).indexOf(id) >= 0) return 'vault'; }
     try { var F = W.__v292Dfix889; if (!F || typeof F.isHidden !== 'function' || typeof F.hiddenIds !== 'function') return 'vault-unavailable';
@@ -227,6 +228,7 @@
     st.runs++;
     var budget = { left: MAX_SERVER_CHECKS, used: 0 }, done = { trimmed: 0, freed: 0 };
     return plan(budget, { write: true }).then(function (p) {
+      try { var U = W.__v292DfixVAULTUNI1; if (U && U.on()) U.hold('gen1', function () { st.vuRerun = (st.vuRerun || 0) + 1; run(); }); } catch (eH) {}   /* ★VAULTUNI1: 分からなかった物語は、判定が取れてから run を最初からやり直す */
       if (!p.over || !p.confirmed.length) { st.last = { at: Date.now(), trimmed: 0, freed: 0, noop: p.noop, getstory: budget.used }; return { ok: true, trimmed: 0, freed: 0, noop: p.noop, getstoryCalls: budget.used }; }
       var chain = Promise.resolve();
       p.confirmed.slice(0, MAX_PER_RUN).forEach(function (x) {

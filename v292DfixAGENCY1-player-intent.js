@@ -52,12 +52,16 @@
   function killed() { return lsGet(KILL) === '1'; }
   function storyOff() { return lsGet(STORY_OFF) === '1'; }   /* STORY 腕だけ止める（SAY/DO の腕は変わらない） */
   function sid() { try { var f = window.__v292Dfix697; var s = f && f.status ? f.status().storyId : null; return s ? String(s) : null; } catch (e) { return null; } }
-  function vaultHidden(id) { try { var V = window.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* KN1・LORE1 と同じ・fail-closed */
+  function vaultHidden(id) { try { var U = window.__v292DfixVAULTUNI1; if (U && U.on()) return U.send(id) !== ''; } catch (eU) { return true; }   /* ★VAULTUNI1: VAULTGATE2 の共通判定（解錠中の本人の物語は通常どおり・施錠中・分からないは送らない） */ try { var V = window.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* KN1・LORE1 と同じ・fail-closed */
+  /* ★VAULTUNI1: この部品が足すのは固定の 3 文（TEXT・TEXT_STORY・TEXT_STORY_B＝物語の中身を含まない規則の文）だけで、入るのは物語の本文の要求の sys（その送信の可否は SendGate・Worker が決める）。
+     そこで共通判定では、固定文を Vault の状態で止めない（裁定 3「問題のない固定文まで機械的に止めない」）。共通判定が通さない物語では、長さなどの記録だけを残さない。 */
+  function uniFixed() { try { var U = window.__v292DfixVAULTUNI1; return !!(U && U.on()); } catch (e) { return false; } }
+  function quietRec() { try { if (!uniFixed()) return false; var id = sid(); return !!(id && vaultHidden(id)); } catch (e) { return true; } }
   function admfKnown() { try { var X = window.__v292DfixADMF1; return !!(X && typeof X.keys === 'function' && typeof X.gate === 'function' && X.keys().indexOf(KEY) >= 0); } catch (e) { return false; } }
   function admfOn() { try { if (!admfKnown()) return false; return window.__v292DfixADMF1.gate(KEY, false) === true; } catch (e) { return false; } }   /* 読めない・古い ADMF1 → false（＝影） */
   function mode() {
     if (killed()) return 'kill';
-    var id = sid(); if (id && vaultHidden(id)) return 'vault';
+    var id = sid(); if (id && !uniFixed() && vaultHidden(id)) return 'vault';   /* ★VAULTUNI1: 共通判定の端末では固定文を Vault で止めない */
     if (lsGet(ON) === '1') return 'on';
     if (admfOn()) return 'on';
     return 'shadow';
@@ -76,7 +80,7 @@
       if (sub === 'dir' && line.indexOf(MK_DIR) !== 0) { stats.notSayDo++; LAST = { at: Date.now(), mode: md, arm: 'story', sub: sub, added: false, why: 'no-input-line' }; return ''; }
       if (line.indexOf(TEXT_STORY) >= 0 || line.indexOf(TEXT_STORY_B) >= 0) { stats.stAlready++; LAST = { at: Date.now(), mode: md, arm: 'story', sub: sub, added: false, why: 'already' }; return ''; }
       stats.stCalls++;
-      var d = { kind: 'STORY', sub: sub, variant: storyMode(), b38a: b38a(), lineLen: line.length, addLen: storyText().length };
+      var d = { kind: 'STORY', sub: sub, variant: storyMode(), b38a: b38a(), lineLen: line.length, addLen: storyText().length }; if (quietRec()) d = null;   /* ★VAULTUNI1 */
       if (md === 'shadow') { stats.stShadow++; LAST = { at: Date.now(), mode: md, arm: 'story', sub: sub, added: false, would: true, d: d }; return ''; }
       stats.stAdded++; if (sub === 'cont') stats.stContAdded++; else stats.stDirAdded++;
       LAST = { at: Date.now(), mode: md, arm: 'story', sub: sub, added: true, d: d };
@@ -107,7 +111,7 @@
       var mk = k === 'SAY' ? MK_SAY : MK_DO;
       if (line.indexOf(mk) !== 0) { stats.notSayDo++; LAST = { at: Date.now(), mode: md, kind: k, added: false, why: 'no-input-line' }; return ''; }
       if (line.indexOf(TEXT) >= 0) { stats.already++; LAST = { at: Date.now(), mode: md, kind: k, added: false, why: 'already' }; return ''; }   /* 1 回だけ */
-      var d = { kind: k, b38a: b38a(), lineLen: line.length, addLen: TEXT.length };
+      var d = { kind: k, b38a: b38a(), lineLen: line.length, addLen: TEXT.length }; if (quietRec()) d = null;   /* ★VAULTUNI1 */
       if (md === 'shadow') { stats.shadow++; LAST = { at: Date.now(), mode: md, added: false, would: true, d: d }; return ''; }
       stats.added++; LAST = { at: Date.now(), mode: md, added: true, d: d };
       return TEXT;

@@ -68,6 +68,7 @@
     if (lsg('v292Dfix402_f781g_' + id) != null) return 'sync-marker';
     var authRaw = lsg('v292Dfix702_storyAuth');
     if (authRaw != null) { var au = J(authRaw, null); if (!au || typeof au !== 'object') return 'auth-unreadable'; if (has(au, id)) return 'authority'; }
+    try { var U = window.__v292DfixVAULTUNI1; if (U && U.on()) { var uv = U.del(id, 'ghost1'); if (uv === 'vault') return 'vault'; if (uv === 'hold') return 'vault-v2-pending'; } } catch (xU) { return 'vault-check-threw'; }   /* ★VAULTUNI1: 分からない → 今は外さない（判定が取れたら run から確かめ直す） */
     var vh = lsg('chr6_vault_hidden');
     if (vh != null) {
       var v = J(vh, null); if (!v || typeof v !== 'object') return 'vault-cache-unreadable';
@@ -148,6 +149,7 @@
   function run() {
     if (off()) { st.off = true; st.phase = 'off'; return; }
     var s0 = scan();
+    try { var U = window.__v292DfixVAULTUNI1; if (U && U.on()) U.hold('ghost1', function () { st.vuRerun = (st.vuRerun || 0) + 1; run(); }); } catch (eH) {}   /* ★VAULTUNI1: 分からなかった行は、判定が取れてから run を最初からやり直す */
     st.candidates = s0.ok.slice();
     for (var k in s0.skipped) if (has(s0.skipped, k)) st.skipped[k] = s0.skipped[k];
     if (!s0.ok.length) { st.phase = 'done'; st.code = 'NO_CANDIDATE'; return; }   /* 候補が無ければサーバーも読まない */

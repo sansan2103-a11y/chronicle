@@ -203,7 +203,11 @@
   function readMeta() { try { var a = JSON.parse(lsg('chr6_slots_meta') || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
   function metaRow(id) { var m = readMeta(); for (var i = 0; i < m.length; i++) if (m[i] && String(m[i].id) === String(id)) return m[i]; return null; }
   function localTurns(id) { try { var d = JSON.parse(lsg('chr6_slot_' + id) || 'null'); return (d && Array.isArray(d.turns)) ? d.turns.length : 0; } catch (e) { return 0; } }
+  /* ★VAULTUNI1: VAULTGATE2 の共通判定。隠した物語は今までどおり断る。分からない → シートを開く前と送る直前に待ってから確かめ直し、まだ分からなければ断る（何も送らない） */
+  var DL_HOLD = 'Vault の状態をまだ確認できないため、いまは削除できません（何も送っていません）。少し待ってから「確かめ直す」を押してください。';
+  function dlUni() { try { var U = window.__v292DfixVAULTUNI1; return (U && U.on()) ? U : null; } catch (e) { return null; } }
   function vaultHidden(id) {
+    try { var U = dlUni(); if (U && U.del(id, 'dl2') === 'vault') return true; } catch (eU) { return true; }
     try { var F = window.__v292Dfix889; if (F && typeof F.isHidden === 'function' && F.isHidden(id)) return true; } catch (e) { return true; }
     try { var o = JSON.parse(lsg('chr6_vault_hidden') || 'null'); var a = (o && Array.isArray(o.hidden)) ? o.hidden : []; for (var i = 0; i < a.length; i++) if (String(a[i]) === String(id)) return true; } catch (e) {}
     return false;
@@ -318,6 +322,7 @@
               deleteOpId: null, result: null, retryable: false, recheck: false, done: false };
     if (PROTECT[r.id] === 1) r.reason = '保護されている物語のため削除できません。';
     else if (vaultHidden(r.id)) r.reason = '隠している物語は削除できません。先に「隠すのをやめる」を行ってください。';
+    else if (dlUni() && dlUni().del(r.id, 'dl2') === 'hold') { r.reason = DL_HOLD; st.vuHold = (st.vuHold || 0) + 1; }   /* ★VAULTUNI1 */
     else if (M && vdWhy(r.id, M.vd)) { r.reason = vdWhy(r.id, M.vd); st.vdRefused = (st.vdRefused || 0) + 1; }   /* ★VDEL1 */
     /* ★サーバの一覧に無い物語は削除しない。Vault v2 で隠した物語は施錠中の一覧に出ず、getstory も「無い」と同じ形で答えるので、
        「この端末だけの物語」と区別できない（D5）。端末の推測では消さない（D3）。 */
@@ -366,7 +371,7 @@
     if (!active()) { blocked('この画面では、いまは物語を一覧から削除できません。物語はそのまま残っています。'); return Promise.resolve(false); }
     if (!allowed()) { blocked('いまは物語の削除を使えません。作った物語は保存されたままです。'); return Promise.resolve(false); }
     var mine = M;
-    return Promise.all([who(), listBasis(), vdFetch()]).then(function (x) {   /* ★VDEL1 */
+    return Promise.all([who(), listBasis(), vdFetch(), dlUni() ? dlUni().wait(uniq, 8000) : null]).then(function (x) {   /* ★VDEL1 */   /* ★VAULTUNI1: 判定が取れるまで少し待つ */
       if (M !== mine) return false;
       var a0 = x[0], L = x[1]; M.vd = x[2];
       if (!a0) { blocked('ログインの状態を確認できないため、削除できません（何も送っていません）。'); return false; }
@@ -443,7 +448,11 @@
     setRes(r, false, '削除できませんでした（' + (c || s) + '）。何も変わっていません。', { code: c || String(s) });
     return Promise.resolve();
   }
-  function sendOne(r) {
+  function sendOne(r) {   /* ★VAULTUNI1: 送る直前に共通判定を確かめ直す（分からなければ待ち、それでも分からなければ送らない） */
+    var U = dlUni(); if (!U) return sendOne1(r);
+    return U.wait([r.id], 8000).then(function () { var u = U.del(r.id, 'dl2'); if (u !== 'ok') { st.vuRefused = (st.vuRefused || 0) + 1; setRes(r, false, u === 'vault' ? VD_MSG : DL_HOLD, { code: 'vaultuni1-' + u }); return; } return sendOne1(r); });
+  }
+  function sendOne1(r) {
     if (vdOn()) return vdFetch().then(function (V) { var w = vdWhy(r.id, V); if (w) { st.vdRefused = (st.vdRefused || 0) + 1; setRes(r, false, w, { code: (V && V.state === 'unknown') ? 'vdel1-unknown' : 'vdel1-hidden' }); return; } return sendOne0(r); });   /* ★VDEL1: 送る直前にもう一度（使い回さない） */
     return sendOne0(r);
   }

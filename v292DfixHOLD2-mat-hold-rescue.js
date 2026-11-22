@@ -77,6 +77,7 @@ function accountOk(id) {
   return null;
 }
 function vaultOk(id) {
+  try { var U = window.__v292DfixVAULTUNI1; if (U && U.on()) { var uv = U.del(id, 'hold2'); if (uv === 'vault') return 'vault'; if (uv === 'hold') return 'vault-unknown'; } } catch (eU) { return 'vault-unknown'; }   /* ★VAULTUNI1 */
   try { var F = window.__v292Dfix889; if (!F || typeof F.isHidden !== 'function') return 'vault-unknown'; if (F.isHidden(id)) return 'vault'; } catch (e) { return 'vault-unknown'; }
   try { var raw = lsg('chr6_vault_hidden'); if (raw != null) { var o = JSON.parse(raw); var a = (o && Array.isArray(o.hidden)) ? o.hidden : null; if (!a) return 'vault-unknown';
     for (var i = 0; i < a.length; i++) if (String(a[i]) === id) return 'vault'; } } catch (e) { return 'vault-unknown'; }
@@ -131,7 +132,11 @@ function readJournal() {
   return { id: j.storyId };
 }
 /* 全部の条件。戻り: Promise<null（全部 OK）| 理由コード> */
-function checkAll(id) {
+function checkAll(id) {   /* ★VAULTUNI1: 判定が取れるまで少し待ってから、全部の条件を確かめる（まだ分からなければ vault-unknown でボタンを出さない） */
+  var U = null; try { U = window.__v292DfixVAULTUNI1; } catch (e) {} if (U && U.on()) return U.wait([id], 8000).then(function () { return checkAll0(id); });
+  return checkAll0(id);
+}
+function checkAll0(id) {
   var why = vaultOk(id) || deleteUsable() || accountOk(id) || localOk(id);
   if (why) return Promise.resolve(why);
   return serverZero(id).then(function (w) {

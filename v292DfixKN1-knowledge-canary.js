@@ -287,7 +287,7 @@
   function sid() { try { var f = root.__v292Dfix697; var s = f && f.status ? f.status().storyId : null; return s ? String(s) : null; } catch (e) { return null; } }
   function killed() { return lsGet(KILL) === '1'; }
   function admfOn() { try { var X = root.__v292DfixADMF1; return !!(X && typeof X.gate === 'function' && X.gate('kn1', false) === true); } catch (e) { return false; } }
-  function vaultHidden(id) { try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* fail-closed */
+  function vaultHidden(id) { try { var U = root.__v292DfixVAULTUNI1; if (U && U.on()) return U.send(id) !== ''; } catch (eU) { return true; }   /* ★VAULTUNI1: VAULTGATE2 の共通判定（解錠中の本人の物語は通常どおり・施錠中・分からないは送らない） */ try { var V = root.__v292Dfix889; if (!V || typeof V.isHidden !== 'function') return true; return !!V.isHidden(id); } catch (e) { return true; } }   /* fail-closed */
   function gateWhy() {
     if (killed()) return 'kill';
     if (!KL) return 'no-lib';

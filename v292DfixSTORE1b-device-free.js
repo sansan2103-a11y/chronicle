@@ -508,6 +508,7 @@
   }
   function vaultBlock(id, env) {
     if (env && env.vcAllow && env.vcAllow[String(id)] === 1) return vcPassOnly(String(id), env);   /* ★VCLEAN1: この実行で確かめた id だけ（隠し一覧の判定だけを外す。パスコードは見る） */
+    if (env && typeof env.vu === 'function') { var uv = env.vu(String(id)); if (uv === 'vault') return 'vault'; if (uv === 'hold') return 'vault-v2-pending'; }   /* ★VAULTUNI1: VAULTGATE2 の共通判定（分からない → 今は消さない・読まない） */
     if (env && env.vg && env.vg.ids && env.vg.ids[String(id)] === 1) return 'vault';   /* ★VAULTGUARD1: Vault v2 で隠している（解錠中で fix889 の一覧から外れていても） */
     if (env && env.vcV2 && env.vcV2[String(id)] === 1) return 'vault';   /* ★VCLEAN1（鍵があるときだけ）: Vault v2 で隠している（解錠中は fix889 の一覧から外れるので、v2 の一覧でも見る＝本文を取り寄せる通常の経路へ流さない） */
     var vh = g(env, 'chr6_vault_hidden');
@@ -1265,7 +1266,7 @@
    *   Vault に関わる理由・id の形・保護・判定できない全体の理由は数だけ（その物語のキーを 1 本も見ない）。
    *   class: a / b / c（FAMILY_CLASS）・marker（f781g）・unsent（f911 / f697p / rescue）・snapshot・backup（chr6_bk_）・unknown（形の分からないキー）
    * ====================================================================== */
-  var COUNT_ONLY = { vault: 1, passcode: 1, 'vault-cache-unreadable': 1, 'vault-unavailable': 1, 'vault-state-unknown': 1, 'vault-check-threw': 1,
+  var COUNT_ONLY = { vault: 1, passcode: 1, 'vault-v2-pending': 1, 'vault-cache-unreadable': 1, 'vault-unavailable': 1, 'vault-state-unknown': 1, 'vault-check-threw': 1,
                      'vault-server-unconfirmed': 1, 'vault-state-changed': 1, 'id-shape': 1, protected: 1, 'key1-unavailable': 1, 'meta-unreadable': 1 };
   function planByReason(env, ctx) {
     var why = {}, glob = [], purge = env.purge === true, e2 = {};
@@ -2059,6 +2060,7 @@
              free2: lsg(F2_OFF) !== '1',   /* ★FREE2c: 既定 ON（kill v292DfixFREE2Off='1'）。v292DfixFREE2On は読まない */
              free2d: lsg('v292DfixFREE2dOff') !== '1',   /* ★FREE2d（kill v292DfixFREE2dOff='1' → FREE2c と同じ） */
              saveBusy: saveBusyB,   /* ★FREE2c: この画面の fix697 がその物語の保存を送っている最中か（FREE2 のときだけ呼ぶ） */
+             vu: (function () { try { var U = root.__v292DfixVAULTUNI1; return (U && U.on()) ? function (id) { return U.del(id, 'store1b'); } : null; } catch (e) { return null; } })(),   /* ★VAULTUNI1 */
              vault: root.__v292Dfix889 || null, inv: root.__v292Dfix562 || null, gate: root.__v292Dfix569 || null,
              vcUnlocked: function () { try { var U = root.__v292Dvault2Ui, s = (U && typeof U.status === 'function') ? U.status() : null; return !!(s && s.hasVault === true && s.unlocked === true); } catch (e) { return false; } },   /* ★VCLEAN1: HOME の Vault（v2）を開いている。v1（fix889）の解錠は本番の Worker で休止中（VAULT_V1_DORMANT）なので使わない */
              vcV2Hidden: function () { try { return root.fetch('/api/save', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json', 'x-chronicle-csrf': '1' }, body: JSON.stringify({ op: 'vault2status' }) })
@@ -2398,7 +2400,7 @@
     try { if (/[?&]story=/.test(String(root.location.search || ''))) { acDone = true; return; } } catch (e) {}
     if (!ready() || !acIdle()) { if (++acTries < AC_TRIES) root.setTimeout(acTick, AC_RETRY_MS); else st.autoclean = { code: 'not-idle' }; return; }
     acDone = true;
-    var go = function () { vgThen(function () { return acRunOnce(benv(), bctx()); }).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0, gens: r.gens || 0, genChars: r.genChars || 0 }; acChain(r); }, function () { st.autoclean = { code: 'threw' }; }); };
+    var go = function () { vgThen(function () { return acRunOnce(benv(), bctx()); }).then(function (r) { st.autoclean = { code: r.code, freed: r.freed || 0, stories: r.stories || 0, snapshots: r.snapshots || 0, failed: r.failed || 0, gens: r.gens || 0, genChars: r.genChars || 0 }; acChain(r); try { var U = root.__v292DfixVAULTUNI1; if (U && U.on()) U.hold('store1b', function () { if (acOnGet(lsg) && ready() && acIdle()) { st.vuRerun = (st.vuRerun || 0) + 1; go(); } }); } catch (eH) {} }, function () { st.autoclean = { code: 'threw' }; }); };   /* ★VAULTUNI1: 分からなかった物語は、判定が取れてから入口（acRunOnce の全部の確かめ）をやり直す */
     try { if (typeof root.requestIdleCallback === 'function') root.requestIdleCallback(go, { timeout: 10000 }); else go(); } catch (e) { go(); }
   }
   /* ★AUTOCLEAN1 r4 (b): 鍵 'b' のときだけ。消せて残りがある回のあと、同じ HOME で 1 回だけ続ける（記録の chain で 2 回目は無い。24 時間の上限も acEarly が見る） */
