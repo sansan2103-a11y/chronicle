@@ -1008,7 +1008,23 @@
     if (/(ちゃん|さん|くん|君|様|先輩|です|だよ|だけど|って)$/.test(W)) return false;
     if (/^(?:わたし|あたし|ぼく|おれ|うち|わし|あたい|こっち|そっち|あっち|ここ|そこ|あそこ|はい|いいえ|うん|ええ|ごめん|ありがとう|だめ|まだ|もう)$/.test(W)) return false;   /* 一人称・指示語・相づち */
     if (cast.indexOf(W) >= 0 || f830AutoMatch(W, cast) || castPartOwner(W)) return false;
+    if (nm1Registered(W, cast)) return false;   /* ★r2 */
     return true;
+  }
+  /* ★NAMING1 r2（実 AI T_ON1 の誤結合）: castPartOwner は姓と名を空白・中黒で分けて登録した名前だけを見る（「本条ひなた」は対象外）ので、
+     名乗りの「ひなた」が通った。その後 fix377 の別名の吸収が「ひなた」を登録人物「本条ひなた」へ結び、女の子が登録人物に吸収された。
+     → 登録人物（主人公を含む）の完全名・区切りを除いた名・空白／中黒で分けた部分・別名（説明の「別名:」行と台帳の ali）と、
+       一致・含む・含まれる（2 字以上）の関係にある名前は、名乗りとして使わない。 */
+  function nm1Registered(W, cast){
+    var w = String(W || '').replace(/[\s　・]/g, ''); if (w.length < 2) return false;
+    var forms = [];
+    (cast || []).forEach(function(c){ c = String(c || ''); if (!c) return; var full = c.replace(/[\s　・]/g, ''); forms.push(full); c.split(/[\s　・]+/).forEach(function(p){ if (p.length >= 2) forms.push(p); });
+      /* 区切り無しで登録した名前（本条ひなた）: 漢字とかなの切れ目で姓・名に分ける。漢字 4 字（早瀬千鶴）は 2 字ずつ */
+      (full.match(/[一-龥々]+|[ぁ-んー]+|[ァ-ヶー]+|[^一-龥々ぁ-んァ-ヶー]+/g) || []).forEach(function(p){ if (p.length >= 2 && p !== full) forms.push(p); });
+      if (/^[一-龥々]{4}$/.test(full)){ forms.push(full.slice(0, 2)); forms.push(full.slice(2)); } });
+    try { var am = aliasMap() || {}; Object.keys(am).forEach(function(a){ if ((cast || []).indexOf(am[a]) >= 0) forms.push(String(a).replace(/[\s　・]/g, '')); }); } catch(e){}
+    for (var i = 0; i < forms.length; i++){ var f = forms[i]; if (!f || f.length < 2) continue; if (f === w || f.indexOf(w) >= 0 || w.indexOf(f) >= 0) return true; }
+    return false;
   }
   /* 本文（地の文）で W が人として出るか */
   function nm1InNarr(W, plain){ return new RegExp('(?:^|[^ぁ-んァ-ヶー一-龥々])' + nm1Esc(W) + '(?:は|が|の|も|と名乗|と言った|ちゃん|さん)').test(plain) || new RegExp('^' + nm1Esc(W) + '(?:は|が|の|も)').test(plain); }
@@ -1064,6 +1080,7 @@
         ((st.t && st.t._convSays) || []).forEach(function(c){
           if (!c || !c.who) return;
           var who = String(c.who), cands = nm1Names(c.say);
+          if (cands.some(function(o){ return nm1Registered(o.w, cast); })){ nm1Drop('names-registered-person'); return; }   /* ★r2: 登録人物の名を名乗る台詞では何も結ばない（呼び名は呼び名のまま） */
           cands.forEach(function(o){
             var W = o.w;
             if (!nm1NameOk(W, cast)){ nm1Drop('invalid-or-cast-name'); return; }
