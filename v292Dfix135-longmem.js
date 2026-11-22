@@ -198,10 +198,10 @@
     var _authBlock245 = 'AUTHORITATIVE CHARACTER NAMES (these exact names already identify characters in this story — dialogue speakers and known cast):\n' +
       (_authList245.length ? _authList245.map(function(n){ return '- ' + n; }).join('\n') : '(none)') + '\n' +
       'When a person in the narration is one of these, you MUST use that EXACT name. NEVER coin a new descriptive label (e.g. 黒髪の少女, 白いワンピースの少女) for someone already named above. One physical character = exactly ONE name.\n\n';
-    return mem3Prompt('You analyze a Japanese ongoing horror TRPG to maintain long-term memory.\n\n' +   /* ★MEM3: OFF は同じ文字列 */
+    return exp1Prompt(mem3Prompt('You analyze a Japanese ongoing horror TRPG to maintain long-term memory.\n\n' +   /* ★MEM3: OFF は同じ文字列 */
       'PREVIOUS SUMMARY:\n' + (prevSummary || '(none)') + '\n\n' +
       _authBlock245 +
-      'KNOWN WORLD INFO:\n' + (prevWorldInfo.length ? prevWorldInfo.map(function(w){return '- ' + w.name + ' (' + w.type + '): ' + w.desc;}).join('\n') : '(none)') + '\n\n' +
+      'KNOWN WORLD INFO:\n' + (prevWorldInfo.length ? prevWorldInfo.map(function(w){var _b = '- ' + w.name + ' (' + w.type + '): ' + w.desc; try { var X = window.__v292DfixEXP1; if (X && typeof X.wiLine === 'function') return X.wiLine(w, _b); } catch(eX){} return _b;}).join('\n') : '(none)') + '\n\n' +
       'KEY EVENTS:\n' + (prevEvents.length ? prevEvents.map(function(e){return '- T' + e.turnIdx + ' (importance ' + e.importance + '): ' + e.event;}).join('\n') : '(none)') + '\n\n' +
       'NEW TURNS:\n' + newText + '\n\n' +
       'Produce a FRESH analysis as JSON with these fields:\n' +
@@ -210,8 +210,10 @@
       '  "worldinfo": [ { "name": "Japanese name", "type": "character|place|object|concept", "desc": "1 sentence Japanese: who/what" } ],\n' +
       '  "events": [ { "turnIdx": number, "event": "1 line Japanese: a major event (death/escape/encounter/loss/key decision)", "importance": 1-3 (3=critical) } ]\n' +
       '}\n' +
-      'Rules: Output ONLY the JSON. Update/replace previous summary entirely. Merge new worldinfo entries with old (no duplicates by name; reuse AUTHORITATIVE CHARACTER NAMES verbatim — do not create a second entry under a different label for the same person). Keep worldinfo <= 30 (drop least relevant). Keep events <= 15 (drop low-importance old ones). Use turnIdx values from the [Turn N] markers above.');
+      'Rules: Output ONLY the JSON. Update/replace previous summary entirely. Merge new worldinfo entries with old (no duplicates by name; reuse AUTHORITATIVE CHARACTER NAMES verbatim — do not create a second entry under a different label for the same person). Keep worldinfo <= 30 (drop least relevant). Keep events <= 15 (drop low-importance old ones). Use turnIdx values from the [Turn N] markers above.'));
   }
+  /* ★EXP1（既定 OFF・鍵 v292DfixEXP1aOn・kill v292DfixEXP1Off）: 部品 v292DfixEXP1-experience.js が条件を見て、人物の欄に exp の 1 項目を足す。無い・OFF は同じ文字列 */
+  function exp1Prompt(p){ try { var X = window.__v292DfixEXP1; return (X && typeof X.prompt === 'function') ? X.prompt(p) : p; } catch(e){ return p; } }
 
   function call(prompt, cb){
     var key = getKey();
@@ -294,8 +296,12 @@
       reset();
       lastBuild = -1;
     }
+    /* ★MEM4R r2（既定 ON・kill v292DfixMEM4ROff）: 印の無い記憶は材料にせず消し、空の記憶・大きく遅れた記憶は、この物語の本文から 0 ターン目（続き）より分けて作り直す。kill・条件外・1 回で届く時は r4 = null（土台どおり） */
+    var r4 = null; if (_lmCanWrite()){ try { var R4 = window.__v292DfixMEM4R; if (R4 && typeof R4.plan === 'function') r4 = R4.plan({ curTurn: curTurn, lastBuild: lastBuild, turns: st.turns, sfx: startSfx }); } catch(eR4){ r4 = null; } }
+    if (r4 && r4.reset){ reset(); lastBuild = -1; try { var M2r = window.__v292DfixMEM2; if (M2r && typeof M2r.trust === 'function') M2r.trust(); } catch(eM2r){} }
+    if (r4 && r4.wait) return;
     if (curTurn < 2) return;                                  // need at least 3 turns
-    if (lastBuild >= 0 && curTurn - lastBuild < REBUILD_INTERVAL) return;
+    if (!(r4 && r4.catchup) && lastBuild >= 0 && curTurn - lastBuild < REBUILD_INTERVAL) return;
     BUSY = true;
     var prevSum = loadSummary();
     var prevWI  = loadWorldInfo();
@@ -305,6 +311,7 @@
     //   直近FIRST_CAPターンだけに絞り、以降は増分(REBUILD_INTERVAL)で進める。
     var FIRST_CAP = 12;
     if (lastBuild < 0 && (curTurn + 1) > FIRST_CAP) startIdx = curTurn - FIRST_CAP + 1;
+    var curAll = curTurn; if (r4 && r4.catchup){ startIdx = r4.from; curTurn = r4.to; }   /* ★MEM4R: 追いつく範囲（1 回 12 ターン・本文 12,000 字まで）。この回の作り直しは curTurn までとして保存・知らせる（OFF は変わらない） */
     var newTurns = st.turns.slice(startIdx, curTurn + 1);
     var prompt = buildPrompt(prevSum, prevWI, prevEv, newTurns, startIdx);
     call(prompt, function(result){
@@ -315,12 +322,14 @@
       if (!s2 || !s2.scene || (s2.scene.loc || null) !== startLoc){ try { console.log(TAG, 'story changed during summarize — discarded (no cross-slot write)'); } catch(_){} return; }
       if (slotSfx() !== startSfx){ try { console.log(TAG, 'active slot changed during summarize — discarded'); } catch(_){} return; }
       if (m3Ctx){ var m3c = m3Ctx; m3Ctx = null; try { if (!m3c.bad) throw new Error('no grams'); result = mem3Filter(result, prevWI, m3c.bad); m3Fail[m3c.sfx] = 0; } catch(eF){ m3Fail[m3c.sfx] = (m3Fail[m3c.sfx] || 0) + 1; m3Stat.filterErr++; m3Stat.discarded++; try { console.log(TAG, 'MEM3 r8: settings check failed — this rebuild is not saved'); } catch(_){} return; } }   /* ★MEM3 r8 (2): MEM3On かつ設定の要点を渡した回だけ */
+      try { var X1 = window.__v292DfixEXP1; if (X1 && typeof X1.merge === 'function') result = X1.merge(result, prevWI, { from: startIdx, to: curTurn, text: newTurns.map(function(t){ return String((t && t.playerText) || '') + '\n' + String((t && t.narrative) || ''); }).join('\n') }) || result; } catch(eX1){}   /* ★EXP1: 型の検査と引き継ぎ（OFF は何もしない） */
       if (!_lmCanSave()){ try { console.log(TAG, 'rebuild OK but save blocked (stale epoch)'); } catch(_){} }
       if (result.summary) saveSummary(result.summary);
       if (result.worldinfo && result.worldinfo.length) saveWorldInfo(result.worldinfo);
       if (result.events && result.events.length) saveEvents(result.events);
       saveLastBuild(curTurn);
       try { var m4h = window.__v292DfixMEM4Done; if (typeof m4h === 'function') m4h({ sfx: startSfx, loc: startLoc, lb: curTurn, ok: _lmCanSave(), r: result }); } catch(_){}   /* ★MEM4 r2/r3: 作り直しの完了を知らせるだけ（保存は上で済んでいる・受け手が無ければ何もしない）。r3: 保存しようとした結果 r を渡す（受け手が保存のとおりかを確かめる） */
+      try { if (r4 && r4.catchup && window.__v292DfixMEM4R) window.__v292DfixMEM4R.finished(startSfx, curTurn, curAll); } catch(eR4f){}   /* ★MEM4R */
       try { console.log(TAG, 'rebuilt at turn', curTurn, '— summary:', (result.summary||'').length, 'chars, worldinfo:', result.worldinfo.length, ', events:', result.events.length); } catch(_){}
     });
   }

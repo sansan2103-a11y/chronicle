@@ -238,7 +238,7 @@
     try { sum = String(lsg('chr6_v292Dfix135_sum' + sfx) || ''); } catch(e){}
     try { var e0 = JSON.parse(lsg('chr6_v292Dfix137_ev' + sfx) || '[]'); if (Array.isArray(e0)) ev = e0; } catch(e){ ev = []; }
     var wi = [];
-    if (m3bOn()){ try { var w0 = JSON.parse(lsg('chr6_v292Dfix136_wi' + sfx) || '[]'); if (Array.isArray(w0)) wi = w0; } catch(e){ wi = []; } }   /* ★MEM3b: 人物の表を読むだけ（書かない） */
+    if (m3bOn() || exp1On()){ try { var w0 = JSON.parse(lsg('chr6_v292Dfix136_wi' + sfx) || '[]'); if (Array.isArray(w0)) wi = w0; } catch(e){ wi = []; } }   /* ★MEM3b: 人物の表を読むだけ（書かない） */
     return { sum: sum, ev: ev, cur: cur, lb: lb, wi: wi };
   }
   /* ★MEM3b（laneMEM3・2026-11-17・既定 OFF: v292DfixMEM3bOn='1'・kill v292DfixMEM3bOff='1'）: 覚え書きの組み立ての順を変える。
@@ -269,6 +269,10 @@
     return trimPlain(sum, limit);
   }
   function trimPlain(s, limit){ if (s.length <= limit) return s; var cut = s.slice(0, limit - 1), k = Math.max(cut.lastIndexOf('。'), cut.lastIndexOf('、')); return (k >= Math.min(SUM_MIN, limit >> 1) ? cut.slice(0, k + 1) : cut) + '…'; }
+  /* ★EXP1: 覚え書きの「経験と習得」の節（部品が条件を見る。OFF・無いときは ''）と、その分の枠 LIM */
+  var LIM = MAX;
+  function exp1On(){ try { var X = window.__v292DfixEXP1; return !!(X && typeof X.on === 'function' && X.on()); } catch(e){ return false; } }
+  function exp1Sec(mem){ try { var X = window.__v292DfixEXP1; return (X && typeof X.section === 'function') ? (X.section(mem && mem.wi, clean) || '') : ''; } catch(e){ return ''; } }
   function compose3b(mem){
     /* 出来事（新しい順）: まず最低 200 字ぶん（1 件目はそれを超えても 1 件は入れる）を確保 */
     var evs = mem.ev.filter(function(e){ return e && typeof e.turnIdx === 'number' && e.turnIdx <= mem.cur && e.event; }).map(function(e){ return { t: e.turnIdx, imp: e.importance || 0, s: clean(e.event) }; }).filter(function(e){ return e.s; });
@@ -277,21 +281,21 @@
     for (; ei < evs.length; ei++){ var l0 = ln(evs[ei]); if (pick.length && head.length + eu + l0.length > M3B_EV_MIN) break; if (l0.length > M3B_EV_MIN) l0 = l0.slice(0, M3B_EV_MIN - head.length - 1) + '…'; pick.push({ t: evs[ei].t, line: l0 }); eu += l0.length; }
     var evRes = pick.length ? head.length + eu : 0;
     /* 人物の表（240 字まで・残りの範囲で） */
-    var seen = {}, rows = [], pl = 0, pplCap = Math.min(M3B_PPL, MAX - evRes - 1 - 60);
+    var seen = {}, rows = [], pl = 0, pplCap = Math.min(M3B_PPL, LIM - evRes - 1 - 60);
     (mem.wi || []).forEach(function(w){ if (!w || w.type !== 'character' || !w.name || rows.length >= M3B_ROWS) return; var n = clean(w.name), d = clean(w.desc); if (!n || /^[（(]/.test(String(w.name)) || /未登録キャラ/.test(String(w.desc || '')) || !d || seen[d]) return; seen[d] = 1;
       var line = '\n・' + n + '：' + d; if (line.length > M3B_ROW) line = line.slice(0, M3B_ROW - 1) + '…'; if (pl + line.length > pplCap) return; rows.push(line); pl += line.length; });
     var PH = '人物（記録した説明。本文で変わっていれば本文が優先）：', pt = rows.length ? PH + rows.join('') : '';
     if (pt && PH.length + pl > pplCap + PH.length) pt = '';
     /* あらすじ（残りで・520 字まで・「確定：」の部を優先して残す） */
-    var sum = clean(mem.sum), sumTxt = '', sroom = MAX - evRes - (pt ? pt.length + 1 : 0) - (evRes ? 1 : 0) - 'あらすじ：'.length;
+    var sum = clean(mem.sum), sumTxt = '', sroom = LIM - evRes - (pt ? pt.length + 1 : 0) - (evRes ? 1 : 0) - 'あらすじ：'.length;
     if (sum && sroom >= 20) sumTxt = 'あらすじ：' + trimSum(sum, Math.min(M3B_SUM, sroom));
     /* 余りがあれば、出来事をさらに新しい順に足す */
     var used = (sumTxt ? sumTxt.length : 0) + (pt ? pt.length + (sumTxt ? 1 : 0) : 0) + (evRes ? evRes + ((sumTxt || pt) ? 1 : 0) : 0);
-    for (; ei < evs.length && pick.length; ei++){ var l1 = ln(evs[ei]); if (used + l1.length > MAX) break; pick.push({ t: evs[ei].t, line: l1 }); eu += l1.length; used += l1.length; }
+    for (; ei < evs.length && pick.length; ei++){ var l1 = ln(evs[ei]); if (used + l1.length > LIM) break; pick.push({ t: evs[ei].t, line: l1 }); eu += l1.length; used += l1.length; }
     pick.sort(function(a, b){ return a.t - b.t; });
     var evTxt = pick.length ? head + pick.map(function(e){ return e.line; }).join('') : '';
     var text = [sumTxt, pt, evTxt].filter(Boolean).join('\n'); st.a.m3b = (st.a.m3b || 0) + 1;
-    if (text.length > MAX) text = text.slice(0, MAX);
+    if (text.length > LIM) text = text.slice(0, LIM);
     lastParts = { sum: { chars: sumTxt.length, kept: sumTxt ? (/未定：/.test(sumTxt) ? 'both' : (/確定：/.test(sumTxt) ? 'fixedOnly' : 'plain')) : 'none', pendingChars: sumTxt.indexOf('未定：') >= 0 ? sumTxt.length - sumTxt.indexOf('未定：') : 0 }, people: { chars: pt.length, rows: pt ? rows.length : 0 }, events: { chars: evTxt.length, count: pick.length, available: evs.length }, total: text.length };
     return text;
   }
@@ -302,13 +306,13 @@
       .map(function(e){ return { t: e.turnIdx, imp: e.importance || 0, s: clean(e.event) }; }).filter(function(e){ return e.s; });
     evs.sort(function(a, b){ return (b.t - a.t) || (b.imp - a.imp); });
     var head = '出来事：', pick = [], used = 0;
-    for (var i = 0; i < evs.length; i++){ var line = '\n・T' + (evs[i].t + 1) + ' ' + evs[i].s; if (used + head.length + line.length > MAX) break; pick.push(evs[i]); used += line.length; }
+    for (var i = 0; i < evs.length; i++){ var line = '\n・T' + (evs[i].t + 1) + ' ' + evs[i].s; if (used + head.length + line.length > LIM) break; pick.push(evs[i]); used += line.length; }
     pick.sort(function(a, b){ return a.t - b.t; });
     var evTxt = pick.length ? (head + pick.map(function(e){ return '\n・T' + (e.t + 1) + ' ' + e.s; }).join('')) : '';
-    var room = MAX - evTxt.length - (evTxt ? 1 : 0) - 'あらすじ：'.length, sum = clean(mem.sum), sumTxt = '';
+    var room = LIM - evTxt.length - (evTxt ? 1 : 0) - 'あらすじ：'.length, sum = clean(mem.sum), sumTxt = '';
     if (sum && room >= SUM_MIN){ if (sum.length > room){ var cut = sum.slice(0, room - 1), k = Math.max(cut.lastIndexOf('。'), cut.lastIndexOf('、')); sum = (k >= SUM_MIN ? cut.slice(0, k + 1) : cut) + '…'; } sumTxt = 'あらすじ：' + sum; }
     var text = [sumTxt, evTxt].filter(Boolean).join('\n');
-    return text.length > MAX ? text.slice(0, MAX) : text;
+    return text.length > LIM ? text.slice(0, LIM) : text;
   }
   /* 腕 A: fix58 userExt から呼ばれる。OFF・見送りのときは parsed をそのまま（同じオブジェクト）返す */
   function applyA(parsed, state){
@@ -317,7 +321,7 @@
     try {
       var S = curState(state); if (!S || !parsed || typeof parsed !== 'object') { skip('NO_STATE'); return parsed; }
       var mem = readMem(S); if (!mem) return parsed;
-      var text = compose(mem); if (!text){ skip('EMPTY'); return parsed; }
+      var e1sec = exp1Sec(mem); LIM = MAX - (e1sec ? e1sec.length + 1 : 0); var text; try { text = compose(mem); } finally { LIM = MAX; } if (e1sec) text = text ? (text + '\n' + e1sec) : e1sec; if (!text){ skip('EMPTY'); return parsed; }   /* ★EXP1: 節の分だけ先に枠を小さくする（OFF は LIM = MAX で同じ組み立て） */
       var rule = m3bOn() ? (RULE + RULE3B) : RULE;   /* ★MEM3 r4: MEM3b ON のときだけ、出来事の読み方を書式の説明として 1 文足す（OFF は従来と同じ文字列） */
       var o = {}, k, placed = false, after = Object.prototype.hasOwnProperty.call(parsed, 'earlierFacts') ? 'earlierFacts' : (Object.prototype.hasOwnProperty.call(parsed, 'storySoFar') ? 'storySoFar' : null);
       if (!after){ o.memoryNotes = { rule: rule, text: text }; placed = true; }

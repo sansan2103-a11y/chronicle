@@ -1487,6 +1487,8 @@
 | 419 | fixRESTYLE1 | `v292DfixRESTYLE1-preset-redo.js` | index：fg3 の直後（RESTYLE1・既定 ON（restyle1on）） | `18a8eea3` | 20261122-vaultgate2r2 | アイコン・画像 | `v292DfixRESTYLE1Off` |
 | 420 | fixVAULTGATE2 | `v292DfixVAULTGATE2-vault-open.js` | index：fix889 の直後（VAULTGATE2・既定 ON・r2: 部品が無いと呼ぶ側が止める／読み直しの後退） | `3c1b3a56` | 20261122-vaultgate2r2 | Vault・非表示 | `v292DfixVAULTGATE2Off` |
 | 421 | fixSCENE1 | `v292DfixSCENE1-cast-presence-input.js` | index：fix192 の直後（SCENE1・GPT #127-WN 優先2・既定 OFF。11-11 の laneSCENE1〔NOW1 等〕とは別） | `641c64a2` | 20261122-scene1r7 | 生成の中心・プロンプト | `v292DfixSCENE1On`（a・c は既定 OFF・r7 から b は全員の既定 ON） `v292DfixSCENE1Off` `v292DfixSCENE1aOff` `v292DfixSCENE1bOff` `v292DfixSCENE1cOff` |
+| 422 | fixMEM4R | `v292DfixMEM4R-rebuild.js` | index：長期記憶の部品の後（MEM4R・11-22） | `8df0898d` | 20261122-mem4r-exp1 | 長期記憶 | 既定 ON（長期記憶が ON の人だけ働く） kill `v292DfixMEM4ROff` | 印の無い古い記憶・空の記憶を、その物語の保存済みの本文から 12 ターン刻みで作り直す（1 物語・1 端末につき 1 回）。Vault は VAULTGATE2 の認可があるときだけ。出荷 11-22・実機は未確認 |
+| 423 | fixEXP1 | `v292DfixEXP1-experience.js` | index：長期記憶の部品の後（EXP1 の E1・11-22・GPT #127-WR 裁定 5） | `af14cab7` | 20261122-mem4r-exp1 | 長期記憶 | 既定 ON（長期記憶が ON の人だけ働く） kill `v292DfixEXP1Off` | 要約の AI への指示の人物欄に「経験・習得」を 1 項目足し、4 段階（教わった／初めてできた／身についた／できなかった）で覚え書きに残す。型の検査で本文に無い習得を捨てる。1 人 3 件まで。出荷 11-22・実 AI と実機は未確認 |
 | 422 | fixACCT1 | `v292DfixACCT1-owner-account-trial.js` | index：OWNERON1 の直後（ACCT1・GPT #127-WN 優先3・#127-WP） | `1d854928` | 20261122-acct1r3 | 認証・アカウント | `v292DfixACCT1Off` `v292DfixACCT1MemOff` `v292DfixACCT1Scene1bOff` |
 
 ## 付録B　ファイルはあるが読み込まれていないもの（＝本番で動いていない）
