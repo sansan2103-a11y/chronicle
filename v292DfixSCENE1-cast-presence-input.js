@@ -262,7 +262,7 @@
   /* sent の中のその人の退出 → { route } | null。next = 次の文（留まる・戻るの確認用。無ければ ''） */
   function gazeOff(g, hf) {   /* ★r7: 「湊を見てから」「湊のほうをちらりと見て」「湊に会釈して」は主人公を見ただけ（一緒に動いていない） */
     var s = str(g); (hf || []).forEach(function (h) { if (!h) return; s = s.replace(new RegExp(esc(h) + HON + '(?:のほう|の方|の顔)?(?:を|に)(?:ちらりと|ちらと|じっと|一度|一瞬|軽く|もう一度)?(?:見|一瞥|振り返|会釈|目礼|一礼|頭を下げ)', 'g'), ''); }); return s; }
-  function r9On() { return bOn() && ls('v292DfixSCENE1bR9Off') !== '1' && ls('v292DfixSCENE1bR9On') === '1'; }   /* ★EXIT2 (1a): 既定 OFF */
+  function r9On() { return bOn() && ls('v292DfixSCENE1bR9Off') !== '1'; }   /* ★EXIT2 (1a): 20261123 から全員 既定 ON（実 AI 10 本・退行 0）。kill v292DfixSCENE1bR9Off */
   var RSN9 = /[^、。]{0,14}を思い出し(?:て)?[、，]/g;   /* ★EXIT2 (1a): 「用事を思い出し、」＝退出の理由の節（回想ではない） */
   function exitIn(sent, forms, next, hero, isInput) {
     var rsnEnd = -1; if (sent && r9On() && IRREAL.test(sent)) { var st9 = String(sent).replace(RSN9, ''); if (st9 !== String(sent) && !IRREAL.test(st9)) { RSN9.lastIndex = 0; var mr9; while ((mr9 = RSN9.exec(sent))) rsnEnd = mr9.index + mr9[0].length; RSN9.lastIndex = 0; } }   /* ★EXIT2 (1a): 理由の節を除くと仮定・回想の印が無い文だけ */
