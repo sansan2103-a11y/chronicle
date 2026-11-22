@@ -24,10 +24,10 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261122-r5';
+  var VER = 'exp1-20261122-r6';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
-  var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0 };   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
+  var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {} };   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
   function cnt(o, k) { o[k] = (o[k] || 0) + 1; }
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return undefined; } }
   function sid() { try { var f = root.__v292Dfix697; var id = f && f.status ? f.status().storyId : null; return id ? String(id) : null; } catch (e) { return null; } }
@@ -204,14 +204,61 @@
     if (!f.some(function (z) { return String(p.nr || '').indexOf(z) >= 0; })) return false;
     return phraseIn(cleanS(x.s), pt + '\n' + unquote(String(p.nr || '')));
   }
+  /* ---- ★r6: 案 A2（E1_REALAI_ANALYSIS.md §5・統括の採用）。要約 AI は本文の語をほとんど使わずに言い換えるので、句の文字の一致は求めない。
+     r5 の検査（checkLoc の前半）で通らなかったときだけ、次の緩い検査で通す（r5 で通るものはそのまま＝r5 が通していた件は減らない）:
+       1) 主人公は対象にしない 2) t は r4 と同じ読みで、その人が出る（名前か会話のタグ）ターンに決まる。t が範囲より前なら古い件として動かさない（前の版に残る）
+       3) 句の漢字の半分以上（2 字以上・漢字が 1 字ならその字）がそのターンの入力か本文にある（「」の中も含む）
+       4) その漢字を含む文が全部、言い切らない・伝聞の文なら捨てる。全部が別の登録の人物の名前の主語の文（「」の中は外して見る）でも捨てる
+       5) first・learned は成功の語（できた・成功・うまくいった・初めて・ようになった）がそのターンに要る。learned は、その文に習得の語が無ければ first に下げる
+       4b) 句の漢字を含む言い切りの文のどれかで、その人が主語（入力の行か、r5 の代名詞・省略の読みを通した地の文。「」の中は外す）
+       6) failed は 失敗・しくじ・できなかった・うまくいかない・すぎ・足りない 等の語がそのターンに要る
+     受け入れたすり抜けは README（意地悪な例を A2 の道で流した結果）。 */
+  var A2_LEARN = /ようになっ|身につけ|身に付け|身についた|身に付いた|覚えた|習得し|ものにし/, A2_OK = /できた|成功|うまくいった|上手くいった|初めて|ようになっ/, A2_FAIL = /失敗|しくじ|できなかっ|うまくいかな|上手くいかな|すぎ|足りず|足りな/;
+  function a2(x, ctx, who) {
+    if (!x || typeof x !== 'object' || !Object.prototype.hasOwnProperty.call(KINDS, x.k)) return 'BAD_K';
+    var s = cleanS(x.s); if (s.length < S_MIN) return 'SHORT'; if (s.length > S_MAX) return 'LONG';
+    var names = (ctx && ctx._names) || [], hero = ctx && ctx.hero ? String(ctx.hero) : '', f = forms(who);
+    if (!f.length || (hero && (who === hero || forms(hero).indexOf(who) >= 0))) return 'A2_HERO';
+    var t0 = parseT(x.t); if (x.t != null && x.t !== '' && isNaN(t0)) return 'BAD_T';
+    if (!isNaN(t0) && t0 < ctx.from) return 'A2_OLD_T';
+    var present = function (p) { var tx = String(p.nr || '') + String(p.pt || ''); return f.some(function (z) { return tx.indexOf(z) >= 0; }) || (Array.isArray(p.says) && p.says.some(function (c) { return c && f.indexOf(String(c.who || '')) >= 0; })); };
+    var tries = isNaN(t0) ? [] : [t0, t0 - 1, ctx.from + t0, ctx.from + t0 - 1], p = null, i, j;
+    for (i = 0; i < tries.length && !p; i++) for (j = 0; j < ctx.parts.length; j++) if (ctx.parts[j].i === tries[i] && present(ctx.parts[j])) { p = ctx.parts[j]; break; }
+    if (!p) { var ps = ctx.parts.filter(present); if (ps.length === 1) p = ps[0]; }
+    if (!p) return 'A2_NOT_PRESENT';
+    var text = String(p.pt || '') + '\n' + String(p.nr || ''), ks = {}, kl = [];
+    (s.match(/[一-鿿々]/g) || []).forEach(function (k) { if (!ks[k]) { ks[k] = 1; kl.push(k); } });
+    var hit = kl.filter(function (k) { return text.indexOf(k) >= 0; });
+    if (!kl.length || (kl.length < 2 ? hit.length < kl.length : hit.length < Math.max(2, Math.ceil(kl.length / 2)))) return 'A2_NO_ANCHOR';
+    var ss = text.replace(/<[^>]*>/g, '\n').split(/(?<=[。！？!?\n」])/).map(function (z) { return z.trim(); }).filter(function (z) { return z && hit.some(function (k) { return z.indexOf(k) >= 0; }); });
+    var live = ss.filter(function (z) { return !HEDGE_RE.test(z) && !RUMOR_RE.test(z); }); if (!live.length) return 'A2_HEDGED';
+    var others = []; names.forEach(function (nm) { if (nm !== who) others = others.concat(forms(nm)); }); if (hero && others.indexOf(hero) < 0 && hero !== who) others = others.concat(forms(hero));
+    var oRe = others.length ? new RegExp('(' + others.map(esc).join('|') + ')(さん|ちゃん|くん|君)?(は|が)') : null;
+    if (oRe && live.every(function (z) { return oRe.test(unquote(z)); })) return 'A2_OTHER_SUBJ';
+    /* ★r6 4b: 句の漢字を含む言い切りの文のどれかで、その人が主語であること（入力の行か地の文。地の文は r5 の代名詞・省略の読みを通した後。「」の中は外す） */
+    var rt = resolveText(p, who, ctx), body = String(p.pt || '') + '\n' + (rt != null ? rt : unquote(String(p.nr || '')));
+    var subj = body.replace(/<[^>]*>/g, '\n').split(/(?<=[。！？!?\n])/).map(function (z) { return z.trim(); }).filter(function (z) { return z && hit.some(function (k) { return z.indexOf(k) >= 0; }) && !HEDGE_RE.test(z) && !RUMOR_RE.test(z); });
+    if (!subj.some(function (z) { return ownClause(z, who) != null; })) return 'A2_NOT_SUBJECT';
+    var k = x.k;
+    if ((k === 'first' || k === 'learned') && !A2_OK.test(text)) return 'A2_NO_SUCCESS';
+    if (k === 'learned' && !live.some(function (z) { return A2_LEARN.test(z); })) { k = 'first'; ST.a2Down++; }
+    if (k === 'failed' && !A2_FAIL.test(text.replace(/失敗(を|も)(恐れ|怖が|気にせ|いと)[^。、]*/g, ''))) return 'A2_NO_FAIL';   /* 「失敗を恐れず」は失敗ではない */
+    return { k: k, s: s, t: p.i };
+  }
   function checkLoc(x, ctx, who) {
+    var r5 = checkLoc5(x, ctx, who); if (typeof r5 !== 'string' || !ctx || !Array.isArray(ctx.parts) || !ctx.parts.length || !ctx._names) return r5;   /* ★r6: r5 で通ればそのまま */
+    if (r5 === 'NOT_OBJ' || r5 === 'BAD_K' || r5 === 'SHORT' || r5 === 'LONG' || r5 === 'BAD_T') return r5;
+    var a = a2(x, ctx, who); if (typeof a === 'string') { cnt(ST.a2Rej, a); return r5; }
+    ST.a2++; return a;
+  }
+  function checkLoc5(x, ctx, who) {
     if (!ctx || !Array.isArray(ctx.parts) || !ctx.parts.length) return checkItem(x, ctx, who);
     if (!x || typeof x !== 'object') return 'NOT_OBJ';
     var t0 = parseT(x.t); if (x.t != null && x.t !== '' && isNaN(t0)) return 'BAD_T';
     var pass = {}, n = 0, firstWhy = null, via = {};
     ctx.parts.forEach(function (p) { var y = {}; for (var k in x) if (Object.prototype.hasOwnProperty.call(x, k)) y[k] = x[k]; y.t = p.i;
       var r = checkItem(y, { from: p.i, to: p.i, text: partText(p) }, who);
-      if (typeof r === 'string' && x.k === 'first' && (r === 'FIRST_NOT_SAID' || r === 'NOT_SUBJECT' || r === 'NOT_IN_TEXT') && selfFirst(x, p, who)) { r = { k: 'first', s: cleanS(x.s), t: p.i }; via[p.i] = 'self'; }
+      if (typeof r === 'string' && x.k === 'first' && (r === 'FIRST_NOT_SAID' || r === 'NOT_SUBJECT' || r === 'NOT_IN_TEXT' || r === 'NEGATED') && selfFirst(x, p, who)) { r = { k: 'first', s: cleanS(x.s), t: p.i }; via[p.i] = 'self'; }
       if (typeof r === 'string' && (r === 'NOT_SUBJECT' || r === 'NOT_IN_TEXT' || r === 'NOT_TAUGHT') && x.k !== 'taught') { var rt = resolveText(p, who, ctx);   /* ★r5: 代名詞・省略の主語 */
         if (rt != null) { var r2 = checkItem(y, { from: p.i, to: p.i, text: String(p.pt || '') + '\n' + rt }, who); if (typeof r2 !== 'string') { r = r2; via[p.i] = 'pron'; } else if (r === 'NOT_SUBJECT' || r === 'NOT_IN_TEXT') r = r2; } }
       if (typeof r === 'string' && x.k === 'taught' && inputTaught(x, p, who, ctx)) { r = { k: 'taught', s: cleanS(x.s), t: p.i }; via[p.i] = 'input'; }   /* ★r5 */
@@ -233,11 +280,15 @@
      満杯: 新しい件の段階が、枠の中でいちばん低い段階（同じなら古い方）より高いときだけ入れ替える。そうでなければ足さない（full を数える）。 */
   var RANK = { learned: 3, first: 2, taught: 1 };
   function topic(s) { var m = /^[一-鿿々ァ-ヶー]{1,6}/.exec(norm(s)); return m ? m[0] : ''; }
-  function sameS(a, b) { var x = norm(a), y = norm(b); if (!x || !y) return false; if (x === y || x.indexOf(y) >= 0 || y.indexOf(x) >= 0) return true; var tx = topic(a), ty = topic(b); return !!tx && tx === ty; }
+  function sameS(a, b) { var x = norm(a), y = norm(b); if (!x || !y) return false; if (x === y || x.indexOf(y) >= 0 || y.indexOf(x) >= 0) return true; var tx = topic(a), ty = topic(b); if (!!tx && tx === ty) return true;
+    /* ★r6: 言い換え（「背の剥がれた文庫に糊を引き直し仕上げた」と「文庫の背の糊を引き直し成功した」）も同じ件: 漢字の集合の重なりが、少ない方の 6 割以上（3 字以上） */
+    var ka = {}, kb = {}, na = 0, nb = 0, both = 0; (x.match(/[一-鿿々]/g) || []).forEach(function (k) { if (!ka[k]) { ka[k] = 1; na++; } }); (y.match(/[一-鿿々]/g) || []).forEach(function (k) { if (!kb[k]) { kb[k] = 1; nb++; if (ka[k]) both++; } });
+    return both >= 3 && both >= Math.ceil(Math.min(na, nb) * 0.6); }
   function addTo(list, c) {
     var pool = list.filter(function (x) { return (x.k === 'failed') === (c.k === 'failed'); }), cap = c.k === 'failed' ? 1 : PER;
     for (var i = 0; i < pool.length; i++) if (sameS(pool[i].s, c.s)) {
-      var p = pool[i]; if (c.k === 'failed' || RANK[c.k] >= RANK[p.k]) { if (p.k !== c.k || p.t !== c.t || p.s !== c.s) { p.k = c.k; p.t = c.t; p.s = c.s; ST.upd++; } else ST.dup++; } else ST.dup++; return; }
+      var p = pool[i]; if (p.k === 'first' && c.k === 'first') { ST.dup++; return; }   /* ★r6: 初めてできたのは最初のターンのまま */
+      if (c.k === 'failed' || RANK[c.k] >= RANK[p.k]) { if (p.k !== c.k || p.t !== c.t || p.s !== c.s) { p.k = c.k; p.t = c.t; p.s = c.s; ST.upd++; } else ST.dup++; } else ST.dup++; return; }
     if (pool.length < cap) { list.push(c); ST.kept++; return; }
     var low = null; pool.forEach(function (x) { if (!low || (RANK[x.k] || 0) < (RANK[low.k] || 0) || ((RANK[x.k] || 0) === (RANK[low.k] || 0) && x.t < low.t)) low = x; });
     if (c.k !== 'failed' && low && RANK[c.k] > RANK[low.k]) { list.splice(list.indexOf(low), 1, c); ST.swapped++; return; }

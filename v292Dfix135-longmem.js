@@ -198,7 +198,7 @@
     var _authBlock245 = 'AUTHORITATIVE CHARACTER NAMES (these exact names already identify characters in this story — dialogue speakers and known cast):\n' +
       (_authList245.length ? _authList245.map(function(n){ return '- ' + n; }).join('\n') : '(none)') + '\n' +
       'When a person in the narration is one of these, you MUST use that EXACT name. NEVER coin a new descriptive label (e.g. 黒髪の少女, 白いワンピースの少女) for someone already named above. One physical character = exactly ONE name.\n\n';
-    return exp1Prompt(mem3Prompt('You analyze a Japanese ongoing horror TRPG to maintain long-term memory.\n\n' +   /* ★MEM3: OFF は同じ文字列 */
+    return mf1Prompt(exp1Prompt(mem3Prompt('You analyze a Japanese ongoing horror TRPG to maintain long-term memory.\n\n' +   /* ★MEM3: OFF は同じ文字列 */
       'PREVIOUS SUMMARY:\n' + (prevSummary || '(none)') + '\n\n' +
       _authBlock245 +
       'KNOWN WORLD INFO:\n' + (prevWorldInfo.length ? prevWorldInfo.map(function(w){var _b = '- ' + w.name + ' (' + w.type + '): ' + w.desc; try { var X = window.__v292DfixEXP1; if (X && typeof X.wiLine === 'function') return X.wiLine(w, _b); } catch(eX){} return _b;}).join('\n') : '(none)') + '\n\n' +
@@ -210,11 +210,15 @@
       '  "worldinfo": [ { "name": "Japanese name", "type": "character|place|object|concept", "desc": "1 sentence Japanese: who/what" } ],\n' +
       '  "events": [ { "turnIdx": number, "event": "1 line Japanese: a major event (death/escape/encounter/loss/key decision)", "importance": 1-3 (3=critical) } ]\n' +
       '}\n' +
-      'Rules: Output ONLY the JSON. Update/replace previous summary entirely. Merge new worldinfo entries with old (no duplicates by name; reuse AUTHORITATIVE CHARACTER NAMES verbatim — do not create a second entry under a different label for the same person). Keep worldinfo <= 30 (drop least relevant). Keep events <= 15 (drop low-importance old ones). Use turnIdx values from the [Turn N] markers above.'));
+      'Rules: Output ONLY the JSON. Update/replace previous summary entirely. Merge new worldinfo entries with old (no duplicates by name; reuse AUTHORITATIVE CHARACTER NAMES verbatim — do not create a second entry under a different label for the same person). Keep worldinfo <= 30 (drop least relevant). Keep events <= 15 (drop low-importance old ones). Use turnIdx values from the [Turn N] markers above.')));   /* ★MEMFIX1 (c): summary の長さの形（OFF は同じ文字列） */
   }
   /* ★EXP1（既定 OFF・鍵 v292DfixEXP1aOn・kill v292DfixEXP1Off）: 部品 v292DfixEXP1-experience.js が条件を見て、人物の欄に exp の 1 項目を足す。無い・OFF は同じ文字列 */
   function exp1Prompt(p){ try { var X = window.__v292DfixEXP1; return (X && typeof X.prompt === 'function') ? X.prompt(p) : p; } catch(e){ return p; } }
 
+  /* ★MEMFIX1（既定 ON・kill v292DfixMEMFIX1Off）: 長期記憶の作り直しが止まり続ける穴の直し。部品が無い・kill・長期記憶 OFF は土台と同じ */
+  function _mf1(){ try { var F = window.__v292DfixMEMFIX1; return (F && typeof F.on === 'function') ? F : null; } catch(e){ return null; } }
+  function _mf1Tok(d){ try { var F = _mf1(); return F ? F.tokens(d) : d; } catch(e){ return d; } }
+  function mf1Prompt(p){ try { var F = _mf1(); return F ? F.prompt(p) : p; } catch(e){ return p; } }
   function call(prompt, cb){
     var key = getKey();
     if (!key){ cb(null); return; }
@@ -224,7 +228,7 @@
       var _b = {
         model: _m,
         temperature: 0.3,
-        max_tokens: 2000,
+        max_tokens: _mf1Tok(2000),   /* ★MEMFIX1: 同じ所で 2 回続けて失敗した後の 1 回だけ 4000（kill・長期記憶 OFF は 2000 のまま） */
         messages: [{ role: 'user', content: prompt }]
       };
       /* ★v292Dsmrc2b: MODEL-SPECIFIC REQUEST POLICY。effective model（_m = registry.primary()）で
@@ -245,7 +249,8 @@
           try {
             var j = JSON.parse(xhr.responseText);
             var content = j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
-            cb(parse(content));
+            var _pr = parse(content); if (!_pr){ try { var Fs = _mf1(); if (Fs && Fs.on()) _pr = Fs.salvage(content); } catch(eS){ _pr = null; } }   /* ★MEMFIX1 (a): 途中で切れた JSON から読めた分 */
+            cb(_pr);
           } catch(e){ cb(null); }
         } else { cb(null); }
       };
@@ -312,11 +317,15 @@
     var FIRST_CAP = 12;
     if (lastBuild < 0 && (curTurn + 1) > FIRST_CAP) startIdx = curTurn - FIRST_CAP + 1;
     var curAll = curTurn; if (r4 && r4.catchup){ startIdx = r4.from; curTurn = r4.to; }   /* ★MEM4R: 追いつく範囲（1 回 12 ターン・本文 12,000 字まで）。この回の作り直しは curTurn までとして保存・知らせる（OFF は変わらない） */
+    var mfP = null; try { var MFx = _mf1(); if (MFx) mfP = MFx.plan({ sfx: startSfx, lb: lastBuild, from: startIdx, to: curTurn, cur: curAll }); } catch(eMF){ mfP = null; }   /* ★MEMFIX1 (b): 続けて失敗した所のやり直しの段取り */
+    if (mfP && mfP.wait){ BUSY = false; return; }
+    if (mfP && typeof mfP.from === 'number'){ startIdx = mfP.from; curTurn = mfP.to; try { _mf1().setTokens(mfP.tokens); } catch(eMt){} }
     var newTurns = st.turns.slice(startIdx, curTurn + 1);
     var prompt = buildPrompt(prevSum, prevWI, prevEv, newTurns, startIdx);
     call(prompt, function(result){
       BUSY = false;
-      if (!result){ try { console.log(TAG, 'rebuild returned null (timeout/parse-fail)'); } catch(_){} return; }
+      if (!result){ try { var MFf = _mf1(); if (MFf) MFf.fail({ sfx: startSfx, lb: lastBuild, to: curTurn, cur: curAll }); } catch(eMf){} try { console.log(TAG, 'rebuild returned null (timeout/parse-fail)'); } catch(_){} return; }
+      try { var MFo = _mf1(); if (MFo && MFo.on()){ if (result._cut) result = MFo.fill(result, prevWI, prevEv); result.summary = MFo.cutSummary(result.summary); } } catch(eMo){}   /* ★MEMFIX1 (a)(c): 切れた項目は前の版で補う・summary は文の区切りで切る */
       // ★fix299b: 要約中(最大90s)にスロット切替/物語差替が起きていたら、このスロットには保存しない。
       var s2 = getState();
       if (!s2 || !s2.scene || (s2.scene.loc || null) !== startLoc){ try { console.log(TAG, 'story changed during summarize — discarded (no cross-slot write)'); } catch(_){} return; }
@@ -330,6 +339,7 @@
       saveLastBuild(curTurn);
       try { var m4h = window.__v292DfixMEM4Done; if (typeof m4h === 'function') m4h({ sfx: startSfx, loc: startLoc, lb: curTurn, ok: _lmCanSave(), r: result }); } catch(_){}   /* ★MEM4 r2/r3: 作り直しの完了を知らせるだけ（保存は上で済んでいる・受け手が無ければ何もしない）。r3: 保存しようとした結果 r を渡す（受け手が保存のとおりかを確かめる） */
       try { if (r4 && r4.catchup && window.__v292DfixMEM4R) window.__v292DfixMEM4R.finished(startSfx, curTurn, curAll); } catch(eR4f){}   /* ★MEM4R */
+      try { var MFk = _mf1(); if (MFk) MFk.ok({ sfx: startSfx }); } catch(eMk){}   /* ★MEMFIX1 */
       try { console.log(TAG, 'rebuilt at turn', curTurn, '— summary:', (result.summary||'').length, 'chars, worldinfo:', result.worldinfo.length, ', events:', result.events.length); } catch(_){}
     });
   }
