@@ -96,7 +96,7 @@
   var TAUGHT_OBJ_RE = /教え(た|る|て)|見せ(た|る|て)|手ほどきし/;
   function esc(x) { return String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
   function forms(name) { var n = String(name || '').trim(), out = []; if (!n) return out; out.push(n);
-    var n1 = false; try { n1 = localStorage.getItem('v292DfixNAME1CHOff') !== '1' && localStorage.getItem('v292DfixNAME1CHOn') === '1'; } catch (eN1) {}   /* ★NAME1CH: 「渡瀬 紬」の「紬」。subjRe は直前が区切り・直後が助詞のときだけ当てる */
+    var n1 = false; try { n1 = localStorage.getItem('v292DfixNAME1CHOff') !== '1'; } catch (eN1) {}   /* ★NAME1CH: 「渡瀬 紬」の「紬」。subjRe は直前が区切り・直後が助詞のときだけ当てる */
     var all2 = n.split(/[\s　・]+/).filter(Boolean), parts = all2.filter(function (x) { return x.length >= 2 || (n1 && all2.length === 2 && /^[一-鿿々ぁ-んァ-ヶー]$/.test(x)); }); if (all2.length > 1 && parts.length) out = out.concat(parts.filter(function (x) { return out.indexOf(x) < 0; }));
     else if (/^[一-鿿々]{4}$/.test(n)) { out.push(n.slice(0, 2)); out.push(n.slice(2)); } else if (/^[一-鿿々]{3}$/.test(n)) out.push(n.slice(1));
     return out; }
@@ -316,6 +316,11 @@
     var asked = lastAsked; lastAsked = false;
     if (!result || !Array.isArray(result.worldinfo)) return result;
     var live = on();
+    /* ★EXP1 r8（2026-11-24・既定 OFF・鍵 v292DfixEXP1PendOn・kill v292DfixEXP1PendOff）: 受け取った要約を取り込む時点で、Vault の答えが 15 秒より古いだけ
+       （VAULTGATE2 が V2_PENDING／V2_CG_STALE／V2_INCOMPLETE＝「隠してある」とも「施錠中」とも言っていない）の回は、受けた exp を捨てていた（rej OFF_AT_MERGE・実 AI で 7 回）。
+       取り込みは端末の中の記憶への書き込みで、外への送信は頼んだ時点でもう済んでいる。頼んだ回（応答に exp がある）に限り、この 3 つの理由のときは取り込む。
+       隠した物語・施錠中（V2_LOCKED など）・kill・長期記憶 OFF は今までどおり捨てる。 */
+    try { if (!live && lsg('v292DfixEXP1PendOff') !== '1' && lsg('v292DfixEXP1PendOn') === '1') { var w8 = why(); if (/^VAULT_V2_(?:PENDING|CG_STALE|INCOMPLETE)$/.test(String(w8)) && Array.isArray(result && result.worldinfo) && result.worldinfo.some(function (z) { return z && typeof z === 'object' && z.exp !== undefined; })) { live = true; cnt(ST.rej, 'PEND_KEPT_LIVE'); } } } catch (e8) {}
     if (!live && !asked) return result;   /* 頼んでいない・OFF: 土台と同じ（触らない） */
     var prevBy = {}; (prevWI || []).forEach(function (w) { if (w && w.type === 'character' && w.name && Array.isArray(w.exp)) prevBy[w.name] = w; });
     var names = {}, routed = {}, chars = result.worldinfo.filter(function (w) { return w && typeof w === 'object' && w.type === 'character' && typeof w.name === 'string' && w.name; }).map(function (w) { return w.name; });

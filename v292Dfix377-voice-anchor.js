@@ -346,7 +346,7 @@
            この行が出なかった（昇格の前は「未登録キャラ」の推定の行があったのに、登録した途端に消える）。昇格の前に貯めた推定（一人称が 2 回以上・または性別）か、
            説明文のはっきりした性別（GENDER1 の inferFromText）があるときだけ、同じ書き方の 1 行を足す。state は書かない。 */
         try {
-          if (localStorage.getItem('v292DfixPROMOVOICE1Off') !== '1' && localStorage.getItem('v292DfixPROMOVOICE1On') === '1'){
+          if (localStorage.getItem('v292DfixPROMOVOICE1Off') !== '1'){   /* 20261124: 全員 既定 ON（実 AI: 登録の次の送信から行が出る・退行 0） */
             var pvQ = window.__v292QuasiPack, pvS = pvQ ? (pvQ.store() || {}) : {}, pvE = pvS[String(p.name)] && pvS[String(p.name)].est, pvG = '';
             if (pvE && pvE.fp && (pvE.fpn || 0) >= 2) lines.push(name + '=一人称「' + pvE.fp + '」で固定');
             else {

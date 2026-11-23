@@ -371,7 +371,7 @@
   /* ★NAME1CH（2026-11-23・既定 OFF・鍵 v292DfixNAME1CHOn・kill v292DfixNAME1CHOff）: 「姓 名」で名が 1 字の登録人物（霧島 冴・渡瀬 紬・瀬名 律）は、入力や本文で「冴は…」と書かれても
      退出・戻りを拾えなかった（名前の部分は 2 字以上だけを使っていた・実 AI 25 ターンで bExits 0）。空白で分けた 1 字の部分を、他の人物の名前の形に含まれないときだけ足す。 */
   var N1CH_RE = /^[一-鿿々ぁ-んァ-ヶー]$/;
-  function n1chOn() { return ls('v292DfixNAME1CHOff') !== '1' && ls('v292DfixNAME1CHOn') === '1'; }
+  function n1chOn() { return ls('v292DfixNAME1CHOff') !== '1'; }   /* 20261124: 全員 既定 ON（実 AI 4 本: 退出を拾えた 0/2 → 2/2・退行 0） */
   function one1(n, S) { var out = []; try { if (!n1chOn()) return out; var k = str(n).trim(), parts = k.split(/[\s　・]+/).filter(Boolean); if (parts.length !== 2) return out;
       var others = []; npcNames(S).forEach(function (m) { if (m !== k) others.push(sp(m)); }); var h = S && S.cast && S.cast.hero && S.cast.hero.name; if (h && str(h).trim() !== k) others.push(sp(h));
       parts.forEach(function (p) { if (N1CH_RE.test(p) && others.every(function (o) { return o.indexOf(p) < 0; })) out.push(p); }); } catch (e) {} return out; }

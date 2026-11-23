@@ -44,7 +44,7 @@
     var full = nrm(name); if (!full) return [];
     var out = [full], C = (cast || []).map(nrm).filter(Boolean);
     function uniq(q) { var h = 0; for (var i = 0; i < C.length; i++) if (C[i].indexOf(q) >= 0) h++; return h <= 1; }
-    var n1 = false; try { n1 = lsg('v292DfixNAME1CHOff') !== '1' && lsg('v292DfixNAME1CHOn') === '1'; } catch (eN1) {}   /* ★NAME1CH: 「霧島 冴」の「冴」は、本文に 直前が漢字でない・直後が助詞や敬称 の形で出ているときだけ名前の形に数える */
+    var n1 = false; try { n1 = lsg('v292DfixNAME1CHOff') !== '1'; } catch (eN1) {}   /* ★NAME1CH: 「霧島 冴」の「冴」は、本文に 直前が漢字でない・直後が助詞や敬称 の形で出ているときだけ名前の形に数える */
     var ps0 = String(name).split(/[\s　・]+/).filter(Boolean);
     ps0.forEach(function (p) { var q = nrm(p); if (q !== full && uniq(q) && out.indexOf(q) < 0 && (q.length >= 2 || (n1 && ps0.length === 2 && /^[一-鿿々ぁ-んァ-ヶー]$/.test(q) && new RegExp('(^|[^一-鿿々])' + esc(q) + PART_AFTER).test(String(text || ''))))) out.push(q); });
     if (out.length === 1 && full.length >= 3) {

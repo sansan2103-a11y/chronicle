@@ -300,7 +300,11 @@
   function ex1Cat(id, env) {
     var b = J(g(env, 'chr6_slot_' + id), null);
     if (!b || typeof b !== 'object' || isArr(b)) return 'body:unreadable';
-    for (var k in b) if (ztHas(b, k) && ZT_TOP[k] !== 1) return 'top:unknown';
+    /* ★ORIGIN1（2026-11-24・既定 OFF・鍵 v292DfixORIGIN1On・kill v292DfixORIGIN1Off）: 筋書きから始めた物語は body.origin = {scenarioId, scenarioRev}（fix819・FLW5 が書く 2 つだけ）を持ち、
+       これが「知らない欄」と数えられて、削除済みでも端末の本体が空き容量に出なかった（実機 3 本）。この 2 つの欄だけ・文字か数だけの origin は、知っている欄として通す。 */
+    var or1 = false; try { or1 = lsg('v292DfixORIGIN1Off') !== '1' && lsg('v292DfixORIGIN1On') === '1'; } catch (eO1) {}
+    function or1Ok(o) { if (o === null) return true; if (!o || typeof o !== 'object' || isArr(o)) return false; for (var q in o) { if (!ztHas(o, q)) continue; if (q !== 'scenarioId' && q !== 'scenarioRev') return false; var tq = typeof o[q]; if (o[q] !== null && tq !== 'string' && tq !== 'number') return false; } return true; }
+    for (var k in b) if (ztHas(b, k) && ZT_TOP[k] !== 1 && !(or1 && k === 'origin' && or1Ok(b[k]))) return 'top:unknown';
     var c = b.cfg, nT = isArr(b.turns) ? b.turns.length : -1;
     if (c != null) {
       if (typeof c !== 'object' || isArr(c)) return 'cfg:not-object';
