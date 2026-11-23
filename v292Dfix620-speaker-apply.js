@@ -120,6 +120,8 @@
             var n = applyTurn(turn, castOf(s), (s && s.cast && s.cast.hero && s.cast.hero.name) || '');
             /* ★SPKCHK1（既定 OFF・鍵 v292DfixSPKCHK1On・kill v292DfixSPKCHK1Off）: 突き合わせ（fix611 の門）の後で 1 回だけ、本文に「話し手は X ではない」の強い根拠がある登録名の札を本文の呼び名へ（who だけ） */
             try { var _sc1 = window.__v292DfixSPKCHK1; if (_sc1 && typeof _sc1.on === 'function' && _sc1.on()) n += _sc1.applyTurn(turn, castOf(s), (s && s.cast && s.cast.hero && s.cast.hero.name) || ''); } catch (_sc1e) {}
+            /* ★SPKQ1（既定 OFF・鍵 v292DfixSPKQ1On・kill v292DfixSPKQ1Off）: AI の札が無いカードのうち、本文と矛盾する札だけを ??? に（効果音・口に出していない「」は外す） */
+            try { var _sq1 = window.__v292DfixSPKQ1; if (_sq1 && typeof _sq1.on === 'function' && _sq1.on()) { var _sq1r = _sq1.applyTurn(turn, castOf(s), (s && s.cast && s.cast.hero && s.cast.hero.name) || '', s); n += (_sq1r.unknown || 0) + (_sq1r.sfx || 0) + (_sq1r.flip || 0); } } catch (_sq1e) {}
             /* ★NAMING1（既定 OFF・鍵 v292DfixNAMING1On・kill v292DfixNAMING1Off）: SPKCHK1 の後の札で、名乗りの後の呼び名を名前の別名へ（fix277 の台帳・fix538 の統一） */
             try { var _nm1 = window.__v292Dfix277Naming1; if (_nm1 && typeof _nm1.on === 'function' && _nm1.on() && s && Array.isArray(s.turns)) _nm1.turn(turn, s.turns.indexOf(turn)); } catch (_nm1e) {}
             if (n > 0) {

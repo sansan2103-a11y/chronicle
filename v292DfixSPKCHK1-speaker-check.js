@@ -322,5 +322,6 @@
   (function w() { w.n = (w.n || 0) + 1; if (wireSfl()) return; if (w.n > 120) return; setTimeout(w, 500); })();
 
   root.__v292DfixSPKCHK1 = { ver: VER, on: on, analyze: analyze, applyTurn: applyTurn, guards: guards, formsOf: formsOf, labelsIn: labelsIn,
+    _h: { quotesOf: quotesOf, sentencesOf: sentencesOf, allForms: allForms, isFormOf: isFormOf, speechBy: speechBy, voiceOf: voiceOf, firstSubject: firstSubject, coSubjects: coSubjects, selfIntro: selfIntro, thirdPerson: thirdPerson, stripInner: stripInner, loose: loose, nrm: nrm, esc: esc },   /* SPKQ1 が同じ部品を使う（読むだけ） */
     stats: function () { return JSON.parse(JSON.stringify({ ver: VER, on: on(), turns: ST.turns, flipped: ST.flipped, kept: ST.kept, guard: ST.guard, errors: ST.errors })); } };
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
