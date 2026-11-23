@@ -2166,7 +2166,7 @@
   var F3_ON = 'v292DfixFREE3On', F3_OFF = 'v292DfixFREE3Off', F3_MAX_ASK = 20, F3_CG_TTL = 30000;
   var F3_DIRTY = { DIRTY_INTENT: 1, DIRTY_LOCAL: 1 };
   var f3st = { surveys: 0, asked: 0, listed: 0, runs: 0, done: 0, failed: 0, journalDeleted: 0, journalKept: 0, why: {} };
-  function f3On() { return lsg(F3_OFF) !== '1' && lsg(F3_ON) === '1' && lsg(D1_KILL) !== '1' && lsg('v292DfixSTORE1Off') !== '1'; }
+  function f3On() { return lsg(F3_OFF) !== '1' && lsg(D1_KILL) !== '1' && lsg('v292DfixSTORE1Off') !== '1'; }   /* 20261123: 全員 既定 ON（実機: 試験物語 7 本を公式の欄から削除・キャンセルで不変・失敗 0・隠した物語は出ない／rig 20/20）。kill v292DfixFREE3Off */
   function f3Why(w) { w = String(w || 'x').slice(0, 40); f3st.why[w] = (f3st.why[w] || 0) + 1; return w; }
   /* 施錠中の隠した id は、CopyGate の vault2visible の答え（端末の全 id を聞いている）で決める。答えが古い・無い → 分からない */
   function f3CgVault(id) {
