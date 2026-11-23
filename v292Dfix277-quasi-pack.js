@@ -364,7 +364,7 @@
     } catch(e){}
   }
   window.__v292Dfix540 = { dropped: function(){ return _dropped540.slice(); }, off: off540 };
-  function nws1On(){ try { return localStorage.getItem('v292DfixNAMEWS1Off') !== '1' && localStorage.getItem('v292DfixNAMEWS1On') === '1'; } catch(e){ return false; } }
+  function nws1On(){ try { return localStorage.getItem('v292DfixNAMEWS1Off') !== '1'; } catch(e){ return false; } }   /* 20261124: 全員 既定 ON（実機: 登録名と空白だけ違う名札・要約の名前で 2 行に分かれる → 1 行・ほかの名前は読み替えない） */
   function nws1Key(n){ return String(n == null ? '' : n).normalize('NFKC').replace(/[\s\u3000\u00A0\u200B-\u200D\uFEFF・･]+/g, ''); }
   window.__v292DfixNAMEWS1 = { on: nws1On, key: nws1Key };
   function aliasFix(name){
@@ -391,6 +391,9 @@
       if (!off277r()){ try { var X277r = window.__v292Dfix850x; if (X277r && typeof X277r.realStore === 'function'){ var rs277r = X277r.realStore(); if (rs277r && typeof rs277r === 'object') st = rs277r; } } catch(_r277){} }
       if (!st) return;
       var map = aliasMap(); var moved = 0;
+      /* ★NAMEWS1 r2（2026-11-24・既定 OFF・鍵 v292DfixNAMEWS1StOn・kill v292DfixNAMEWS1StOff）: 人物の状態（からだ・こころ等）も、登録名と空白だけ違う名前の行を登録名の行へまとめる
+         （実機: 前面の行に「桑田ほのか・桑田 ほのか」と同じ人が 2 回並んだ）。まとめ方は別名のときと同じ（新しい側を優先）。 */
+      try { if (nws1On() && localStorage.getItem('v292DfixNAMEWS1StOff') !== '1' && localStorage.getItem('v292DfixNAMEWS1StOn') === '1') { var cn2 = castNames(), m2 = {}; for (var k2 in map) if (Object.prototype.hasOwnProperty.call(map, k2)) m2[k2] = map[k2]; Object.keys(st).forEach(function(a2){ if (m2[a2] || cn2.indexOf(a2) >= 0) return; var c2 = aliasFix(a2); if (c2 && c2 !== a2 && cn2.indexOf(c2) >= 0) m2[a2] = c2; }); map = m2; } } catch(eSt){}
       Object.keys(map).forEach(function(a){
         if (!st[a]) return;
         var c = map[a];
