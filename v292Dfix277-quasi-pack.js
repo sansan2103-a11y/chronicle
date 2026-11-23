@@ -364,8 +364,15 @@
     } catch(e){}
   }
   window.__v292Dfix540 = { dropped: function(){ return _dropped540.slice(); }, off: off540 };
+  function nws1On(){ try { return localStorage.getItem('v292DfixNAMEWS1Off') !== '1' && localStorage.getItem('v292DfixNAMEWS1On') === '1'; } catch(e){ return false; } }
+  function nws1Key(n){ return String(n == null ? '' : n).normalize('NFKC').replace(/[\s\u3000\u00A0\u200B-\u200D\uFEFF・･]+/g, ''); }
+  window.__v292DfixNAMEWS1 = { on: nws1On, key: nws1Key };
   function aliasFix(name){
-    try { if (offA()) return name; var m = aliasMap(); return m[name] || name; } catch(e){ return name; }
+    try { if (offA()) return name; var m = aliasMap(); if (m[name]) return m[name];
+      /* ★NAMEWS1（2026-11-24・既定 OFF・鍵 v292DfixNAMEWS1On・kill v292DfixNAMEWS1Off）: 登録名と、空白（半角・全角）・中黒・見えない文字の有無だけが違う名前は、登録名に読み替える
+         （Owner 報告 11-23: 途中で登録した「桜田ほのか」が、会話ログではアイコンなし・キャラ一覧では登録済みと自動抽出の 2 行に分かれた）。一致する登録名がちょうど 1 つのときだけ。 */
+      if (nws1On() && name) { var kN = nws1Key(name); if (kN.length >= 2) { var cs = castNames(), hit = []; for (var iN = 0; iN < cs.length; iN++) { if (cs[iN] === name) return name; if (nws1Key(cs[iN]) === kN && hit.indexOf(cs[iN]) < 0) hit.push(cs[iN]); } if (hit.length === 1) return hit[0]; } }
+      return name; } catch(e){ return name; }
   }
   window.__v292AliasFix = aliasFix; // index.html(会話ログ収穫)から呼ばれる
 

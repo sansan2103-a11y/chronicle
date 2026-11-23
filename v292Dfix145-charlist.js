@@ -312,6 +312,9 @@
     // v292Dfix350: 登録キャラの短縮呼び(例「スピカ」←「スピカ・ヴァレン」)を別人として
     //   表示しない別名ガード。長さ2以上で一方が他方を完全包含=同一人物とみなす。
     var __regNames = Object.keys(registered);
+    /* ★NAMEWS1: 登録名と空白・中黒・見えない文字だけが違う名前も「登録済み」と読む（自動抽出の行に同じ人が出ないように）。鍵は fix277 の NAMEWS1 と同じ */
+    var __nws1 = null; try { var __N1 = window.__v292DfixNAMEWS1; if (__N1 && __N1.on()) { __nws1 = {}; __regNames.forEach(function(r){ var k = __N1.key(r); if (k.length >= 2) __nws1[k] = 1; }); } } catch(eN1){ __nws1 = null; }
+    function __nws1Reg(nm){ try { return !!(__nws1 && nm && __nws1[window.__v292DfixNAMEWS1.key(nm)] === 1); } catch(e){ return false; } }
     function __isAliasOfRegistered(nm){
       if(!nm || nm.length<2) return false;
       for(var _i=0;_i<__regNames.length;_i++){ var _r=__regNames[_i]; if(!_r||_r===nm) continue;
@@ -320,7 +323,7 @@
     }
     Object.keys(wiByName).forEach(function(nm){
       function __isVariantOfPeer(nm){ try{ var pool=Object.keys(wiByName); for(var i=0;i<pool.length;i++){ var b=pool[i]; if(b===nm) continue; if(nm.length>b.length && nm.slice(-b.length)===b) return true; } }catch(e){} return false; } // v292Dfix358: 「間延びした影」→「影」等、修飾語+既出名詞は同一として非表示
-    if (registered[nm] || __isAliasOfRegistered(nm) || __isVariantOfPeer(nm)) return;
+    if (registered[nm] || __nws1Reg(nm) || __isAliasOfRegistered(nm) || __isVariantOfPeer(nm)) return;
       /* ★fix537b(2026-07-25・実機30ターンで判明): 別名台帳で正名が確定している呼称は一覧に出さない。
          fix537 が「名乗り」で 少女=シオン を確定させ、会話ログの who も fix77 の状態も
          シオンへ統合されるのに、**キャラ一覧だけが両方を並べていた**(データ層で別名を見ていなかった)。
@@ -417,7 +420,7 @@
             var __who = __says[__si] && __says[__si].who;
             var __h = String(__who == null ? '' : __who).trim();
             if (!__h) continue;
-            if (registered[__h] || __isAliasOfRegistered(__h)) continue;
+            if (registered[__h] || __nws1Reg(__h) || __isAliasOfRegistered(__h)) continue;
             var __label = __f487label(__h, __t);
             // ★fix487d: 汎用未識別(???)は、その核(例「若い男」)が具体呼称として既出なら畳む(生成側を残す)
             if (__f487gen(__h)){ var __core = __coreOf(__label); if (__core && __specific[__core] && Object.keys(__specific).length === 1) continue; }  // ★fix487f: 具体候補が1つの時だけ畳む(複数=別人の恐れ→畳まない)

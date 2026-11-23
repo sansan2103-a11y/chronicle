@@ -419,7 +419,7 @@
               /* ★HMOVE1（2026-11-24・既定 OFF・鍵 v292DfixHMOVE1On・kill v292DfixHMOVE1Off）: 主人公が移動しただけでは、出ていった人を「戻った」にしない
                  （実 AI 4 本: 冴が去る → 主人公が別の場所へ移動 → 冴の退出が解けて、次の回の前面の行に冴が入った）。退出のまま持ち越し、
                  戻すのは今までの根拠（入力で来る・その人の台詞・本文で戻る・主人公と一緒・その場で動く）と、6 ターン何も無いときの期限だけ。 */
-              if (ls('v292DfixHMOVE1Off') !== '1' && ls('v292DfixHMOVE1On') === '1') { if (!st.moved) { st.moved = tn; ST.bMovedKept = (ST.bMovedKept || 0) + 1; } }
+              if (ls('v292DfixHMOVE1Off') !== '1') {   /* 20261124: 全員 既定 ON（実 AI 4 本: 移動の後に前面へ戻る 6/6 → 0/6・戻りは認識・退行 0） */ if (!st.moved) { st.moved = tn; ST.bMovedKept = (ST.bMovedKept || 0) + 1; } }
               else { st = null; noteBack(n, tn, 'heroMoved'); } }
             else if ((ty === 'DO' || ty === 'STORY') && hasAny(maskQ(str(t.playerText)), fb) && IN_ARRIVE.test(str(t.playerText)) && !/(?:ない|なかった)/.test(str(t.playerText))) { st = null; noteBack(n, tn, 'input'); }
             else if (Array.isArray(t._convSays) && t._convSays.some(function (c) { return c && fb.indexOf(str(c.who).trim()) >= 0; })) { st = null; noteBack(n, tn, 'speaker'); }
