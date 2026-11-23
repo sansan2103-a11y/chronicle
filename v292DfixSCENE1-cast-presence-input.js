@@ -415,7 +415,12 @@
         var TT = S.turns.slice(), cin = curInput(S); if (cin) TT.push(cin);   /* ★r4: 組み立て中の入力も 1 つのターンとして読む（その回の送信から効く） */
         for (var i = 0; i < TT.length; i++) { var t = TT[i] || {}, ty = str(t.inputType).toUpperCase(), tn = i + 1;
           if (st && tn > st.turn) {
-            if (heroMovedAt(S, t) || hp[tn]) { st = null; noteBack(n, tn, 'heroMoved'); }
+            if (heroMovedAt(S, t) || hp[tn]) {
+              /* ★HMOVE1（2026-11-24・既定 OFF・鍵 v292DfixHMOVE1On・kill v292DfixHMOVE1Off）: 主人公が移動しただけでは、出ていった人を「戻った」にしない
+                 （実 AI 4 本: 冴が去る → 主人公が別の場所へ移動 → 冴の退出が解けて、次の回の前面の行に冴が入った）。退出のまま持ち越し、
+                 戻すのは今までの根拠（入力で来る・その人の台詞・本文で戻る・主人公と一緒・その場で動く）と、6 ターン何も無いときの期限だけ。 */
+              if (ls('v292DfixHMOVE1Off') !== '1' && ls('v292DfixHMOVE1On') === '1') { if (!st.moved) { st.moved = tn; ST.bMovedKept = (ST.bMovedKept || 0) + 1; } }
+              else { st = null; noteBack(n, tn, 'heroMoved'); } }
             else if ((ty === 'DO' || ty === 'STORY') && hasAny(maskQ(str(t.playerText)), fb) && IN_ARRIVE.test(str(t.playerText)) && !/(?:ない|なかった)/.test(str(t.playerText))) { st = null; noteBack(n, tn, 'input'); }
             else if (Array.isArray(t._convSays) && t._convSays.some(function (c) { return c && fb.indexOf(str(c.who).trim()) >= 0; })) { st = null; noteBack(n, tn, 'speaker'); }
             else if (ty === 'DO' && objHere(t.playerText, fb)) { st = null; noteBack(n, tn, 'obj'); }   /* ★r5 */
