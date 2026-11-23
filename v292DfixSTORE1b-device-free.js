@@ -2235,6 +2235,7 @@
       out.account = a0;
       var ids = candidates(env), pend = [];
       ids.forEach(function (id) { var w = f3Local(id, env); if (w) { if (w !== 'not-unsent') out.skipped[w] = (out.skipped[w] || 0) + 1; return; } pend.push(id); });
+      try { pend.sort(function (a, b) { a = String(a); b = String(b); return a < b ? 1 : (a > b ? -1 : 0); }); } catch (eSort) {}   /* FREE3 r2: 新しく作った物語から先に調べる（id は作った時刻の順）。上限 20 本で新しい削除が後ろに隠れた（実機 11-23） */
       if (pend.length > F3_MAX_ASK) { out.capped = pend.length - F3_MAX_ASK; pend = pend.slice(0, F3_MAX_ASK); }
       var chain = Promise.resolve();
       pend.forEach(function (id) { chain = chain.then(function () {
