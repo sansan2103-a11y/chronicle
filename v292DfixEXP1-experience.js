@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261124-r10';
+  var VER = 'exp1-20261124-r11';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
@@ -107,7 +107,22 @@
   var TAUGHT_SUBJ_RE = /教わ|習っ|習い|教えてもら|見せてもら|手ほどきを受け/;
   var TAUGHT_OBJ_RE = /教え(た|る|て)|見せ(た|る|て)|手ほどきし/;
   function esc(x) { return String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-  function forms(name) { var n = String(name || '').trim(), out = []; if (!n) return out; out.push(n);
+  /* ★EXP1 r11（2026-11-24・既定 OFF・鍵 v292DfixEXP1NameOn・kill v292DfixEXP1NameOff）: 要約 AI は人物の項目名を「渡瀬紬」と空白なしで返す（実機 4 本の診断で全件）。
+     登録名は「渡瀬 紬」。空白なしの 3 字の名前からは「瀬紬」しか作れず、本文の「紬は…」に当たらないので、紬の経験が NOT_SUBJECT・NOT_TAUGHT・NOT_IN_TEXT で全部落ちていた。
+     登録名（主人公と登場人物）と、空白・中黒を除いて同じ項目名は、登録名の形（名字・名前）でも本文を探す。一致する登録名がちょうど 1 つのときだけ。 */
+  var CANON = {};
+  function nameOn() { return lsg('v292DfixEXP1NameOff') !== '1' && lsg('v292DfixEXP1NameOn') === '1'; }
+  function strip(n) { return String(n || '').replace(/[\s　・]+/g, ''); }
+  function setCanon(ctx) {
+    CANON = {}; if (!nameOn() || !ctx) return;
+    var reg = []; if (ctx.hero) reg.push(String(ctx.hero)); if (ctx.gender && typeof ctx.gender === 'object') Object.keys(ctx.gender).forEach(function (k) { if (k && reg.indexOf(k) < 0) reg.push(k); });
+    var seen = {}; reg.forEach(function (r) { var k = strip(r); if (!k) return; seen[k] = (seen[k] || 0) + 1; if (strip(r) !== r) CANON[k] = r; });
+    Object.keys(CANON).forEach(function (k) { if (seen[k] !== 1) delete CANON[k]; });
+  }
+  function forms(name) { var n0 = String(name || '').trim(), c0 = CANON[n0];
+    if (c0 && c0 !== n0) { var o0 = forms0(c0); if (o0.indexOf(n0) < 0) o0.unshift(n0); cnt(ST, 'nameCanon'); return o0; }
+    return forms0(name); }
+  function forms0(name) { var n = String(name || '').trim(), out = []; if (!n) return out; out.push(n);
     try { var ns = n.replace(/[\s　・]+/g, ''); if (ns !== n && ns.length >= 2 && localStorage.getItem('v292DfixNAME1CHOff') !== '1') out.push(ns); } catch (eNs) {}   /* ★NAME1CH r2: AI は「瀬名 律」を「瀬名律」と続けて書くことがある（実機で NOT_SUBJECT・NOT_IN_TEXT） */
     var n1 = false; try { n1 = localStorage.getItem('v292DfixNAME1CHOff') !== '1'; } catch (eN1) {}   /* ★NAME1CH: 「渡瀬 紬」の「紬」。subjRe は直前が区切り・直後が助詞のときだけ当てる */
     var all2 = n.split(/[\s　・]+/).filter(Boolean), parts = all2.filter(function (x) { return x.length >= 2 || (n1 && all2.length === 2 && /^[一-鿿々ぁ-んァ-ヶー]$/.test(x)); }); if (all2.length > 1 && parts.length) out = out.concat(parts.filter(function (x) { return out.indexOf(x) < 0; }));
@@ -346,6 +361,7 @@
     var prevBy = {}; (prevWI || []).forEach(function (w) { if (w && w.type === 'character' && w.name && Array.isArray(w.exp)) prevBy[w.name] = w; });
     var names = {}, routed = {}, chars = result.worldinfo.filter(function (w) { return w && typeof w === 'object' && w.type === 'character' && typeof w.name === 'string' && w.name; }).map(function (w) { return w.name; });
     var diag = { at: Date.now(), from: ctx && ctx.from, to: ctx && ctx.to, items: [] };
+    setCanon(ctx);
     if (ctx && typeof ctx === 'object') { var cx = {}; for (var kc in ctx) if (Object.prototype.hasOwnProperty.call(ctx, kc)) cx[kc] = ctx[kc]; cx._names = chars.slice(); ctx = cx; }   /* ★r5: 人物の名前（代名詞の読みと入力の行の taught に使う） */
     /* ★r4: 人物でない項目に付いた exp は、句の主語がこの版の人物の項目のだれか 1 人と確かめられるときだけ、その人の経験として検査に回す（確かめられなければ捨てる） */
     if (live) result.worldinfo.forEach(function (w) {
