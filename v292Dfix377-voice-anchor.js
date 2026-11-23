@@ -341,6 +341,22 @@
         lines.push(name + '=一人称は女性のもの(私/あたし等)で固定。「俺」「僕」は使わない');
       } else if (g === '男性'){
         lines.push(name + '=一人称は男性のもの(俺/僕/私等)で固定。「あたし」は使わない');
+      } else if (!o.hero) {
+        /* ★PROMOVOICE1（2026-11-23・既定 OFF・鍵 v292DfixPROMOVOICE1On・kill v292DfixPROMOVOICE1Off）: 物語の途中で「NPC に昇格」した人物は voice も gender も空で、
+           この行が出なかった（昇格の前は「未登録キャラ」の推定の行があったのに、登録した途端に消える）。昇格の前に貯めた推定（一人称が 2 回以上・または性別）か、
+           説明文のはっきりした性別（GENDER1 の inferFromText）があるときだけ、同じ書き方の 1 行を足す。state は書かない。 */
+        try {
+          if (localStorage.getItem('v292DfixPROMOVOICE1Off') !== '1' && localStorage.getItem('v292DfixPROMOVOICE1On') === '1'){
+            var pvQ = window.__v292QuasiPack, pvS = pvQ ? (pvQ.store() || {}) : {}, pvE = pvS[String(p.name)] && pvS[String(p.name)].est, pvG = '';
+            if (pvE && pvE.fp && (pvE.fpn || 0) >= 2) lines.push(name + '=一人称「' + pvE.fp + '」で固定');
+            else {
+              if (pvE && (pvE.g === '女性' || pvE.g === '男性')) pvG = pvE.g;
+              if (!pvG && p.desc){ var pvG1 = window.__v292DfixGENDER1; if (pvG1 && typeof pvG1.on === 'function' && pvG1.on() && typeof pvG1.inferFromText === 'function') pvG = pvG1.inferFromText(String(p.desc)); }
+              if (pvG === '女性') lines.push(name + '=一人称は女性のもの(私/あたし等)で固定。「俺」「僕」は使わない');
+              else if (pvG === '男性') lines.push(name + '=一人称は男性のもの(俺/僕/私等)で固定。「あたし」は使わない');
+            }
+          }
+        } catch(ePv){}
       }
     });
     // C: 未登録キャラ（場面限定・S.castが常に勝つ・確信度不足は無言）

@@ -248,6 +248,15 @@
   var REMOTE = /声|聞こえ|電話|通話|画面|写真|手紙|思い出|回想|夢|噂|のこと|について|の話|向こう|遠く|二階から|階上|階下|外から|窓の外/;
   var MOVE_OUT = /出て|出た|去っ|立ち去|帰っ|戻っ|離れ|向かっ|行っ|いっ|消え/;
   var IN_ARRIVE = /(?:来る|来て|来た|くる|きて|きた|入って|入る|現れ|戻って|戻る|下りて|降りて|やって|合流|顔を出|姿を見せ|連れて)/;
+  function qStrip(s) {   /* ★NAME1CH: 最上位の「…」『…』を、中の句点ごと 1 字（＿）に畳む。閉じていない括弧はそのまま */
+    var a = String(s), out = '', depth = 0, start = -1;
+    for (var i = 0; i < a.length; i++) { var ch = a.charAt(i);
+      if (ch === '「' || ch === '『') { if (depth === 0) start = i; depth++; }
+      else if ((ch === '」' || ch === '』') && depth > 0) { depth--; if (depth === 0) { out += '＿'; start = -1; } }
+      else if (depth === 0) out += ch; }
+    if (depth > 0 && start >= 0) out += a.slice(start);
+    return out;
+  }
   function maskQ(s) {
     var a = String(s).split(''), st = [];
     for (var i = 0; i < a.length; i++) { var ch = a[i];
@@ -359,9 +368,16 @@
       ST.bPro = (ST.bPro || 0) + 1;
       return ss[j].replace(PRO_RE, function (all, pr, pa) { return all.slice(0, all.length - pr.length - pa.length) + n + pa; });
     } catch (e) { return null; } }
+  /* ★NAME1CH（2026-11-23・既定 OFF・鍵 v292DfixNAME1CHOn・kill v292DfixNAME1CHOff）: 「姓 名」で名が 1 字の登録人物（霧島 冴・渡瀬 紬・瀬名 律）は、入力や本文で「冴は…」と書かれても
+     退出・戻りを拾えなかった（名前の部分は 2 字以上だけを使っていた・実 AI 25 ターンで bExits 0）。空白で分けた 1 字の部分を、他の人物の名前の形に含まれないときだけ足す。 */
+  var N1CH_RE = /^[一-鿿々ぁ-んァ-ヶー]$/;
+  function n1chOn() { return ls('v292DfixNAME1CHOff') !== '1' && ls('v292DfixNAME1CHOn') === '1'; }
+  function one1(n, S) { var out = []; try { if (!n1chOn()) return out; var k = str(n).trim(), parts = k.split(/[\s　・]+/).filter(Boolean); if (parts.length !== 2) return out;
+      var others = []; npcNames(S).forEach(function (m) { if (m !== k) others.push(sp(m)); }); var h = S && S.cast && S.cast.hero && S.cast.hero.name; if (h && str(h).trim() !== k) others.push(sp(h));
+      parts.forEach(function (p) { if (N1CH_RE.test(p) && others.every(function (o) { return o.indexOf(p) < 0; })) out.push(p); }); } catch (e) {} return out; }
   function exitForms(n, S) {   /* ★r7: 退出は登録名そのまま＋「姓 名」（空白で分かれる）か 4 字の名の後ろ 2 字で、他の人物・主人公の呼び名と重ならない形（「氷室灯里」の「灯里」） */
     var f = formsOf(n), k = str(n).trim(), parts = k.split(/[\s　・]+/).filter(Boolean), cand = [];
-    if (parts.length === 2) cand = parts.filter(function (p) { return p.length >= 2; }); else if (k.length === 4 && parts.length === 1) cand = [k.slice(2)];
+    if (parts.length === 2) cand = parts.filter(function (p) { return p.length >= 2 || (n1chOn() && N1CH_RE.test(p)); }); else if (k.length === 4 && parts.length === 1) cand = [k.slice(2)];   /* ★NAME1CH: 「霧島 冴」の「冴」（1 字の名）も。当てる側の正規表現は 直後が 敬称＋は/が/も・直前が漢字でない ことを見る */
     if (!cand.length) return f;
     var others = []; try { npcNames(S).forEach(function (m) { if (m !== k) others = others.concat(rawForms(m)); }); var h = S.cast && S.cast.hero && S.cast.hero.name; if (h) others = others.concat(rawForms(h)); } catch (e) {}
     cand.forEach(function (c) { if (f.indexOf(c) < 0 && others.every(function (o) { return o.indexOf(c) < 0 && c.indexOf(o) < 0; })) f.push(c); });
@@ -395,7 +411,7 @@
       S = S || getS(); if (!S || !Array.isArray(S.turns)) return out;
       var hf = heroForms(), L = S.turns.length, hp = heroPlaceSeq(S), cin0 = curInput(S); HP = heroPlaceNow(S, cin0);
       npcNames(S).forEach(function (n) {
-        var fs = exitForms(n, S), fb = fs.concat(rawForms(n)), st = null;   /* 退出は登録名そのまま（確かな側）・戻りは姓・名の形でも（戻す側） */
+        var fs = exitForms(n, S), fb = fs.concat(rawForms(n), one1(n, S)), st = null;   /* 退出は登録名そのまま（確かな側）・戻りは姓・名の形でも（戻す側） */
         var TT = S.turns.slice(), cin = curInput(S); if (cin) TT.push(cin);   /* ★r4: 組み立て中の入力も 1 つのターンとして読む（その回の送信から効く） */
         for (var i = 0; i < TT.length; i++) { var t = TT[i] || {}, ty = str(t.inputType).toUpperCase(), tn = i + 1;
           if (st && tn > st.turn) {
@@ -406,7 +422,7 @@
             else if (ty === 'SAY' && vocHere(t.playerText, fb)) { st = null; noteBack(n, tn, 'voc'); }   /* ★r5 */
           }
           if (ty === 'DO' || ty === 'STORY') {   /* ★r4: 利用者の入力に書かれた退出（SAY は読まない）。入力で戻ってくる・この場で動くなら解く（既存の条件） */
-            var ins = sents(maskQ(str(t.playerText)));
+            var ins = sents(n1chOn() ? qStrip(str(t.playerText)) : maskQ(str(t.playerText)));   /* ★NAME1CH: 入力の中の台詞（「…。…」と告げ、去っていく）で文が切れて主語を失わないよう、台詞ごと 1 字に畳む */
             for (var q = 0; q < ins.length; q++) { var xi = exitIn(ins[q], fs, ins[q + 1] || '', hf, true);
               if (xi) { st = { turn: tn, route: xi.route, src: 'input' }; noteExit(n, tn, 'input'); continue; }
               if (st && tn > st.turn && actsHere(ins[q], fb)) { st = null; noteBack(n, tn, 'input'); } } }

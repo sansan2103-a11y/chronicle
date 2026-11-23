@@ -357,7 +357,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261123-vaultuni1on';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261123-name1ch';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4564,7 +4564,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ★MEM4R r2（既定 ON・kill v292DfixMEM4ROff）: 長期記憶を、その物語の本文から 0 ターン目より分けて作り直す（印の無い記憶・空の記憶・大きく遅れた記憶） -->
 <script src="v292DfixMEM4R-rebuild.js?cb=20261122-mem4r3"></script>
 <!-- ★EXP1（既定 OFF・鍵 v292DfixEXP1aOn・kill v292DfixEXP1Off）: 長期記憶の人物の欄に「経験と習得」の 1 項目（今の worldinfo の中だけ） -->
-<script src="v292DfixEXP1-experience.js?cb=20261122-exp1r7said"></script>
+<script src="v292DfixEXP1-experience.js?cb=20261123-name1ch"></script>
 <!-- ★MEMSTATE1（既定 ON・kill v292DfixMEMSTATE1Off）: 長期記憶の人物の状態を、いまの状態に書き換える -->
 <script src="v292DfixMEMSTATE1-longmem-state.js?cb=20261122-memstate1"></script>
 <!-- ★MEMFIX1（既定 ON・kill v292DfixMEMFIX1Off）: 長期記憶の作り直しが止まり続ける穴（途中で切れた応答・やり直しの上限・summary の長さ） -->
@@ -4630,7 +4630,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
        engineMode=1 のとき sys を丸ごと差し替える。既定=従来。topbarの⚙エンジンで切替。 -->
   <script src="v292Dfix796-memory-retrieve.js?cb=20261021-bundle38-b"></script>
   <script src="v292Dfix192-newengine.js?cb=20261123-read1abc"></script>
-  <script src="v292DfixSCENE1-cast-presence-input.js?cb=20261123-exit2on"></script><!-- ★SCENE1（GPT #127-WN 優先2・既定 OFF）: 未登場の登録 NPC を既出から分ける・退出の判定・入力の種類。ON v292DfixSCENE1On=1・kill v292DfixSCENE1Off=1 -->
+  <script src="v292DfixSCENE1-cast-presence-input.js?cb=20261123-name1ch"></script><!-- ★SCENE1（GPT #127-WN 優先2・既定 OFF）: 未登場の登録 NPC を既出から分ける・退出の判定・入力の種類。ON v292DfixSCENE1On=1・kill v292DfixSCENE1Off=1 -->
   <script src="v292DfixUNSEEN1-unseen-cast.js?cb=20261123-unseen1"></script><!-- ★UNSEEN1（既定 OFF・鍵 v292DfixUNSEEN1On・kill v292DfixUNSEEN1Off）: 未登場の登録人物を【キャラ属性】【口調】【話者】で場にいる人と分ける -->
   <script src="v292DfixAGENCY1-player-intent.js?cb=20261123-vaultuni1off"></script><!-- ★AGENCY1 (GPT #127-RS ②): SAY/DO の入力説明の行に「入力されていない主人公の意図・発話内容を確定しない」1 文（fix192 が呼ぶ）。既定は影（足さない）。ON = 管理者画面の鍵 agency1 または localStorage v292DfixAGENCY1On=1。Vault は足さない。kill: localStorage v292DfixAGENCY1Off=1 -->
   <!-- v292Dfix197: アイコン修復。pollinationsが402化したため、pollKeyがあれば&key=付与、
@@ -4754,7 +4754,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix372-gender-radio-guard.js?cb=v292Dfix372"></script>
 <script src="v292Dfix374-default-style-guard.js?cb=20260901-fix783"></script>
 <script src="v292Dfix376-speaker-guard.js?cb=20260902-fix800"></script>
-<script src="v292Dfix377-voice-anchor.js?cb=20261123-unseen1"></script>
+<script src="v292Dfix377-voice-anchor.js?cb=20261123-promovoice1"></script>
 <script src="v292Dfix378-species-judge.js?cb=v292Dfix378"></script>
 <script src="v292Dfix379-wrap-keeper.js?cb=20261123-promog1on"></script>
 <!-- v292Dfix822: START_RULES_V1（GPT 裁定 2026-09-06(20)(21)）。keeper prio1 で【開始ルール】(毎turn)・【開始時の状況】(T0のみ) を
@@ -4843,7 +4843,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix957-speaker-cataphora.js?cb=20261022-bundle41-a"></script><!-- v292Dfix957: 独立行の裸「」の後方照応（既定OFF・ON: localStorage v292Dfix957On=1） -->
 <script src="v292Dfix620-speaker-apply.js?cb=20261123-naming1"></script>
 <!-- ★SPKCHK1（既定 OFF・鍵 v292DfixSPKCHK1On・kill v292DfixSPKCHK1Off）: 名札を本文と照らす（登録名の札に本文の強い反証があるときだけ who を本文の呼び名へ） -->
-<script src="v292DfixSPKCHK1-speaker-check.js?cb=20261123-read1"></script>
+<script src="v292DfixSPKCHK1-speaker-check.js?cb=20261123-name1ch"></script>
 <script src="v292DfixIDSPLIT2-selfname-merge.js?cb=20261108-bundle93-i"></script><!-- v292DfixIDSPLIT2 (★93-i: 管理者画面の機能スイッチ idsplit2。行なし = OFF): 名乗りで記述的な呼び名を登録NPCへ結び付ける（証拠がそろう時だけ・それ以外は観測のみ）。kill: localStorage v292DfixIDSPLIT2Off=1 -->
 <!-- fix616: 話者の由来をターンへ記録（GPT実装順②）。並行配列 turn._convSayMeta に書き、
      _convSays / who / say / DOM は触らない。**新ターンだけ**・自分から保存しない。

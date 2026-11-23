@@ -96,7 +96,8 @@
   var TAUGHT_OBJ_RE = /教え(た|る|て)|見せ(た|る|て)|手ほどきし/;
   function esc(x) { return String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
   function forms(name) { var n = String(name || '').trim(), out = []; if (!n) return out; out.push(n);
-    var parts = n.split(/[\s　・]+/).filter(function (x) { return x.length >= 2; }); if (parts.length > 1) out = out.concat(parts);
+    var n1 = false; try { n1 = localStorage.getItem('v292DfixNAME1CHOff') !== '1' && localStorage.getItem('v292DfixNAME1CHOn') === '1'; } catch (eN1) {}   /* ★NAME1CH: 「渡瀬 紬」の「紬」。subjRe は直前が区切り・直後が助詞のときだけ当てる */
+    var all2 = n.split(/[\s　・]+/).filter(Boolean), parts = all2.filter(function (x) { return x.length >= 2 || (n1 && all2.length === 2 && /^[一-鿿々ぁ-んァ-ヶー]$/.test(x)); }); if (all2.length > 1 && parts.length) out = out.concat(parts.filter(function (x) { return out.indexOf(x) < 0; }));
     else if (/^[一-鿿々]{4}$/.test(n)) { out.push(n.slice(0, 2)); out.push(n.slice(2)); } else if (/^[一-鿿々]{3}$/.test(n)) out.push(n.slice(1));
     return out; }
   function sentences(text) { return String(text || '').replace(/<[^>]*>/g, '\n').split(/(?<=[。！？!?\n])/).map(function (x) { return x.trim(); }).filter(Boolean); }
