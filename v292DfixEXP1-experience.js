@@ -34,7 +34,13 @@
   function vaultOk() {
     var id = sid(); if (!id) return 'ID_UNKNOWN';
     var G = root.__v292DfixVAULTGATE2; if (!G || typeof G.hidden !== 'function') return 'NO_VAULTGATE2';
-    try { if (G.hidden(id) === false) return ''; if (typeof G.openWhy === 'function' && G.openWhy(id) === '') return ''; return 'VAULT_' + String((typeof G.openWhy === 'function' && G.openWhy(id)) || 'HIDDEN').slice(0, 24); } catch (e) { return 'VAULT_THREW'; }
+    try { if (G.hidden(id) === false) return ''; if (typeof G.openWhy === 'function' && G.openWhy(id) === '') return '';
+      var wv = 'VAULT_' + String((typeof G.openWhy === 'function' && G.openWhy(id)) || 'HIDDEN').slice(0, 24);
+      /* ★EXP1 r9（2026-11-24・既定 OFF・r8 と同じ鍵 v292DfixEXP1PendOn・kill v292DfixEXP1PendOff）: 頼む側も同じ穴だった（実機: 要約の依頼を組む時点で Vault の答えが古いと、経験を頼まないまま要約だけ送られた）。
+         要約の送信そのものは長期記憶の側の関門（VAULTSEND1・MEM3）が決めていて、EXP1 が足すのはその依頼の中の 1 項目だけ＝外へ出る本文は増えない。
+         答えが古いだけ（V2_PENDING・V2_CG_STALE・V2_INCOMPLETE）のときは働く。隠してある・施錠中と分かったときは今までどおり働かない。 */
+      if (/^VAULT_V2_(?:PENDING|CG_STALE|INCOMPLETE)$/.test(wv) && lsg('v292DfixEXP1PendOff') !== '1' && lsg('v292DfixEXP1PendOn') === '1') { cnt(ST.rej, 'PEND_ASK_LIVE'); return ''; }
+      return wv; } catch (e) { return 'VAULT_THREW'; }
   }
   /* why: '' = 働く／それ以外 = 働かない理由 */
   function why() {
@@ -96,6 +102,7 @@
   var TAUGHT_OBJ_RE = /教え(た|る|て)|見せ(た|る|て)|手ほどきし/;
   function esc(x) { return String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
   function forms(name) { var n = String(name || '').trim(), out = []; if (!n) return out; out.push(n);
+    try { var ns = n.replace(/[\s　・]+/g, ''); if (ns !== n && ns.length >= 2 && localStorage.getItem('v292DfixNAME1CHOff') !== '1') out.push(ns); } catch (eNs) {}   /* ★NAME1CH r2: AI は「瀬名 律」を「瀬名律」と続けて書くことがある（実機で NOT_SUBJECT・NOT_IN_TEXT） */
     var n1 = false; try { n1 = localStorage.getItem('v292DfixNAME1CHOff') !== '1'; } catch (eN1) {}   /* ★NAME1CH: 「渡瀬 紬」の「紬」。subjRe は直前が区切り・直後が助詞のときだけ当てる */
     var all2 = n.split(/[\s　・]+/).filter(Boolean), parts = all2.filter(function (x) { return x.length >= 2 || (n1 && all2.length === 2 && /^[一-鿿々ぁ-んァ-ヶー]$/.test(x)); }); if (all2.length > 1 && parts.length) out = out.concat(parts.filter(function (x) { return out.indexOf(x) < 0; }));
     else if (/^[一-鿿々]{4}$/.test(n)) { out.push(n.slice(0, 2)); out.push(n.slice(2)); } else if (/^[一-鿿々]{3}$/.test(n)) out.push(n.slice(1));
