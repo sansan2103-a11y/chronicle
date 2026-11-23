@@ -22,7 +22,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixSPKQ1) return;
-  var VER = 'spkq1-20261124-r2';
+  var VER = 'spkq1-20261124-r2b';
   var ST = { turns: 0, unknown: 0, sfx: 0, flip: 0, guard: 0, kept: {}, why: {}, errors: 0 };
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function on() { return lsg('v292DfixSPKQ1Off') !== '1'; }   /* 20261124-spkq1on: 全員 既定 ON（保存済みの実 AI 出力 684 枚で 9 枚を直し誤り 0・実機 10 ターンで 1 枚を直し誤り 0・後段と再読み込みで戻らない）。止めるのは kill v292DfixSPKQ1Off='1' */
@@ -119,7 +119,8 @@
       /* ★r2（GPT #127-XI (b)）: 「Y は「…」と聞いた」は 尋ねた と 耳にした の両方に読める。「と聞いた／聞いて」は台詞が問いの形（？・か・の で終わる）のときだけ。
          受け身（と言われた・呼ばれた・尋ねられた）・聴取（という声・が聞こえ・耳に・届く）・文字（と書かれ・表示）は Y の発話ではないので数えない */
       var c3cl = postFlat.split('。')[0];
-      var c3heard = /^(?:と|って)(?:いう|言う)?[^。]{0,10}(?:声|音|言葉|叫び|囁き|呟き)(?:が|を|に|は|も)/.test(c3cl) || /(?:聞こえ|耳にし|耳に入|耳に届|届い|届く|響い|響く|言われ|呼ばれ|告げられ|尋ねられ|訊かれ|聞かれ|問われ|命じられ|頼まれ|書かれ|書いてあ|表示|読め)/.test(c3cl);
+      var c3heard = /^(?:と|って)(?:いう|言う)[^。、]{0,8}(?:声|音|言葉|叫び|囁き|呟き)(?:が|を|に|は|も)/.test(c3cl) || /^(?:と|って)[^。、]{0,10}(?:声|言葉)を(?:聞|耳)/.test(c3cl) || /(?:言われ|呼ばれ|告げられ|尋ねられ|訊かれ|聞かれ|問われ|命じられ|頼まれ|書かれ|書いてあ|表示|読め)/.test(c3cl)
+        || (/(?:聞こえ|耳にし|耳に入|耳に届|届い|届く|響い|響く)/.test(c3cl) && !/^(?:と|って)[^。、]{0,4}(?:尋ね|訊ね|訊い|言[うっい]|叫|呼びかけ|囁|ささや|呟|つぶや|告げ|答え|返[しす])/.test(c3cl));   /* 「店員が客に「…」と尋ねる声が届く」は 店員の発話 */
       var c3kiku = /^(?:と|って)[^。、]{0,6}?(?:聞い|聞く|聞き(?!返))/.test(c3cl) && !/(?:[？?]|か|の|かな|かしら|だろう|でしょう)$/.test(String(q.body).replace(/[\s　。…‥]+$/, ''));
       if (!hit && !c3heard && !c3kiku && pre && h.loose(q.body).length >= 2 && !/[\n。」]$/.test(between.replace(/[ 　]+$/, '')) && /^(?:と|って)(?!う|ころ|き)/.test(postFlat)) {
         var subjPre = h.firstSubject(pre, toks);
