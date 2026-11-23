@@ -16,16 +16,17 @@
  *     P5 台詞の直後の文が「言いながら／そう言って／呟いて…」で主語が X、または主語が X で聞き手の反応の動詞でない
  *   聞き手の反応（頷く・黙る・見つめる・聞く・答えない…）だけが X に付いているときは根拠に数えない。
  * ■守ること: 本文は 1 字も変えない。別の人の札へ替えるのは「Y は「…」と言った」の形（同じ文の主語が登録人物 Y）だけ。ほかは '???'。過去ターンへ遡らない。
- * ■鍵: v292DfixSPKQ1On='1'（既定 OFF）・kill v292DfixSPKQ1Off='1'（常に勝つ）。
+ * ■鍵: 20261124-spkq1on から全員 既定 ON（kill v292DfixSPKQ1Off='1' が常に勝つ）。カードを外す道だけ 別の鍵 v292DfixSPKQ1DropOn='1'（既定 OFF・kill v292DfixSPKQ1DropOff）。
  * ■診断: window.__v292DfixSPKQ1.stats() / .analyze(narr, cards, meta, cast, hero, genders)
  * ===================================================================== */
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixSPKQ1) return;
-  var VER = 'spkq1-20261124-r1';
+  var VER = 'spkq1-20261124-r1on';
   var ST = { turns: 0, unknown: 0, sfx: 0, flip: 0, guard: 0, kept: {}, why: {}, errors: 0 };
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
-  function on() { return lsg('v292DfixSPKQ1Off') !== '1' && lsg('v292DfixSPKQ1On') === '1'; }
+  function on() { return lsg('v292DfixSPKQ1Off') !== '1'; }   /* 20261124-spkq1on: 全員 既定 ON（保存済みの実 AI 出力 684 枚で 9 枚を直し誤り 0・実機 10 ターンで 1 枚を直し誤り 0・後段と再読み込みで戻らない）。止めるのは kill v292DfixSPKQ1Off='1' */
+  function dropOn() { return lsg('v292DfixSPKQ1DropOff') !== '1' && lsg('v292DfixSPKQ1DropOn') === '1'; }   /* カードを外す道（効果音・口に出していない「」）は実機で未確認のため 別の鍵・既定 OFF */
   function H() { try { return root.__v292DfixSPKCHK1 && root.__v292DfixSPKCHK1._h; } catch (e) { return null; } }
   function bump(o, k) { o[k] = (o[k] || 0) + 1; }
   var GATE = { 'bare-inferred': 1, 'harvest': 1 };
@@ -169,7 +170,7 @@
         if (r.act === 'keep') { bump(ST.kept, r.why); return; }
         if (manual(turn, r.ci)) { bump(ST.kept, 'manual'); return; }
         var c = cards[r.ci]; if (!c || String(c.who || '') !== String(r.from)) { bump(ST.kept, 'changed'); return; }
-        if (r.act === 'drop') { drop.push(r.ci); bump(ST.why, r.why); return; }
+        if (r.act === 'drop') { if (!dropOn()) { bump(ST.kept, 'drop-off:' + r.why); return; } drop.push(r.ci); bump(ST.why, r.why); return; }
         if (r.act === 'flip') { c.who = r.to; setMark(turn, r.ci, r.to); r0.flip = (r0.flip || 0) + 1; ST.flip = (ST.flip || 0) + 1; bump(ST.why, r.why + '>flip'); return; }
         c.who = '???'; setMark(turn, r.ci, '???'); r0.unknown++; bump(ST.why, r.why);
       });
