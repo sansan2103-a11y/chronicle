@@ -47,6 +47,10 @@
       var parts = [];
       var h = S.cast.hero;
       if (h && h.gender && (h.name || '').length) parts.push(h.name + '(主人公)=' + h.gender);
+      /* ★PROMOGENDER1（2026-11-23・既定 OFF・鍵 v292DfixPROMOGENDER1On・kill v292DfixPROMOGENDER1Off）: 物語の途中で「NPC に昇格」した人物は gender が空で、【キャラ属性】に一度も入らなかった（実 AI の記録で確認）。
+         説明文にはっきりした語があるときだけ、GENDER1 の inferFromText（保守的・男女の語が混ざる文は決めない）で性別を読み、この行にだけ足す。state は書き換えない。OFF・kill は 1 字も変わらない。 */
+      var pg1 = null; try { if (localStorage.getItem('v292DfixPROMOGENDER1Off') !== '1' && localStorage.getItem('v292DfixPROMOGENDER1On') === '1') { var G1p = window.__v292DfixGENDER1; if (G1p && typeof G1p.on === 'function' && G1p.on() && typeof G1p.inferFromText === 'function') pg1 = G1p; } } catch(ePg){ pg1 = null; }
+      if (pg1) (S.cast.npcs || []).forEach(function(n){ try { if (n && n.name && !n.gender && n.desc) { var gg = pg1.inferFromText(String(n.desc)); if (gg === '女性' || gg === '男性') parts.push(n.name + '=' + gg); } } catch(ePg2){} });
       (S.cast.npcs || []).forEach(function(n){ if (n && n.name && n.gender) parts.push(n.name + '=' + n.gender + (window.__v292DfixFLW4 && typeof window.__v292DfixFLW4.suffix === 'function' ? window.__v292DfixFLW4.suffix(n) : '')); });   /* ★FLW4: はっきりした年齢だけ「・17歳」（kill v292DfixFLW4Off） */
       if (!parts.length) return '';
       return '\n【キャラ属性】' + parts.join('、') + '。各キャラの一人称・言葉遣い・地の文の代名詞(彼/彼女)は、この性別と人物像に必ず一致させる。';
