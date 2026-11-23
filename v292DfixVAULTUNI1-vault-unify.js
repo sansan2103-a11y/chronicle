@@ -26,7 +26,7 @@
   var VER = 'vaultuni1-20261123-r2', POLL = 2000, HOLD_MAX = 120000;
   var stats = { send: 0, sendOk: 0, sendStop: {}, del: 0, delOk: 0, delVault: 0, delHold: 0, waits: 0, holds: 0, reruns: 0, expired: 0 };
   function cnt(o, k) { k = String(k || 'X').slice(0, 32); o[k] = (o[k] || 0) + 1; }
-  function on() { try { return root.localStorage.getItem('v292DfixVAULTUNI1Off') !== '1' && root.localStorage.getItem('v292DfixVAULTUNI1On') === '1'; } catch (e) { return false; } }   /* 20261123: 既定 OFF へ戻した（実機で空き容量シートの削除が全部 保留になり 0 件になった）。ON は v292DfixVAULTUNI1On='1' */
+  function on() { try { return root.localStorage.getItem('v292DfixVAULTUNI1Off') !== '1'; } catch (e) { return false; } }   /* 20261123 r2: 全員 既定 ON（実機: 空き容量シートの件数は OFF と同じ・delHold 0・一覧と端末の削除が通る・放置中の通信は OFF と同じ）。kill v292DfixVAULTUNI1Off。以前の経緯→   /* 20261123: 既定 OFF へ戻した（実機で空き容量シートの削除が全部 保留になり 0 件になった）。ON は v292DfixVAULTUNI1On='1' */
   function G() { try { var g = root.__v292DfixVAULTGATE2; return (g && typeof g.hidden === 'function') ? g : null; } catch (e) { return null; } }
   /* ★r2（GPT #127-WZ）: ISO1 の verdict の null は「本人」だけでなく「本文が無い・ログインの無い古い画面」でも出る。そこで解錠中の隠した物語は、
      いまログインしているアカウント（ISO1 の viewer が acct）の、iso2 の帰属の記録（作成 c と最終書込み w がどちらもこのアカウント）があるときだけ本人とする。 */
