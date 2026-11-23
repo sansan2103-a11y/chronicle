@@ -24,11 +24,17 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261122-r7';
+  var VER = 'exp1-20261124-r10';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
   function cnt(o, k) { o[k] = (o[k] || 0) + 1; }
+  /* ★r10（2026-11-24・GPT #127-XF・既定 OFF・鍵 v292DfixEXP1r10On・kill v292DfixEXP1r10Off）:
+     (1) taught の句だけ 40 字まで（「律からフィルムの入れ方を教わった」＝誰から・何を、が 24 字に入らず全部 LONG で落ちていた）
+     (2) 入力の行ではその人がやったことになっているのに、地の文では別の登録人物がやっている → 覚えない（A2_ACTOR_CONFLICT）
+     (3) 覚え書きの節を、起きた順の 1 行 1 件「T3｜紬：律から…を教わった（習得は不明）」にする（節の上限 200 字） */
+  function r10On() { return lsg('v292DfixEXP1r10Off') !== '1' && lsg('v292DfixEXP1r10On') === '1'; }
+  function sMax(x) { return (x && x.k === 'taught' && r10On()) ? 40 : S_MAX; }
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return undefined; } }
   function sid() { try { var f = root.__v292Dfix697; var id = f && f.status ? f.status().storyId : null; return id ? String(id) : null; } catch (e) { return null; } }
   function vaultOk() {
@@ -60,7 +66,7 @@
   function prompt(p) {
     if (typeof p !== 'string' || !on()) return p;
     if (p.split(WI_OLD).length !== 2) { cnt(ST.rej, 'PROMPT_MISMATCH'); return p; }
-    var q = p.split(WI_OLD).join(WI_NEW);
+    var q = p.split(WI_OLD).join(r10On() ? WI_NEW.replace('"s": "Japanese, 24 chars max: ', '"s": "Japanese, 24 chars max (for taught: 40 chars max, written as from whom and what, like 「律からフィルムの入れ方を教わった」; name the teacher only when the text names them): ') : WI_NEW);
     var ri = q.lastIndexOf('Use turnIdx values from the [Turn N] markers above.');
     if (ri < 0) { cnt(ST.rej, 'PROMPT_MISMATCH'); return p; }
     ri += 'Use turnIdx values from the [Turn N] markers above.'.length;
@@ -125,7 +131,7 @@
   function checkItem(x, ctx, who) {
     if (!x || typeof x !== 'object') return 'NOT_OBJ';
     if (!Object.prototype.hasOwnProperty.call(KINDS, x.k)) return 'BAD_K';
-    var s = cleanS(x.s); if (s.length < S_MIN) return 'SHORT'; if (s.length > S_MAX) return 'LONG';
+    var s = cleanS(x.s); if (s.length < S_MIN) return 'SHORT'; if (s.length > sMax(x)) return 'LONG';
     var t = +x.t; if (!(t >= ctx.from && t <= ctx.to) || Math.floor(t) !== t) return 'BAD_T';
     if (typeof who !== 'string' || !who) return 'NO_WHO';
     var ss = sentences(unquote(String(ctx.text || '').replace(/<[^>]*>/g, '\n'))), found = false, why = 'NOT_IN_TEXT', rr = recipRe(who);   /* ★r3: 「」の中は根拠にしない */
@@ -224,7 +230,7 @@
   var A2_LEARN = /ようになっ|身につけ|身に付け|身についた|身に付いた|覚えた|習得し|ものにし/, A2_OK = /できた|成功|うまくいった|上手くいった|初めて|ようになっ/, A2_FAIL = /失敗|しくじ|できなかっ|うまくいかな|上手くいかな|すぎ|足りず|足りな/;
   function a2(x, ctx, who) {
     if (!x || typeof x !== 'object' || !Object.prototype.hasOwnProperty.call(KINDS, x.k)) return 'BAD_K';
-    var s = cleanS(x.s); if (s.length < S_MIN) return 'SHORT'; if (s.length > S_MAX) return 'LONG';
+    var s = cleanS(x.s); if (s.length < S_MIN) return 'SHORT'; if (s.length > sMax(x)) return 'LONG';
     var names = (ctx && ctx._names) || [], hero = ctx && ctx.hero ? String(ctx.hero) : '', f = forms(who);
     if (!f.length || (hero && (who === hero || forms(hero).indexOf(who) >= 0))) return 'A2_HERO';
     var t0 = parseT(x.t); if (x.t != null && x.t !== '' && isNaN(t0)) return 'BAD_T';
@@ -248,6 +254,14 @@
     var subj = body.replace(/<[^>]*>/g, '\n').split(/(?<=[。！？!?\n])/).map(function (z) { return z.trim(); }).filter(function (z) { return z && hit.some(function (k) { return z.indexOf(k) >= 0; }) && !HEDGE_RE.test(z) && !RUMOR_RE.test(z); });
     if (!subj.some(function (z) { return ownClause(z, who) != null; })) return 'A2_NOT_SUBJECT';
     var k = x.k;
+    if (r10On() && k !== 'taught' && oRe) {            /* ★r10 (2): 根拠が入力の行だけで、地の文では別の人が主語 */
+      var sp10 = function (tx) { return String(tx || '').replace(/<[^>]*>/g, '\n').split(/(?<=[。！？!?\n])/).map(function (z) { return z.trim(); }).filter(function (z) { return z && hit.some(function (kk) { return z.indexOf(kk) >= 0; }) && !HEDGE_RE.test(z) && !RUMOR_RE.test(z); }); };
+      var nrU = unquote(String(p.nr || ''));
+      var ownPt = sp10(String(p.pt || '')).some(function (z) { return ownClause(z, who) != null; });
+      var ownNr = sp10(rt != null ? rt : nrU).some(function (z) { return ownClause(z, who) != null; });
+      var otherNr = sp10(nrU).some(function (z) { return oRe.test(z) && ownClause(z, who) == null; });
+      if (ownPt && !ownNr && otherNr) return 'A2_ACTOR_CONFLICT';
+    }
     /* ★SPKCHK1 と同梱（2026-11-22・VX1_B3 の実測）: 句が「…だと話した／言った」＝台詞の申告の写しなら、first・learned にしない（A2 は「」の中も手がかりに数えるので、
        「糊って触るのも今日が初めてなんですよ」という台詞が first「糊を触るのが今日初めてだと話した」として残った）。kill: v292DfixEXP1SaidOff='1' で r7 のまま */
     if ((k === 'first' || k === 'learned') && lsg('v292DfixEXP1SaidOff') !== '1' && /(?:と|って)(?:話し|言っ|語っ|答え|打ち明け|明かし|告げ|口にし|漏らし|こぼし)た$/.test(s)) return 'A2_SAID';
@@ -370,6 +384,26 @@
   function section(wi, cleanFn) {
     if (!Array.isArray(wi) || !on()) return '';
     var lines = [], used = HEAD.length, cl = typeof cleanFn === 'function' ? cleanFn : function (s) { return String(s || ''); };
+    if (r10On()) {                                      /* ★r10 (3): 起きた順・1 行 1 件 */
+      var all = [];
+      wi.forEach(function (w) {
+        if (!w || w.type !== 'character' || !w.name || !Array.isArray(w.exp) || !w.exp.length) return;
+        w.exp.filter(function (x) { return x && KINDS[x.k] && x.s; }).slice().sort(function (a, b) { return (+b.t || 0) - (+a.t || 0); }).slice(0, NOTE_PER)
+          .forEach(function (x) { all.push({ t: +x.t || 0, n: cl(w.name), s: cl(x.s), k: x.k }); });
+      });
+      all.sort(function (a, b) { return b.t - a.t; });
+      var pick = [];
+      all.forEach(function (x) {
+        if (x.s.length <= 1) return;
+        var tail = x.k === 'taught' ? ((/教わ|習っ|教えてもら|見せてもら|手ほどき/.test(x.s) ? '' : '＝教わった') + '（習得は不明）') : ('＝' + KINDS[x.k]);
+        var ln = '\n・T' + (x.t + 1) + '｜' + x.n + '：' + x.s + tail;
+        if (used + ln.length > 200) return;
+        pick.push({ t: x.t, ln: ln }); used += ln.length;
+      });
+      if (!pick.length) return '';
+      pick.sort(function (a, b) { return a.t - b.t; });
+      var t10 = HEAD + pick.map(function (x) { return x.ln; }).join(''); ST.notes++; ST.noteChars += t10.length; return t10;
+    }
     wi.forEach(function (w) {
       if (!w || w.type !== 'character' || !w.name || !Array.isArray(w.exp) || !w.exp.length) return;
       var items = w.exp.filter(function (x) { return x && KINDS[x.k] && x.s; }).slice().sort(function (a, b) { return (+b.t || 0) - (+a.t || 0); }).slice(0, NOTE_PER)
