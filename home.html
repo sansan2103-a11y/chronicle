@@ -264,7 +264,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261123-promog1on';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261123-newgate1';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -1005,16 +1005,47 @@
   /* ★fix667(M1): 連打で slot が二重にできないようにする。作成が始まったら
      ページ遷移まで二度目を受け付けない（失敗して戻るときだけ解除する）。 */
   var f667Creating = false;
+  var ng1Stats = { waits: 0, ok: 0, timeout: 0, ms: 0 };
+  try { window.__v292DfixNEWGATE1 = { stats: function(){ return JSON.parse(JSON.stringify(ng1Stats)); } }; } catch(eNs){}
+  function ng1Note(text, ms){ try { var d = document.getElementById('ng1Note'); if (!d){ d = document.createElement('div'); d.id = 'ng1Note'; d.setAttribute('role', 'status'); d.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:86vw;background:#2a2a3a;color:#fff;-webkit-text-fill-color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;z-index:99999;box-shadow:0 4px 14px rgba(0,0,0,.35)'; document.body.appendChild(d); } d.textContent = text; d.style.display = text ? 'block' : 'none'; if (d.__t) clearTimeout(d.__t); if (text && ms) d.__t = setTimeout(function(){ d.style.display = 'none'; }, ms); } catch(e){} }
+  function ng1Wait(G, cb){
+    ng1Stats.waits++; var t0 = Date.now(), done = false;
+    ng1Note('保存の準備を確認しています…', 0);
+    try { if (typeof G.refresh === 'function') G.refresh('newstory'); } catch(e){}
+    (function tick(){
+      if (done) return; var e = 'unknown'; try { e = G.status().effective; } catch(e2){ e = 'unknown'; }
+      if (e !== 'unknown'){ done = true; ng1Stats.ok++; ng1Stats.ms = Date.now() - t0; ng1Note('', 0); return cb(true); }
+      if (Date.now() - t0 >= 8000){ done = true; ng1Stats.timeout++; ng1Stats.ms = Date.now() - t0; return cb(false); }
+      setTimeout(tick, 250);
+    })();
+  }
   function newStory(opts){
     /* ★fix667(M2): 新規物語ボタン押下の直前に認証状態を見直す（tickは足さない） */
     try { f667Refresh(); } catch(e){}
     /* ★fix667(M1): slot を発行・保存する前に生の値で確かめる。
        完全ブロックはしない。「認証設定なしで作成」を明示選択したときだけ従来どおり進む。 */
-    if (!(opts && opts.force)){
+    if (!(opts && (opts.force || opts.__ng1))){
       try { if (f667NeedsGate()){ f667ShowGate(); return; } } catch(e){}
     }
     if (f667Creating) return;
     f667Creating = true;
+    /* ★NEWGATE1（2026-11-23・GPT #127-WR 裁定 4・既定 OFF・鍵 v292DfixNEWGATE1On・kill v292DfixNEWGATE1Off）:
+       CopyGate が Vault の状態を確かめられていない間（effective 'unknown'）に物語を作ると、持ち主の印などの新しい書き込みが断られ、
+       古い短い id の物語がある端末では、作った物語が「開けません」になることがあった（Local 3/3）。作る前に読み直しを頼み、
+       答えが届いてから作る。最大 8 秒待っても届かなければ作らない（一覧に何も足さない・もう一度押せる）。関門の規則は変えない。 */
+    try {
+      if (!(opts && opts.__ng1) && localStorage.getItem('v292DfixNEWGATE1Off') !== '1' && localStorage.getItem('v292DfixNEWGATE1On') === '1'){
+        var ng1G = window.__v292Dvault2CopyGate, ng1S = (ng1G && typeof ng1G.status === 'function') ? ng1G.status() : null;
+        if (ng1S && ng1S.effective === 'unknown' && ng1S.scope !== 'OUT_OF_SCOPE'){
+          ng1Wait(ng1G, function(ok){
+            f667Creating = false;
+            if (ok){ var o2 = {}; try { for (var k2 in (opts || {})) o2[k2] = opts[k2]; } catch(eK){} o2.__ng1 = true; newStory(o2); }
+            else ng1Note('保存の準備を確認できませんでした。少し待ってから、もう一度お試しください。', 6000);
+          });
+          return;
+        }
+      }
+    } catch(eNg){}
     var meta = readMeta();
     var id = 's'+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36);
     meta.push({ id:id, name:'新しい物語', key:'chr6_slot_'+id, updatedAt:null,
