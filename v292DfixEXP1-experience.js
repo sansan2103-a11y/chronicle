@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261124-r11';
+  var VER = 'exp1-20261124-r11on';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
@@ -33,7 +33,7 @@
      (1) taught の句だけ 40 字まで（「律からフィルムの入れ方を教わった」＝誰から・何を、が 24 字に入らず全部 LONG で落ちていた）
      (2) 入力の行ではその人がやったことになっているのに、地の文では別の登録人物がやっている → 覚えない（A2_ACTOR_CONFLICT）
      (3) 覚え書きの節を、起きた順の 1 行 1 件「T3｜紬：律から…を教わった（習得は不明）」にする（節の上限 200 字） */
-  function r10On() { return lsg('v292DfixEXP1r10Off') !== '1' && lsg('v292DfixEXP1r10On') === '1'; }
+  function r10On() { return lsg('v292DfixEXP1r10Off') !== '1'; }   /* 20261124-exp1r11on: 全員 既定 ON（長期記憶が ON の人）。実 AI 2 本で 24 字を超える taught が 2 件残り、誤って別の人に付いた経験 0 */
   function sMax(x) { return (x && x.k === 'taught' && r10On()) ? 40 : S_MAX; }
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return undefined; } }
   function sid() { try { var f = root.__v292Dfix697; var id = f && f.status ? f.status().storyId : null; return id ? String(id) : null; } catch (e) { return null; } }
@@ -111,7 +111,7 @@
      登録名は「渡瀬 紬」。空白なしの 3 字の名前からは「瀬紬」しか作れず、本文の「紬は…」に当たらないので、紬の経験が NOT_SUBJECT・NOT_TAUGHT・NOT_IN_TEXT で全部落ちていた。
      登録名（主人公と登場人物）と、空白・中黒を除いて同じ項目名は、登録名の形（名字・名前）でも本文を探す。一致する登録名がちょうど 1 つのときだけ。 */
   var CANON = {};
-  function nameOn() { return lsg('v292DfixEXP1NameOff') !== '1' && lsg('v292DfixEXP1NameOn') === '1'; }
+  function nameOn() { return lsg('v292DfixEXP1NameOff') !== '1'; }   /* 20261124-exp1r11on: 全員 既定 ON。実機の診断に残った要約 AI の返事の当て直しで 残り 0 件 → 2〜3 件（全部正しい）。実機 2 本は AI が空白ありで返したので この枝は未通過（害なし） */
   function strip(n) { return String(n || '').replace(/[\s　・]+/g, ''); }
   function setCanon(ctx) {
     CANON = {}; if (!nameOn() || !ctx) return;
