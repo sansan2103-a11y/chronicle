@@ -357,7 +357,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261124-exp1r11on';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261124-spkq1c3';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4845,7 +4845,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ★SPKCHK1（既定 OFF・鍵 v292DfixSPKCHK1On・kill v292DfixSPKCHK1Off）: 名札を本文と照らす（登録名の札に本文の強い反証があるときだけ who を本文の呼び名へ） -->
 <script src="v292DfixSPKCHK1-speaker-check.js?cb=20261124-spkq1"></script>
 <!-- ★SPKQ1（既定 OFF・鍵 v292DfixSPKQ1On・kill v292DfixSPKQ1Off）: AI の札が無いカードのうち、本文と矛盾する札だけを ??? に（効果音・口に出していない「」は外す）。SPKCHK1 の部品を読む -->
-<script src="v292DfixSPKQ1-speaker-unknown.js?cb=20261124-spkq1on"></script>
+<script src="v292DfixSPKQ1-speaker-unknown.js?cb=20261124-spkq1c3"></script>
 <script src="v292DfixIDSPLIT2-selfname-merge.js?cb=20261108-bundle93-i"></script><!-- v292DfixIDSPLIT2 (★93-i: 管理者画面の機能スイッチ idsplit2。行なし = OFF): 名乗りで記述的な呼び名を登録NPCへ結び付ける（証拠がそろう時だけ・それ以外は観測のみ）。kill: localStorage v292DfixIDSPLIT2Off=1 -->
 <!-- fix616: 話者の由来をターンへ記録（GPT実装順②）。並行配列 turn._convSayMeta に書き、
      _convSays / who / say / DOM は触らない。**新ターンだけ**・自分から保存しない。
