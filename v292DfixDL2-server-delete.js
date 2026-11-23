@@ -450,7 +450,11 @@
   }
   function sendOne(r) {   /* ★VAULTUNI1: 送る直前に共通判定を確かめ直す（分からなければ待ち、それでも分からなければ送らない） */
     var U = dlUni(); if (!U) return sendOne1(r);
-    return U.wait([r.id], 8000).then(function () { var u = U.del(r.id, 'dl2'); if (u !== 'ok') { st.vuRefused = (st.vuRefused || 0) + 1; setRes(r, false, u === 'vault' ? VD_MSG : DL_HOLD, { code: 'vaultuni1-' + u }); return; } return sendOne1(r); });
+    var mine1 = M; if (M) { M.msg = '確認しています…'; renderSheet(); }   /* ★VAULTUNI1 r2: 待つ間は「確認しています」 */
+    return U.wait([r.id], 8000).then(function () { return who(); }).then(function (a1) {
+      if (!M || M !== mine1 || !a1 || a1 !== M.a0) { st.vuAcct = (st.vuAcct || 0) + 1; setRes(r, false, 'ログイン中のアカウントが変わったため、削除しませんでした（何も送っていません）。', { code: 'vaultuni1-account' }); return; }   /* ★VAULTUNI1 r2 (Fix 1): 待った後にアカウントを読み直す */
+      if (M) { M.msg = '送信しています…'; renderSheet(); }
+      var u = U.del(r.id, 'dl2'); if (u !== 'ok') { st.vuRefused = (st.vuRefused || 0) + 1; setRes(r, false, u === 'vault' ? VD_MSG : DL_HOLD, { code: 'vaultuni1-' + u }); return; } return sendOne1(r); });
   }
   function sendOne1(r) {
     if (vdOn()) return vdFetch().then(function (V) { var w = vdWhy(r.id, V); if (w) { st.vdRefused = (st.vdRefused || 0) + 1; setRes(r, false, w, { code: (V && V.state === 'unknown') ? 'vdel1-unknown' : 'vdel1-hidden' }); return; } return sendOne0(r); });   /* ★VDEL1: 送る直前にもう一度（使い回さない） */
