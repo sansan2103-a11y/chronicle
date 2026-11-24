@@ -230,6 +230,8 @@
             try{ p.__sel=sel; }catch(_ps){}   /* ★fix333n(RC-2): 品質分析で再計算せず再利用する */
             var fb=foregroundBlock(sel);
             if(fb && sys.indexOf('【この一手で前面に出す')<0) sys=sys+'\n\n'+fb;
+            /* ★EXP1 r13（既定 OFF・鍵 v292DfixEXP1FgOn）: 前面に出す人物の経験を 1 行（EXP1 が門・字数・文面を持つ。OFF・記録なしは空文字＝1 バイトも変わらない） */
+            try{ var _x13=window.__v292DfixEXP1, _l13=(fb && sel && _x13 && typeof _x13.fgLine==='function') ? _x13.fgLine(sel.fg) : ''; if(_l13 && sys.indexOf('【この物語の中で起きたこと】')<0) sys=sys+'\n'+_l13; }catch(_e13){}
           }
         }catch(_i){ try{console.warn(TAG,'inject err',_i.message);}catch(_){} }
       }

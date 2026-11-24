@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261124-r12';
+  var VER = 'exp1-20261124-r13';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
@@ -407,7 +407,9 @@
   /* ---- (4) 覚え書きの節 ---- */
   var HEAD = '経験と習得（本文で確かめた範囲）：';
   function section(wi, cleanFn) {
+    FGWI = null;
     if (!Array.isArray(wi) || !on()) return '';
+    FGWI = wi;   /* r13: 前面の 1 行が読む（この関数が門を通った回の記録だけ） */
     var lines = [], used = HEAD.length, cl = typeof cleanFn === 'function' ? cleanFn : function (s) { return String(s || ''); };
     if (r10On()) {                                      /* ★r10 (3): 起きた順・1 行 1 件 */
       var all = [];
@@ -441,7 +443,34 @@
     if (!lines.length) return '';
     var t = HEAD + lines.join(''); ST.notes++; ST.noteChars += t.length; return t;
   }
-  var api = { VER: VER, on: on, why: why, prompt: prompt, wiLine: wiLine, merge: merge, section: section, checkItem: checkItem, checkLoc: checkLoc, parseT: parseT, last: function () { return JSON.parse(JSON.stringify(LAST)); }, KINDS: KINDS, NOTE_MAX: NOTE_MAX, PER: PER,
+  /* ★EXP1 r13（2026-11-24・GPT #127-XJ・既定 OFF・鍵 v292DfixEXP1FgOn・kill v292DfixEXP1FgOff）: 前面に出す人物の経験を、その人物の指示のすぐ後に 1 行で出す。
+     実 AI 2 本: 経験の節（送信の 85% の位置の資料の中）に「律から教わった」が入っていても、紬は設定の「前職」へ話を寄せた（正答 1/4）。
+     禁止文ではなく、事実の提示と「設定の経歴より後に起きた」という位置づけだけ。1 人 2 件・全体 160 字まで。門は EXP1 と同じ（隠した物語・施錠中・長期記憶 OFF では出さない）。
+     人物の記録は、覚え書きの節を作るとき（section）に受け取ったものを使う＝このページで一度も覚え書きを作っていなければ出さない。 */
+  var FGWI = null, FG_MAX = 160;
+  function fgOn() { return lsg('v292DfixEXP1FgOff') !== '1' && lsg('v292DfixEXP1FgOn') === '1'; }
+  function fgLine(names) {
+    try {
+      if (!fgOn() || !Array.isArray(names) || !names.length || !Array.isArray(FGWI) || !on()) return '';
+      var parts = [], used = 0;
+      names.forEach(function (n) {
+        var w = null; FGWI.forEach(function (z) { if (!w && z && z.type === 'character' && z.name && strip(z.name) === strip(n) && Array.isArray(z.exp) && z.exp.length) w = z; });
+        if (!w) return;
+        var xs = w.exp.filter(function (x) { return x && KINDS[x.k] && x.s && x.k !== 'failed'; }).slice().sort(function (a, b) { return ((b.k === 'taught') - (a.k === 'taught')) || ((+b.t || 0) - (+a.t || 0)); }).slice(0, 2)
+          .sort(function (a, b) { return (+a.t || 0) - (+b.t || 0); });
+        if (!xs.length) return;
+        var seg = String(n) + '＝' + xs.map(function (x) {
+          return 'T' + ((+x.t || 0) + 1) + ' ' + String(x.s).replace(/[\r\n【】]/g, ' ') + (x.k === 'taught' ? '（教わった事実は確定・習得は未確認）' : (x.k === 'first' ? '（初めてできた）' : '（身についた）'));
+        }).join('／');
+        if (used + seg.length > FG_MAX) return;
+        parts.push(seg); used += seg.length;
+      });
+      if (!parts.length) return '';
+      cnt(ST, 'fgLines');
+      return '【この物語の中で起きたこと】' + parts.join('　') + '。人物設定の経歴より後に、この物語の中で実際に起きた出来事。';
+    } catch (e) { return ''; }
+  }
+  var api = { VER: VER, on: on, why: why, prompt: prompt, wiLine: wiLine, merge: merge, section: section, fgLine: fgLine, checkItem: checkItem, checkLoc: checkLoc, parseT: parseT, last: function () { return JSON.parse(JSON.stringify(LAST)); }, KINDS: KINDS, NOTE_MAX: NOTE_MAX, PER: PER,
     stats: function () { return JSON.parse(JSON.stringify(ST)); } };
   try { Object.defineProperty(root, '__v292DfixEXP1', { value: Object.freeze(api), configurable: false, enumerable: false, writable: false }); } catch (e) { root.__v292DfixEXP1 = api; }
 })(typeof window !== 'undefined' ? window : globalThis);
