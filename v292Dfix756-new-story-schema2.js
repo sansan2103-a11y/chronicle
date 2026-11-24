@@ -546,6 +546,7 @@
   //   ★独自の auth 判定・独自の getstory を持たない。
   //   ★上限に達したら黙って諦める（write 0 / 既存経路そのまま）。
   // =====================================================================
+  var NG2 = { waits: 0, ok: 0, timeout: 0, ms: 0, t0: 0, unknownAtRun: 0 };
   var POLL_MS = 250, POLL_MAX = 200;               /* 最大 ≒ 50 秒（fix705 の boot 上限より長い） */
   var pollN = 0;
   (function bootPoll(){
@@ -554,7 +555,25 @@
       if (!on()) return;
       pollN++; stats.polls++;
       var g = gate();
-      if (g.ok){ RUN_P = run(g.storyId); return; }
+      /* ★NEWGATE2（2026-11-24・既定 OFF・鍵 v292DfixNEWGATE2On・kill v292DfixNEWGATE2Off）:
+         新しい物語の最初の準備（run）は、最初に控え（スナップショット）を書く。その瞬間に Vault の CopyGate の答えがまだ無い（effective 'unknown'）と、
+         CopyGate が控えの書き込みを断り（SecurityError）、SNAPSHOT_CREATE_FAILED → PREPARE_HOLD になる。run はタブごとに 1 回きりなので、
+         その物語はクラウドへ確定せず、削除シートも「保存が終わってから」で押せなくなる（実機 11-24・試験用の物語 1 本）。
+         ON のとき: 準備の条件がそろっても、CopyGate の答えが 'unknown' の間は run を始めずに待つ（読み直しを 1 回頼む・最大 15 秒）。
+         15 秒待っても届かなければ、今までどおり run する（＝今日と同じ結果。悪くはならない）。関門の規則・保存の手順は変えない。
+         OFF のときも「unknown のまま run した回数」だけ数える（動きは変えない）。 */
+      if (g.ok){
+        var ng2e = null; try { var ng2G = window.__v292Dvault2CopyGate, ng2S = (ng2G && typeof ng2G.status === 'function') ? ng2G.status() : null; if (ng2S && ng2S.scope !== 'OUT_OF_SCOPE') ng2e = ng2S.effective; } catch(eN2){ ng2e = null; }
+        if (ng2e === 'unknown'){
+          var ng2On = false; try { ng2On = localStorage.getItem('v292DfixNEWGATE2Off') !== '1' && localStorage.getItem('v292DfixNEWGATE2On') === '1'; } catch(eN3){}
+          if (ng2On){
+            if (!NG2.t0){ NG2.t0 = Date.now(); NG2.waits++; try { if (typeof ng2G.refresh === 'function') ng2G.refresh('newstory-run'); } catch(eN4){} note({ kind: 'NG2_WAIT' }); }
+            if (Date.now() - NG2.t0 < 15000){ state.phase = 'waiting'; state.code = 'COPYGATE_UNKNOWN'; try { setTimeout(bootPoll, POLL_MS); } catch(eN5){} return; }
+            NG2.timeout++; note({ kind: 'NG2_TIMEOUT' });
+          } else NG2.unknownAtRun++;
+        } else if (NG2.t0 && !NG2.ms){ NG2.ms = Date.now() - NG2.t0; NG2.ok++; note({ kind: 'NG2_OK', ms: NG2.ms }); }
+        RUN_P = run(g.storyId); return;
+      }
       state.phase = 'waiting'; state.code = g.code;
       /* 恒久的に成立しない条件は待たずに終える（poll を無駄に回さない） */
       if (g.code === 'OFF' || g.code === 'NO_DOCUMENT_STORY' || g.code === 'DEFAULT_STORY_UNSUPPORTED' ||
@@ -574,6 +593,7 @@
   // =====================================================================
   window.__v292Dfix756 = {
     __armed: true, BUILD: BUILD, ENABLED_BY_DEFAULT: true,
+    ng2: function(){ return { waits: NG2.waits, ok: NG2.ok, timeout: NG2.timeout, ms: NG2.ms, unknownAtRun: NG2.unknownAtRun }; },   /* ★NEWGATE2: 数だけ */
     SAFE_ABANDON_PHASES: SAFE_ABANDON_PHASES.slice(),
     on: on, off: off,
     /* なぜ起動した/しなかったのかを、副作用なしで説明する（実機受入で使う） */
