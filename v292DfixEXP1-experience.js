@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261124-r14';
+  var VER = 'exp1-20261125-r15';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
@@ -110,11 +110,13 @@
   /* ★EXP1 r11（2026-11-24・既定 OFF・鍵 v292DfixEXP1NameOn・kill v292DfixEXP1NameOff）: 要約 AI は人物の項目名を「渡瀬紬」と空白なしで返す（実機 4 本の診断で全件）。
      登録名は「渡瀬 紬」。空白なしの 3 字の名前からは「瀬紬」しか作れず、本文の「紬は…」に当たらないので、紬の経験が NOT_SUBJECT・NOT_TAUGHT・NOT_IN_TEXT で全部落ちていた。
      登録名（主人公と登場人物）と、空白・中黒を除いて同じ項目名は、登録名の形（名字・名前）でも本文を探す。一致する登録名がちょうど 1 つのときだけ。 */
-  var CANON = {};
+  var CANON = {}, REGN = [];
   function nameOn() { return lsg('v292DfixEXP1NameOff') !== '1'; }   /* 20261124-exp1r11on: 全員 既定 ON。実機の診断に残った要約 AI の返事の当て直しで 残り 0 件 → 2〜3 件（全部正しい）。実機 2 本は AI が空白ありで返したので この枝は未通過（害なし） */
   function strip(n) { return String(n || '').replace(/[\s　・]+/g, ''); }
   function setCanon(ctx) {
-    CANON = {}; if (!nameOn() || !ctx) return;
+    CANON = {}; REGN = [];
+    try { if (ctx) { if (ctx.hero) REGN.push(String(ctx.hero)); if (ctx.gender && typeof ctx.gender === 'object') Object.keys(ctx.gender).forEach(function (k) { if (k && REGN.indexOf(k) < 0) REGN.push(k); }); } } catch (eRg) {}
+    if (!nameOn() || !ctx) return;
     var reg = []; if (ctx.hero) reg.push(String(ctx.hero)); if (ctx.gender && typeof ctx.gender === 'object') Object.keys(ctx.gender).forEach(function (k) { if (k && reg.indexOf(k) < 0) reg.push(k); });
     var seen = {}; reg.forEach(function (r) { var k = strip(r); if (!k) return; seen[k] = (seen[k] || 0) + 1; if (strip(r) !== r) CANON[k] = r; });
     Object.keys(CANON).forEach(function (k) { if (seen[k] !== 1) delete CANON[k]; });
@@ -334,8 +336,24 @@
      同じ件: 句が同じ／片方が片方を含む／先頭の漢字の語（話題）が同じ → 重ねない。段階が上がるか同じなら、新しい方の段階とターンに置き換える（下がる知らせは無視）。
      満杯: 新しい件の段階が、枠の中でいちばん低い段階（同じなら古い方）より高いときだけ入れ替える。そうでなければ足さない（full を数える）。 */
   var RANK = { learned: 3, first: 2, taught: 1 };
-  function topic(s) { var m = /^[一-鿿々ァ-ヶー]{1,6}/.exec(norm(s)); return m ? m[0] : ''; }
-  function sameS(a, b) { var x = norm(a), y = norm(b); if (!x || !y) return false; if (x === y || x.indexOf(y) >= 0 || y.indexOf(x) >= 0) return true; var tx = topic(a), ty = topic(b); if (!!tx && tx === ty) return true;
+  /* ★EXP1 r15（2026-11-25・既定 OFF・鍵 v292DfixEXP1TeachRouteOn・kill v292DfixEXP1TeachRouteOff）: 実 AI 1 本（試験_R14_1125）で見つけた 3 点。
+     (a) 教えた側が主人公でない登録人物のとき、「蓮にもやい結びの結び方を教えた」が教えた側の taught（＝教わった）として通り、教わった側へ回らなかった
+         （sys に「渡瀬 紬：蓮に…を教えた＝教わった」）。→ 句が「…教えた／見せた」で終わる taught は、通っても教わった側へ回す。回せなければ残さない。
+     (b) 同じ件の判定が、句の頭の人名（「紬に…」「紬から…」）と「教わった／教えた」の字で重なり、別の題材（もやい結び／草笛）が 1 件に潰れた。
+         → 頭の「登録名＋から／に／と／の」と末尾の「を教わった／を教えた」を外した中身で比べる。
+     (c) 逆向きの教え（蓮が紬に教えた）も (a) で教わった側（紬）の経験になる。 */
+  function r15On() { return lsg('v292DfixEXP1TeachRouteOff') !== '1' && lsg('v292DfixEXP1TeachRouteOn') === '1'; }
+  var TEACH_END = /(教えた|教える|教えてあげた|教えてやった|手ほどきした|見せた)$/;
+  function core15(s) {
+    var n = norm(s), fs = [];
+    REGN.forEach(function (r) { forms(r).forEach(function (z) { z = norm(z); if (z && fs.indexOf(z) < 0) fs.push(z); }); });
+    fs.sort(function (a, b) { return b.length - a.length; });
+    for (var i = 0; i < fs.length; i++) { var re = new RegExp('^' + esc(fs[i]) + '(さん|ちゃん|くん|君)?(から|に|と|の)'); if (re.test(n)) { n = n.replace(re, ''); break; } }
+    n = n.replace(/(を|の)?(教わった|教わる|習った|教えてもらった|見せてもらった|手ほどきを受けた|教えた|教える|教えてあげた|教えてやった|手ほどきした|見せた)$/, '');
+    return n;
+  }
+  function topic(s) { var m = /^[一-鿿々ァ-ヶー]{1,6}/.exec(r15On() ? core15(s) : norm(s)); return m ? m[0] : ''; }
+  function sameS(a, b) { var x = norm(a), y = norm(b); if (r15On()) { var x15 = core15(a), y15 = core15(b); if (x15 && y15) { x = x15; y = y15; } } if (!x || !y) return false; if (x === y || x.indexOf(y) >= 0 || y.indexOf(x) >= 0) return true; var tx = topic(a), ty = topic(b); if (!!tx && tx === ty) return true;
     /* ★r6: 言い換え（「背の剥がれた文庫に糊を引き直し仕上げた」と「文庫の背の糊を引き直し成功した」）も同じ件: 漢字の集合の重なりが、少ない方の 6 割以上（3 字以上） */
     var ka = {}, kb = {}, na = 0, nb = 0, both = 0; (x.match(/[一-鿿々]/g) || []).forEach(function (k) { if (!ka[k]) { ka[k] = 1; na++; } }); (y.match(/[一-鿿々]/g) || []).forEach(function (k) { if (!kb[k]) { kb[k] = 1; nb++; if (ka[k]) both++; } });
     return both >= 3 && both >= Math.ceil(Math.min(na, nb) * 0.6); }
@@ -393,13 +411,15 @@
       var list = (prevBy[w.name] ? prevBy[w.name].exp : []).filter(function (x) { return x && KINDS[x.k] && typeof x.s === 'string'; }).map(function (x) { return { k: x.k, s: x.s, t: +x.t || 0 }; });
       if (!live) { if (raw !== undefined) cnt(ST.rej, 'OFF_AT_MERGE'); if (list.length) o.exp = list; return o; }   /* ★r2: 頼んだ後に OFF になった回は、受けた exp を保存しない（前の版だけ残す） */
       (Array.isArray(raw) ? raw : []).forEach(function (x) { ST.got++; var c = checkLoc(x, ctx, w.name);
-        if (typeof c === 'string' && x && x.k === 'taught') {   /* ★r5: 教えた側に付いた taught は、教わった側（ほかの人物 1 人）の経験として検査し直す */
+        var t15 = !!(r15On() && x && x.k === 'taught' && typeof c !== 'string' && TEACH_END.test(cleanS(x.s)));   /* ★r15 (a) */
+        if ((typeof c === 'string' || t15) && x && x.k === 'taught') {   /* ★r5: 教えた側に付いた taught は、教わった側（ほかの人物 1 人）の経験として検査し直す */
           var hit = []; chars.forEach(function (nm) { if (nm === w.name) return; var y = {}; for (var ky in x) if (Object.prototype.hasOwnProperty.call(x, ky)) y[ky] = x[ky]; y.s = taughtPhrase(x.s, nm); if (y.s === cleanS(x.s) && !forms(nm).some(function (z) { return cleanS(x.s).indexOf(z) >= 0; })) return; var cc = checkLoc(y, ctx, nm); if (typeof cc !== 'string') hit.push([nm, cc]); });
-          if (hit.length === 1 && r14On()) {   /* ★r14: 教えた人の名前を句に入れる（「フィルムの入れ方」→「律からフィルムの入れ方を教わった」）。40 字を超えるなら入れない */
+          if (hit.length === 1 && (r14On() || r15On())) {   /* ★r14: 教えた人の名前を句に入れる（「フィルムの入れ方」→「律からフィルムの入れ方を教わった」）。40 字を超えるなら入れない */
             var h14 = hit[0][1], s14 = String(h14.s || ''), f14 = forms(w.name), sh14 = f14.length ? f14.slice().sort(function (a, b) { return a.length - b.length; })[0] : '';
             if (sh14 && s14 && !/教わ|習っ|から/.test(s14) && !f14.some(function (z) { return s14.indexOf(z) >= 0; })) {
               var n14 = sh14 + 'から' + s14 + 'を教わった'; if (n14.length <= 40) { h14.s = n14; cnt(ST, 'taughtFrom'); } } }
-          if (hit.length === 1) { ST.taughtTo++; diag.items.push({ on: 'character', name: String(w.name || '').slice(0, 24), k: x.k, s: String(x.s || '').slice(0, 30), t: x.t, v: 'TAUGHT_TO', to: hit[0][0], ft: hit[0][1].t }); (routed[hit[0][0]] = routed[hit[0][0]] || []).push(hit[0][1]); return; } }
+          if (hit.length === 1) { ST.taughtTo++; diag.items.push({ on: 'character', name: String(w.name || '').slice(0, 24), k: x.k, s: String(x.s || '').slice(0, 30), t: x.t, v: 'TAUGHT_TO', to: hit[0][0], ft: hit[0][1].t }); (routed[hit[0][0]] = routed[hit[0][0]] || []).push(hit[0][1]); return; }
+          if (t15) { cnt(ST.rej, 'TEACH_UNROUTED'); diag.items.push({ on: 'character', name: String(w.name || '').slice(0, 24), k: x.k, s: String(x.s || '').slice(0, 30), t: x.t, v: 'TEACH_UNROUTED', n: hit.length }); return; } }
         diag.items.push({ on: 'character', name: String(w.name || '').slice(0, 24), k: x && x.k, s: x && String(x.s || '').slice(0, 30), t: x && x.t, v: typeof c === 'string' ? c : 'KEPT', ft: typeof c === 'string' ? null : c.t });
         if (typeof c === 'string') { cnt(ST.rej, c); return; } addTo(list, c); });
       (routed[w.name] || []).forEach(function (c) { addTo(list, c); }); delete routed[w.name];   /* ★r4 */
