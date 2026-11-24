@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261124-r13on';
+  var VER = 'exp1-20261124-r14';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
@@ -325,6 +325,9 @@
   }
   function countVia(v) { if (v === 'self') ST.selfFirst++; else if (v === 'pron') ST.pron++; else if (v === 'input') ST.inputTaught++; }
   /* ★r5: 教えた側に付いた taught の句から、教わった側の名前（「B に」）と「を教えた」を外す */
+  /* ★EXP1 r14（2026-11-24・既定 OFF・鍵 v292DfixEXP1TaughtFromOn・kill v292DfixEXP1TaughtFromOff）: 教えた側の taught を教わった側へ回すとき（TAUGHT_TO）、
+     句から「紬に」「を教えた」を外すだけで、教えた人の名前が付かなかった（実機 2 本: T4〜T6 の行に「律から」が無く、次の作り直しまで誰から教わったかが渡らない）。 */
+  function r14On() { return lsg('v292DfixEXP1TaughtFromOff') !== '1' && lsg('v292DfixEXP1TaughtFromOn') === '1'; }
   function taughtPhrase(s, to) { var f = forms(to), t = cleanS(s); f.forEach(function (z) { t = t.replace(new RegExp('^' + esc(z) + '(さん|ちゃん|くん|君)?に[、，,]?'), ''); }); return t.replace(/(を|の)?(教えた|教える|教えてあげた|教えてやった|手ほどきした|見せた)$/, '').trim(); }
   /* ---- (3) 引き継ぎ（★r2: 段階の優先で入れ替える・同じ話題は 1 件・戻すのは経験を持つ人だけ・30 件の内側） ----
      1 人の枠: 主の枠 3 件（learned > first > taught の順に大事）と、failed の別枠 1 件。
@@ -392,6 +395,10 @@
       (Array.isArray(raw) ? raw : []).forEach(function (x) { ST.got++; var c = checkLoc(x, ctx, w.name);
         if (typeof c === 'string' && x && x.k === 'taught') {   /* ★r5: 教えた側に付いた taught は、教わった側（ほかの人物 1 人）の経験として検査し直す */
           var hit = []; chars.forEach(function (nm) { if (nm === w.name) return; var y = {}; for (var ky in x) if (Object.prototype.hasOwnProperty.call(x, ky)) y[ky] = x[ky]; y.s = taughtPhrase(x.s, nm); if (y.s === cleanS(x.s) && !forms(nm).some(function (z) { return cleanS(x.s).indexOf(z) >= 0; })) return; var cc = checkLoc(y, ctx, nm); if (typeof cc !== 'string') hit.push([nm, cc]); });
+          if (hit.length === 1 && r14On()) {   /* ★r14: 教えた人の名前を句に入れる（「フィルムの入れ方」→「律からフィルムの入れ方を教わった」）。40 字を超えるなら入れない */
+            var h14 = hit[0][1], s14 = String(h14.s || ''), f14 = forms(w.name), sh14 = f14.length ? f14.slice().sort(function (a, b) { return a.length - b.length; })[0] : '';
+            if (sh14 && s14 && !/教わ|習っ|から/.test(s14) && !f14.some(function (z) { return s14.indexOf(z) >= 0; })) {
+              var n14 = sh14 + 'から' + s14 + 'を教わった'; if (n14.length <= 40) { h14.s = n14; cnt(ST, 'taughtFrom'); } } }
           if (hit.length === 1) { ST.taughtTo++; diag.items.push({ on: 'character', name: String(w.name || '').slice(0, 24), k: x.k, s: String(x.s || '').slice(0, 30), t: x.t, v: 'TAUGHT_TO', to: hit[0][0], ft: hit[0][1].t }); (routed[hit[0][0]] = routed[hit[0][0]] || []).push(hit[0][1]); return; } }
         diag.items.push({ on: 'character', name: String(w.name || '').slice(0, 24), k: x && x.k, s: x && String(x.s || '').slice(0, 30), t: x && x.t, v: typeof c === 'string' ? c : 'KEPT', ft: typeof c === 'string' ? null : c.t });
         if (typeof c === 'string') { cnt(ST.rej, c); return; } addTo(list, c); });
