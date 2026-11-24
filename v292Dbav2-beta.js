@@ -134,7 +134,7 @@
      準備の止めが掛かっている間（ph1Block）にページを離れるときだけ、入力欄の文をこのタブの sessionStorage に控え（物語 id ごと・2000 字まで・10 分で無効）、
      同じ物語を同じタブで開いたとき入力欄が空なら戻して控えを消す。隠した物語（Vault）では控えない。送信はしない。 */
   var DR = { saved: 0, restored: 0, skipped: null };
-  function drOn() { try { return localStorage.getItem('v292DfixDRAFT1Off') !== '1' && localStorage.getItem('v292DfixDRAFT1On') === '1'; } catch (e) { return false; } }
+  function drOn() { try { return localStorage.getItem('v292DfixDRAFT1Off') !== '1'; } catch (e) { return false; } }   /* 20261125-draft1on: 実機 r3（読み込み直し 2 回をまたいで残る・送った文は蘇らない・別の物語へ混ざらない）→ 既定 ON */
   function drHidden() { try { var V = window.__v292DfixVAULTGATE2; return !!(V && typeof V.hidden === 'function' && V.hidden(docId)); } catch (e) { return true; } }
   function drKey() { return 'v292Dbav2_draft:' + docId; }
   try {
