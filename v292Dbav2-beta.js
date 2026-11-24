@@ -167,5 +167,8 @@
     } catch (e) {}
     return body;
   }
-  window.__v292Dbav2 = { stampNew: stampNew, preparing: function () { return prep.on && !prep.done; }, prep: function () { return JSON.parse(JSON.stringify(prep)); }, status: function () { return { mode: mode(), flag: g('v292Dav2On'), mine: g('v292DbAv2'), flagSet: st.flagSet, flagCleared: st.flagCleared, held: st.held, stamped: st.stamped || 0, artStamped: st.artStamped || 0 }; } };
+  window.__v292Dbav2 = { stampNew: stampNew,
+    /* ★PREPHOLD1 r3: index.html の G.submit／cont／retry の入口が読む（処理側の関門）。capture の段の止めは二重の守りとして残す */
+    sendHeld: function () { try { return ph1Block() && localStorage.getItem('v292DfixPREPHOLD1GateOff') !== '1' && localStorage.getItem('v292DfixPREPHOLD1GateOn') === '1'; } catch (e) { return false; } },   /* 処理側の関門は既定 OFF（鍵 v292DfixPREPHOLD1GateOn）→ 実機確認 → ON */
+    notifyHeld: function (how) { try { prep.gateBlocked = (prep.gateBlocked || 0) + 1; prep.gateLast = String(how || ''); overlay(prep.failed ? FAIL_MSG(prep.verdict) : '物語を準備しています。少し待ってから、もう一度送信してください。', !!prep.failed); } catch (e) {} }, preparing: function () { return prep.on && !prep.done; }, prep: function () { return JSON.parse(JSON.stringify(prep)); }, status: function () { return { mode: mode(), flag: g('v292Dav2On'), mine: g('v292DbAv2'), flagSet: st.flagSet, flagCleared: st.flagCleared, held: st.held, stamped: st.stamped || 0, artStamped: st.artStamped || 0 }; } };
 })();
