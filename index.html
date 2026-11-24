@@ -31,7 +31,7 @@
 <script src="v292DfixISO1-local-only-foreign-hide.js?cb=20261107-iso1e"></script><!-- v292DfixISO1: 別アカウントのlocal-only物語を隠す・開かせない。OFF=localStorage v292DfixISO1Off=1 -->
 <script src="v292DfixADMF1-account-flags.js?cb=20261122-acct1r3"></script><!-- ★admg1: +lc1 / ld1 / rc1 / oma1（管理者画面の機能スイッチ・全体の値）。★admf2: 話者の訂正（sfl1）と NPC 場面整合（npres1・行なし=OFF）。★ADMF-1 r3: 管理者画面のアカウント機能スイッチ（/auth/me accountFlags）で SFL を使うかを決める（読むだけ・書き込み 0）。OFF=localStorage v292DfixADMF1Off=1（= SFL OFF） -->
 <!-- ★BAV2 (GPT #127-DV/#127-EE): beta を最初から Asset v2 で始める（client 側は使い勝手だけ。安全は Worker。Worker が features.assetV2Beta を返さない間は何もしない） -->
-<script src="v292Dbav2-beta.js?cb=20261125-tagx2"></script>
+<script src="v292Dbav2-beta.js?cb=20261125-prephold3"></script>
 <!-- ★fix990 (GPT #127-EN D): 旧画像 op が ASSET_V2_REQUIRED で断られたら、このタブではその op を 10 分送らない（fix523/633/634 より前に置く）。kill: localStorage v292Dfix990Off=1 -->
 <script src="v292Dfix990-legacy-img-breaker.js?cb=20261115-imgstop1r3"></script>
 <script src="v292DfixS1-entry-notice.js?cb=20261019-bundle31-a"></script><!-- v292DfixS1: github.io でだけ正式な入口の案内（自動転送なし）。OFF=localStorage v292DfixS1Off=1 -->
@@ -359,7 +359,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261125-tagx2';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261125-prephold3';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */

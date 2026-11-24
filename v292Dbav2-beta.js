@@ -76,7 +76,7 @@
   var SEND = { on: false, label: null };
   function sendState() {   /* #127-DY Q3: 送信の準備（fix892 の判定そのもの）をボタンに映す。タイマーで送信可能にはしない・自動送信しない */
     try { var btn = document.getElementById('sendBtn'); if (!btn) return; var F = window.__v292Dfix892; var k = (F && typeof F.holdKind === 'function') ? F.holdKind() : null;
-      var hold = !!k || (prep.on && !prep.done) || (prep.failed && ph1On()) || (typeof p2 === 'object' && p2 && ph1On() && p2On() && (p2.busy || p2.failed));   /* ★PREPHOLD1 ★PREPHOLD2 r2 */
+      var hold = !!k || (prep.on && !prep.done) || (prep.failed && ph1On()) || (typeof p2 === 'object' && p2 && ph1On() && p2On() && (p2.busy || p2.failed || p2.soft));   /* ★PREPHOLD1 ★PREPHOLD2 r2 */
       if (hold && !SEND.on) { SEND.on = true; SEND.label = btn.textContent; btn.disabled = true; btn.setAttribute('data-bav2-hold', '1'); btn.textContent = '保存準備中…'; }
       else if (!hold && SEND.on) { SEND.on = false; btn.disabled = false; btn.removeAttribute('data-bav2-hold'); if (SEND.label != null) btn.textContent = SEND.label; }
     } catch (e) {}
@@ -98,7 +98,12 @@
      （ホームから開き直した未完了の物語）では prep.on にならず、fix756 が走っている間も送信できた（実機 GATE_QA2 の Y）。
      fix756 が実行中（running）か CopyGate 待ち（waiting / COPYGATE_UNKNOWN）の間は同じ覆いと同じ止めを掛け、
      PREPARE_HOLD で終わったら失敗の案内（ホームへ戻る）にする。それ以外で終わったら覆いを外す。あわせて、準備の待ちが 15 秒を超えたら覆いに「ホームへ戻る」を出す。 */
-  var p2 = { busy: false, failed: false, shown: 0, last: null };
+  var p2 = { busy: false, failed: false, shown: 0, last: null, soft: false, softN: 0 };
+  /* ★PREPHOLD3 (2026-11-25, GPT #127-XP 優先 1, default OFF: localStorage v292DfixPREPHOLD3On='1'): fix756 が「分類待ち」（waiting で COPYGATE_UNKNOWN 以外）の間、
+     送信ボタンが約 350ms 押せた（実機: 2,926ms に押せる → 3,273ms に PREPHOLD2 の止め）。分類が出るまで覆いなしで送信だけ止める（ボタンは「保存準備中…」）。
+     昇格済みの物語は 5〜6 秒で skipped になり、ボタンが押せるのはもともとその後（8〜9 秒）なので待ちは増えない。読み込みから 12 秒を超えたら外す（分類が来ない物語を止め続けない）。 */
+  var P3_T0 = Date.now();
+  function p3On() { try { return localStorage.getItem('v292DfixPREPHOLD3Off') !== '1' && localStorage.getItem('v292DfixPREPHOLD3On') === '1'; } catch (e) { return false; } }
   function p2On() { try { return localStorage.getItem('v292DfixPREPHOLD2Off') !== '1'; } catch (e) { return false; } }   /* 20261125-prephold2on: 実機 PASS（r2）→ 既定 ON。kill v292DfixPREPHOLD2Off */
   function p2State() { try { var F = window.__v292Dfix756; var s = F && typeof F.state === 'function' ? F.state() : null; if (!s) return null;
     if (s.storyId && docId && String(s.storyId) !== String(docId)) return null; return s; } catch (e) { return null; } }
@@ -107,6 +112,8 @@
       if (!isIndex || !docId || !ph1On() || !p2On()) return;
       if (prep.on) { if (!prep.done && !prep.homeShown && Date.now() - prep.t0 > 15000) { prep.homeShown = true; overlay('物語を準備しています…', true); } return; }
       var s = p2State(); var busy = !!s && (s.phase === 'running' || (s.phase === 'waiting' && s.code === 'COPYGATE_UNKNOWN'));
+      var soft = !busy && !p2.busy && p3On() && !!s && s.phase === 'waiting' && (Date.now() - P3_T0) < 12000;
+      if (soft !== p2.soft) { p2.soft = soft; if (soft) p2.softN++; }
       if (busy) { if (!p2.busy) { p2.busy = true; p2.shown++; p2.t0 = Date.now(); overlay('物語を準備しています…'); }
         else if (!p2.homeShown && Date.now() - p2.t0 > 15000) { p2.homeShown = true; overlay('物語を準備しています…', true); }
         p2.last = s.phase; sendState(); return; }
@@ -122,7 +129,7 @@
       sendState();
     } catch (e) {}
   }
-  try { setInterval(p2Tick, 400); } catch (e) {}
+  try { setInterval(p2Tick, 150); } catch (e) {}
   /* ★DRAFT1 (2026-11-25, GPT #127-XP 優先 2, default OFF: localStorage v292DfixDRAFT1On='1'): 保存の準備の読み込み直し・「ホームへ戻る」で、入力欄に書いた文が消える。
      準備の止めが掛かっている間（ph1Block）にページを離れるときだけ、入力欄の文をこのタブの sessionStorage に控え（物語 id ごと・2000 字まで・10 分で無効）、
      同じ物語を同じタブで開いたとき入力欄が空なら戻して控えを消す。隠した物語（Vault）では控えない。送信はしない。 */
@@ -140,13 +147,15 @@
         if (!drOn()) return; var raw = sessionStorage.getItem(drKey()); if (!raw) return;
         var el = document.getElementById('inp'); if (!el) { if (++drN < 40) setTimeout(drTry, 250); return; }
         var o = null; try { o = JSON.parse(raw); } catch (e2) { o = null; }
+        if (!o || typeof o.v !== 'string' || Date.now() - (+o.t || 0) > 600000) { sessionStorage.removeItem(drKey()); return; }
+        if (drHidden()) {   /* r2: 読み込み直後 1〜9 秒は Vault の答えがまだ無く hidden() が true（V2_PENDING）。答えが出るまで待つ（最大 20 秒）。出なければ戻さず消す */
+          if (++drN < 80) { setTimeout(drTry, 250); return; } sessionStorage.removeItem(drKey()); DR.skipped = 'vault-restore'; return; }
         sessionStorage.removeItem(drKey());
-        if (!o || typeof o.v !== 'string' || Date.now() - (+o.t || 0) > 600000 || drHidden()) return;
         if (!String(el.value || '').trim()) { el.value = o.v; try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (e3) {} DR.restored++; }
       } catch (e) {} })();
     }
   } catch (e) {}
-  function ph1Block() { return ph1On() && ((prep.on && (!prep.done || prep.failed)) || (p2On() && (p2.busy || p2.failed))); }
+  function ph1Block() { return ph1On() && ((prep.on && (!prep.done || prep.failed)) || (p2On() && (p2.busy || p2.failed || p2.soft))); }
   function ph1Stop(ev, how) { try { ev.preventDefault(); ev.stopImmediatePropagation(); ev.stopPropagation(); } catch (e) {}
     prep.capBlocked = (prep.capBlocked || 0) + 1; prep.capLast = how;
     var _f = prep.failed || p2.failed; overlay(_f ? FAIL_MSG(prep.verdict || p2.last) : '物語を準備しています。少し待ってから、もう一度送信してください。', !!_f); }
