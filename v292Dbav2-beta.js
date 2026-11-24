@@ -94,10 +94,32 @@
   /* ★PREPHOLD1 r2（実機 F1）: 入力欄の Enter は G.submit を呼ぶが、後から読み込まれる部品が G.submit を差し替えるので、上の wrapG の門を通らずに送信が始まった
      （ボタンは disabled で止まっていただけ）。fix892 と同じ作法で、capture の段で Enter と送信まわりのクリックを止める。
      止めるのは「準備中（まだ終わっていない）」と「準備が失敗した後」。鍵 OFF では何もしない。 */
-  function ph1Block() { return ph1On() && prep.on && (!prep.done || prep.failed); }
+  /* ★PREPHOLD2 (2026-11-25, default OFF: localStorage v292DfixPREPHOLD2On='1'): 「新しい物語」の印なしで開いた、まだ昇格していない物語
+     （ホームから開き直した未完了の物語）では prep.on にならず、fix756 が走っている間も送信できた（実機 GATE_QA2 の Y）。
+     fix756 が実行中（running）か CopyGate 待ち（waiting / COPYGATE_UNKNOWN）の間は同じ覆いと同じ止めを掛け、
+     PREPARE_HOLD で終わったら失敗の案内（ホームへ戻る）にする。それ以外で終わったら覆いを外す。あわせて、準備の待ちが 15 秒を超えたら覆いに「ホームへ戻る」を出す。 */
+  var p2 = { busy: false, failed: false, shown: 0, last: null };
+  function p2On() { try { return localStorage.getItem('v292DfixPREPHOLD2On') === '1'; } catch (e) { return false; } }
+  function p2State() { try { var F = window.__v292Dfix756; var s = F && typeof F.state === 'function' ? F.state() : null; if (!s) return null;
+    if (s.storyId && docId && String(s.storyId) !== String(docId)) return null; return s; } catch (e) { return null; } }
+  function p2Tick() {
+    try {
+      if (!isIndex || !docId || !ph1On() || !p2On()) return;
+      if (prep.on) { if (!prep.done && !prep.homeShown && Date.now() - prep.t0 > 15000) { prep.homeShown = true; overlay('物語を準備しています…', true); } return; }
+      var s = p2State(); var busy = !!s && (s.phase === 'running' || (s.phase === 'waiting' && s.code === 'COPYGATE_UNKNOWN'));
+      if (busy) { if (!p2.busy) { p2.busy = true; p2.shown++; p2.t0 = Date.now(); overlay('物語を準備しています…'); }
+        else if (!p2.homeShown && Date.now() - p2.t0 > 15000) { p2.homeShown = true; overlay('物語を準備しています…', true); }
+        p2.last = s.phase; return; }
+      if (p2.busy) { p2.busy = false; p2.last = s ? (s.phase + '/' + (s.verdict || s.code || '')) : 'none';
+        if (s && s.phase === 'done' && s.verdict === 'PREPARE_HOLD') { p2.failed = true; overlay(FAIL_MSG(s.code || 'PREPARE_HOLD'), true); }
+        else if (!p2.failed) unOverlay(); }
+    } catch (e) {}
+  }
+  try { setInterval(p2Tick, 400); } catch (e) {}
+  function ph1Block() { return ph1On() && ((prep.on && (!prep.done || prep.failed)) || (p2On() && (p2.busy || p2.failed))); }
   function ph1Stop(ev, how) { try { ev.preventDefault(); ev.stopImmediatePropagation(); ev.stopPropagation(); } catch (e) {}
     prep.capBlocked = (prep.capBlocked || 0) + 1; prep.capLast = how;
-    overlay(prep.failed ? FAIL_MSG(prep.verdict) : '物語を準備しています。少し待ってから、もう一度送信してください。', !!prep.failed); }
+    var _f = prep.failed || p2.failed; overlay(_f ? FAIL_MSG(prep.verdict || p2.last) : '物語を準備しています。少し待ってから、もう一度送信してください。', !!_f); }
   try {
     document.addEventListener('keydown', function (ev) { try { var t = ev.target;
       if (ph1Block() && t && t.id === 'inp' && ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && ev.keyCode !== 229) ph1Stop(ev, 'enter'); } catch (e) {} }, true);
@@ -170,5 +192,5 @@
   window.__v292Dbav2 = { stampNew: stampNew,
     /* ★PREPHOLD1 r3: index.html の G.submit／cont／retry の入口が読む（処理側の関門）。capture の段の止めは二重の守りとして残す */
     sendHeld: function () { try { return ph1Block() && localStorage.getItem('v292DfixPREPHOLD1GateOff') !== '1' && localStorage.getItem('v292DfixPREPHOLD1GateOn') === '1'; } catch (e) { return false; } },   /* 処理側の関門は既定 OFF（鍵 v292DfixPREPHOLD1GateOn）→ 実機確認 → ON */
-    notifyHeld: function (how) { try { prep.gateBlocked = (prep.gateBlocked || 0) + 1; prep.gateLast = String(how || ''); overlay(prep.failed ? FAIL_MSG(prep.verdict) : '物語を準備しています。少し待ってから、もう一度送信してください。', !!prep.failed); } catch (e) {} }, preparing: function () { return prep.on && !prep.done; }, prep: function () { return JSON.parse(JSON.stringify(prep)); }, status: function () { return { mode: mode(), flag: g('v292Dav2On'), mine: g('v292DbAv2'), flagSet: st.flagSet, flagCleared: st.flagCleared, held: st.held, stamped: st.stamped || 0, artStamped: st.artStamped || 0 }; } };
+    notifyHeld: function (how) { try { prep.gateBlocked = (prep.gateBlocked || 0) + 1; prep.gateLast = String(how || ''); var _f = prep.failed || p2.failed; overlay(_f ? FAIL_MSG(prep.verdict || p2.last) : '物語を準備しています。少し待ってから、もう一度送信してください。', !!_f); } catch (e) {} }, p2: function () { return JSON.parse(JSON.stringify(p2)); }, preparing: function () { return prep.on && !prep.done; }, prep: function () { return JSON.parse(JSON.stringify(prep)); }, status: function () { return { mode: mode(), flag: g('v292Dav2On'), mine: g('v292DbAv2'), flagSet: st.flagSet, flagCleared: st.flagCleared, held: st.held, stamped: st.stamped || 0, artStamped: st.artStamped || 0 }; } };
 })();
