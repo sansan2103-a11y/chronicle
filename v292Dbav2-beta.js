@@ -91,6 +91,19 @@
   function FAIL_MSG(v) { return ph1On() ? ('この物語の保存の準備がまだ終わっていません（' + v + '）。このまま続けると保存されないため、送信を止めています。ホームへ戻って、もう一度開いてください。')
                                         : ('物語の準備ができませんでした（' + v + '）。ホームへ戻って、もう一度開いてください。'); }
   function fail(v) { prep.done = true; prep.failed = true; prep.verdict = v; overlay(FAIL_MSG(v), true); }
+  /* ★PREPHOLD1 r2（実機 F1）: 入力欄の Enter は G.submit を呼ぶが、後から読み込まれる部品が G.submit を差し替えるので、上の wrapG の門を通らずに送信が始まった
+     （ボタンは disabled で止まっていただけ）。fix892 と同じ作法で、capture の段で Enter と送信まわりのクリックを止める。
+     止めるのは「準備中（まだ終わっていない）」と「準備が失敗した後」。鍵 OFF では何もしない。 */
+  function ph1Block() { return ph1On() && prep.on && (!prep.done || prep.failed); }
+  function ph1Stop(ev, how) { try { ev.preventDefault(); ev.stopImmediatePropagation(); ev.stopPropagation(); } catch (e) {}
+    prep.capBlocked = (prep.capBlocked || 0) + 1; prep.capLast = how;
+    overlay(prep.failed ? FAIL_MSG(prep.verdict) : '物語を準備しています。少し待ってから、もう一度送信してください。', !!prep.failed); }
+  try {
+    document.addEventListener('keydown', function (ev) { try { var t = ev.target;
+      if (ph1Block() && t && t.id === 'inp' && ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && ev.keyCode !== 229) ph1Stop(ev, 'enter'); } catch (e) {} }, true);
+    document.addEventListener('click', function (ev) { try { var t = ev.target, b = t && t.closest ? t.closest('#sendBtn,#contBtn,#retryBtn') : null;
+      if (ph1Block() && b) ph1Stop(ev, 'click'); } catch (e) {} }, true);
+  } catch (e) {}
   function prepTick() {
     if (!isIndex || !isNew || !docId) return;
     if (!prep.on) {
