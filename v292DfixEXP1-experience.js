@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261124-r11on';
+  var VER = 'exp1-20261124-r12';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
@@ -338,11 +338,20 @@
     return both >= 3 && both >= Math.ceil(Math.min(na, nb) * 0.6); }
   function addTo(list, c) {
     var pool = list.filter(function (x) { return (x.k === 'failed') === (c.k === 'failed'); }), cap = c.k === 'failed' ? 1 : PER;
-    for (var i = 0; i < pool.length; i++) if (sameS(pool[i].s, c.s)) {
+    /* ★r12（2026-11-24・既定 OFF・鍵 v292DfixEXP1TaughtKeepOn・kill v292DfixEXP1TaughtKeepOff）: 「律から…を教わった」(taught) と「一人で…できた」(first／learned) は
+       同じ漢字が重なると同じ件と見なされ、段階の高い方が taught を上書きして「誰から教わったか」が消えていた（実機 題材_1: KEPT なのに残らず）。
+       taught と first／learned は別の事実として両方残す。満杯のときも、taught を first／learned で押し出さない。 */
+    var r12 = lsg('v292DfixEXP1TaughtKeepOff') !== '1' && lsg('v292DfixEXP1TaughtKeepOn') === '1';
+    for (var i = 0; i < pool.length; i++) if (sameS(pool[i].s, c.s) && !(r12 && ((pool[i].k === 'taught') !== (c.k === 'taught')))) {
       var p = pool[i]; if (p.k === 'first' && c.k === 'first') { ST.dup++; return; }   /* ★r6: 初めてできたのは最初のターンのまま */
       if (c.k === 'failed' || RANK[c.k] >= RANK[p.k]) { if (p.k !== c.k || p.t !== c.t || p.s !== c.s) { p.k = c.k; p.t = c.t; p.s = c.s; ST.upd++; } else ST.dup++; } else ST.dup++; return; }
     if (pool.length < cap) { list.push(c); ST.kept++; return; }
     var low = null; pool.forEach(function (x) { if (!low || (RANK[x.k] || 0) < (RANK[low.k] || 0) || ((RANK[x.k] || 0) === (RANK[low.k] || 0) && x.t < low.t)) low = x; });
+    if (r12 && c.k !== 'failed' && low && low.k === 'taught' && c.k !== 'taught') {   /* taught は押し出さない: taught 以外でいちばん低い・古い件と比べる */
+      var low2 = null; pool.forEach(function (x) { if (x.k === 'taught') return; if (!low2 || (RANK[x.k] || 0) < (RANK[low2.k] || 0) || ((RANK[x.k] || 0) === (RANK[low2.k] || 0) && x.t < low2.t)) low2 = x; });
+      if (low2 && (RANK[c.k] > RANK[low2.k] || (RANK[c.k] === RANK[low2.k] && c.t > low2.t))) { list.splice(list.indexOf(low2), 1, c); ST.swapped++; return; }
+      ST.full++; return;
+    }
     if (c.k !== 'failed' && low && RANK[c.k] > RANK[low.k]) { list.splice(list.indexOf(low), 1, c); ST.swapped++; return; }
     if (c.k === 'failed' && low && c.t >= low.t) { list.splice(list.indexOf(low), 1, c); ST.swapped++; return; }
     ST.full++;
