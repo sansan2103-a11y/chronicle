@@ -103,7 +103,7 @@
      送信ボタンが約 350ms 押せた（実機: 2,926ms に押せる → 3,273ms に PREPHOLD2 の止め）。分類が出るまで覆いなしで送信だけ止める（ボタンは「保存準備中…」）。
      昇格済みの物語は 5〜6 秒で skipped になり、ボタンが押せるのはもともとその後（8〜9 秒）なので待ちは増えない。読み込みから 12 秒を超えたら外す（分類が来ない物語を止め続けない）。 */
   var P3_T0 = Date.now();
-  function p3On() { try { return localStorage.getItem('v292DfixPREPHOLD3Off') !== '1' && localStorage.getItem('v292DfixPREPHOLD3On') === '1'; } catch (e) { return false; } }
+  function p3On() { try { return localStorage.getItem('v292DfixPREPHOLD3Off') !== '1'; } catch (e) { return false; } }   /* 20261125-prephold3on: 実機（未昇格の開き直しで soft 1 回・見えた範囲で隙間なし／昇格済み 3 回は soft 0・押せるまで 8.1〜8.6 秒で増えず）→ 既定 ON */
   function p2On() { try { return localStorage.getItem('v292DfixPREPHOLD2Off') !== '1'; } catch (e) { return false; } }   /* 20261125-prephold2on: 実機 PASS（r2）→ 既定 ON。kill v292DfixPREPHOLD2Off */
   function p2State() { try { var F = window.__v292Dfix756; var s = F && typeof F.state === 'function' ? F.state() : null; if (!s) return null;
     if (s.storyId && docId && String(s.storyId) !== String(docId)) return null; return s; } catch (e) { return null; } }
@@ -140,7 +140,7 @@
   try {
     if (isIndex && docId) {
       window.addEventListener('pagehide', function () { try {
-        if (!drOn() || !ph1Block()) return; var el = document.getElementById('inp'); var v = el ? String(el.value || '') : '';
+        if (!drOn()) return; var el = document.getElementById('inp');   /* r3: 止めの有無に関係なく控える（開くたびに入る自動の読み込み直しは止めが無い時に起きる。実機: 8.3 秒目・hidden false） */ var v = el ? String(el.value || '') : '';
         if (!v.trim()) return; if (drHidden()) { DR.skipped = 'vault'; return; }
         sessionStorage.setItem(drKey(), JSON.stringify({ t: Date.now(), v: v.slice(0, 2000) })); DR.saved++; } catch (e) {} });
       var drN = 0; (function drTry() { try {
