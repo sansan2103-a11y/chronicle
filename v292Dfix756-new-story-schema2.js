@@ -568,13 +568,13 @@
         var ng2e = null; try { var ng2G = window.__v292Dvault2CopyGate, ng2S = (ng2G && typeof ng2G.status === 'function') ? ng2G.status() : null; if (ng2S && ng2S.scope !== 'OUT_OF_SCOPE') ng2e = ng2S.effective; } catch(eN2){ ng2e = null; }
         /* r2（GPT #127-XK (b)）: 'unknown' のまま run しない。答えが届くまで同じページで待ち続ける（run の「タブごと 1 回」は使わない）。
            15 秒を超えたら小さく知らせる。届いたら知らせを消して run。試験用: sessionStorage v292DfixNEWGATE2TestUnknownMs = ミリ秒（その間だけ、この待ちの判定を 'unknown' とみなす。CopyGate 本体には触れない） */
-        var ng2On = false; try { ng2On = localStorage.getItem('v292DfixNEWGATE2Off') !== '1' && localStorage.getItem('v292DfixNEWGATE2On') === '1'; } catch(eN3){}
+        var ng2On = false; try { ng2On = localStorage.getItem('v292DfixNEWGATE2Off') !== '1'; } catch(eN3){}   /* 20261124-newgate2on: 全員 既定 ON（実機: すぐ回復 4.5 秒・遅れて回復 25 秒・通常 2 本とも run → CLEAN。待っている間は run の権利を使わない）。止めるのは kill v292DfixNEWGATE2Off='1' */
         if (ng2On){ try { var ng2T = parseInt(sessionStorage.getItem('v292DfixNEWGATE2TestUnknownMs') || '0', 10); if (ng2T > 0 && ng2e != null && (Date.now() - NG2.boot) < ng2T) ng2e = 'unknown'; } catch(eN6){} }
         if (ng2e === 'unknown'){
           if (ng2On){
             if (!NG2.t0){ NG2.t0 = Date.now(); NG2.waits++; try { if (typeof ng2G.refresh === 'function') ng2G.refresh('newstory-run'); } catch(eN4){} note({ kind: 'NG2_WAIT' }); }
             var ng2W = Date.now() - NG2.t0;
-            if (ng2W >= 15000 && !NG2.shown){ NG2.shown = true; NG2.long++; ng2Note('保存の準備を確認しています…（この物語はまだクラウドに保存されていません）'); note({ kind: 'NG2_LONG' });
+            if (ng2W >= 15000 && !NG2.shown){ NG2.shown = true; NG2.long++; ng2Note('保存の準備を確認しています…');   /* 実機 C3: 待ちの間も通常の保存は届くことがあるので「保存されていません」とは言わない */ note({ kind: 'NG2_LONG' });
               try { if (typeof ng2G.refresh === 'function') ng2G.refresh('newstory-run-long'); } catch(eN7){} }
             state.phase = 'waiting'; state.code = 'COPYGATE_UNKNOWN';
             pollN--; stats.polls--;                       /* 待ちは boot の上限（50 秒）に数えない */
