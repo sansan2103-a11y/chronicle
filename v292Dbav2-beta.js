@@ -99,7 +99,7 @@
      fix756 が実行中（running）か CopyGate 待ち（waiting / COPYGATE_UNKNOWN）の間は同じ覆いと同じ止めを掛け、
      PREPARE_HOLD で終わったら失敗の案内（ホームへ戻る）にする。それ以外で終わったら覆いを外す。あわせて、準備の待ちが 15 秒を超えたら覆いに「ホームへ戻る」を出す。 */
   var p2 = { busy: false, failed: false, shown: 0, last: null };
-  function p2On() { try { return localStorage.getItem('v292DfixPREPHOLD2On') === '1'; } catch (e) { return false; } }
+  function p2On() { try { return localStorage.getItem('v292DfixPREPHOLD2Off') !== '1'; } catch (e) { return false; } }   /* 20261125-prephold2on: 実機 PASS（r2）→ 既定 ON。kill v292DfixPREPHOLD2Off */
   function p2State() { try { var F = window.__v292Dfix756; var s = F && typeof F.state === 'function' ? F.state() : null; if (!s) return null;
     if (s.storyId && docId && String(s.storyId) !== String(docId)) return null; return s; } catch (e) { return null; } }
   function p2Tick() {
@@ -198,6 +198,6 @@
   }
   window.__v292Dbav2 = { stampNew: stampNew,
     /* ★PREPHOLD1 r3: index.html の G.submit／cont／retry の入口が読む（処理側の関門）。capture の段の止めは二重の守りとして残す */
-    sendHeld: function () { try { return ph1Block() && localStorage.getItem('v292DfixPREPHOLD1GateOff') !== '1' && localStorage.getItem('v292DfixPREPHOLD1GateOn') === '1'; } catch (e) { return false; } },   /* 処理側の関門は既定 OFF（鍵 v292DfixPREPHOLD1GateOn）→ 実機確認 → ON */
+    sendHeld: function () { try { return ph1Block() && localStorage.getItem('v292DfixPREPHOLD1GateOff') !== '1';   /* 20261125-prephold2on: 実機 PASS（GPT #127-XO の 3 条件）→ 既定 ON */ } catch (e) { return false; } },   /* 処理側の関門は既定 OFF（鍵 v292DfixPREPHOLD1GateOn）→ 実機確認 → ON */
     notifyHeld: function (how) { try { prep.gateBlocked = (prep.gateBlocked || 0) + 1; prep.gateLast = String(how || ''); var _f = prep.failed || p2.failed; overlay(_f ? FAIL_MSG(prep.verdict || p2.last) : '物語を準備しています。少し待ってから、もう一度送信してください。', !!_f); } catch (e) {} }, p2: function () { return JSON.parse(JSON.stringify(p2)); }, preparing: function () { return prep.on && !prep.done; }, prep: function () { return JSON.parse(JSON.stringify(prep)); }, status: function () { return { mode: mode(), flag: g('v292Dav2On'), mine: g('v292DbAv2'), flagSet: st.flagSet, flagCleared: st.flagCleared, held: st.held, stamped: st.stamped || 0, artStamped: st.artStamped || 0 }; } };
 })();
