@@ -445,7 +445,7 @@
   }
   /* ★EXP1 r13（2026-11-24・GPT #127-XJ・既定 OFF・鍵 v292DfixEXP1FgOn・kill v292DfixEXP1FgOff）: 前面に出す人物の経験を、その人物の指示のすぐ後に 1 行で出す。
      実 AI 2 本: 経験の節（送信の 85% の位置の資料の中）に「律から教わった」が入っていても、紬は設定の「前職」へ話を寄せた（正答 1/4）。
-     禁止文ではなく、事実の提示と「設定の経歴より後に起きた」という位置づけだけ。1 人 2 件・全体 160 字まで。門は EXP1 と同じ（隠した物語・施錠中・長期記憶 OFF では出さない）。
+     禁止文ではなく、事実の提示だけ（GPT #127-XJ の文面）。既存の覚え書きの節は動かさない（前面でない人物の経験が送られなくなるため＝追加方式）。1 人 2 件・全体 160 字まで。門は EXP1 と同じ（隠した物語・施錠中・長期記憶 OFF では出さない）。
      人物の記録は、覚え書きの節を作るとき（section）に受け取ったものを使う＝このページで一度も覚え書きを作っていなければ出さない。 */
   var FGWI = null, FG_MAX = 160;
   function fgOn() { return lsg('v292DfixEXP1FgOff') !== '1' && lsg('v292DfixEXP1FgOn') === '1'; }
@@ -460,14 +460,14 @@
           .sort(function (a, b) { return (+a.t || 0) - (+b.t || 0); });
         if (!xs.length) return;
         var seg = String(n) + '＝' + xs.map(function (x) {
-          return 'T' + ((+x.t || 0) + 1) + ' ' + String(x.s).replace(/[\r\n【】]/g, ' ') + (x.k === 'taught' ? '（教わった事実は確定・習得は未確認）' : (x.k === 'first' ? '（初めてできた）' : '（身についた）'));
+          return 'T' + ((+x.t || 0) + 1) + ' ' + String(x.s).replace(/[\r\n【】]/g, ' ') + (x.k === 'taught' ? '（習得未確認）' : (x.k === 'first' ? '（初めて成功）' : '（身についた）'));
         }).join('／');
         if (used + seg.length > FG_MAX) return;
         parts.push(seg); used += seg.length;
       });
       if (!parts.length) return '';
       cnt(ST, 'fgLines');
-      return '【この物語の中で起きたこと】' + parts.join('　') + '。人物設定の経歴より後に、この物語の中で実際に起きた出来事。';
+      return '【物語内で確認された経験】' + parts.join('　') + '。';   /* GPT #127-XJ: 位置づけの一文は入れない */
     } catch (e) { return ''; }
   }
   var api = { VER: VER, on: on, why: why, prompt: prompt, wiLine: wiLine, merge: merge, section: section, fgLine: fgLine, checkItem: checkItem, checkLoc: checkLoc, parseT: parseT, last: function () { return JSON.parse(JSON.stringify(LAST)); }, KINDS: KINDS, NOTE_MAX: NOTE_MAX, PER: PER,
