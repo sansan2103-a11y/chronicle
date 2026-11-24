@@ -57,7 +57,9 @@
   function wrapG() {
     try { var G = window.G; if (!G || G.__bav2) return !!(G && G.__bav2);
       ['submit', 'cont', 'retry'].forEach(function (k) { var f = G[k]; if (typeof f !== 'function') return;
-        G[k] = function () { if (prep.on && !prep.done) { prep.refused++; overlay('物語を準備しています。少し待ってから、もう一度送信してください。'); return; } return f.apply(this, arguments); }; });
+        G[k] = function () { if (prep.on && !prep.done) { prep.refused++; overlay('物語を準備しています。少し待ってから、もう一度送信してください。'); return; }
+          if (prep.failed && ph1On()) { prep.refusedAfterFail = (prep.refusedAfterFail || 0) + 1; overlay(FAIL_MSG(prep.verdict), true); return; }   /* ★PREPHOLD1 */
+          return f.apply(this, arguments); }; });
       G.__bav2 = true; return true; } catch (e) { return false; }
   }
   var MAT = 'v292Dbav2_mat:';
@@ -74,13 +76,21 @@
   var SEND = { on: false, label: null };
   function sendState() {   /* #127-DY Q3: 送信の準備（fix892 の判定そのもの）をボタンに映す。タイマーで送信可能にはしない・自動送信しない */
     try { var btn = document.getElementById('sendBtn'); if (!btn) return; var F = window.__v292Dfix892; var k = (F && typeof F.holdKind === 'function') ? F.holdKind() : null;
-      var hold = !!k || (prep.on && !prep.done);
+      var hold = !!k || (prep.on && !prep.done) || (prep.failed && ph1On());   /* ★PREPHOLD1 */
       if (hold && !SEND.on) { SEND.on = true; SEND.label = btn.textContent; btn.disabled = true; btn.setAttribute('data-bav2-hold', '1'); btn.textContent = '保存準備中…'; }
       else if (!hold && SEND.on) { SEND.on = false; btn.disabled = false; btn.removeAttribute('data-bav2-hold'); if (SEND.label != null) btn.textContent = SEND.label; }
     } catch (e) {}
   }
   function release(v) { prep.done = true; prep.verdict = v; unOverlay(); writeMat(); }
-  function fail(v) { prep.done = true; prep.failed = true; prep.verdict = v; overlay('物語の準備ができませんでした（' + v + '）。ホームへ戻って、もう一度開いてください。', true); }
+  /* ★PREPHOLD1（2026-11-24・既定 OFF・鍵 v292DfixPREPHOLD1On・kill v292DfixPREPHOLD1Off）: 上の 4. の意図は「昇格できなかった・時間切れ：止めたまま」だが、
+     fail() が prep.done を立てるので、送信の門（wrapG）と送信ボタン（sendState）が解除されていた。画面の覆いは残るが、キーボードやプログラムからの送信は通る。
+     実機（試験用の物語）: 準備が 60 秒で終わらず CLIENT_TIMEOUT → そのまま 1 ターン送る → 通常の保存でサーバーに shadow の行ができる → 開き直すと
+     fix756 は SERVER_ROW_PRESENT・fix756r は NOT_FIX750_ORIGIN で昇格せず、端末とサーバーの食い違い（BOOTSTRAP_CONTENT_DIVERGENCE）で以後の保存が止まる。
+     ON: 失敗の後も送信を止めたままにする（設定・送信・続き・やり直し）。案内は「まだ 1 ターンも保存していないので、ホームへ戻って開き直せば準備をやり直せる」。 */
+  function ph1On() { try { return localStorage.getItem('v292DfixPREPHOLD1Off') !== '1' && localStorage.getItem('v292DfixPREPHOLD1On') === '1'; } catch (e) { return false; } }
+  function FAIL_MSG(v) { return ph1On() ? ('この物語の保存の準備がまだ終わっていません（' + v + '）。このまま続けると保存されないため、送信を止めています。ホームへ戻って、もう一度開いてください。')
+                                        : ('物語の準備ができませんでした（' + v + '）。ホームへ戻って、もう一度開いてください。'); }
+  function fail(v) { prep.done = true; prep.failed = true; prep.verdict = v; overlay(FAIL_MSG(v), true); }
   function prepTick() {
     if (!isIndex || !isNew || !docId) return;
     if (!prep.on) {
