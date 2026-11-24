@@ -87,8 +87,8 @@
      実機（試験用の物語）: 準備が 60 秒で終わらず CLIENT_TIMEOUT → そのまま 1 ターン送る → 通常の保存でサーバーに shadow の行ができる → 開き直すと
      fix756 は SERVER_ROW_PRESENT・fix756r は NOT_FIX750_ORIGIN で昇格せず、端末とサーバーの食い違い（BOOTSTRAP_CONTENT_DIVERGENCE）で以後の保存が止まる。
      ON: 失敗の後も送信を止めたままにする（設定・送信・続き・やり直し）。案内は「まだ 1 ターンも保存していないので、ホームへ戻って開き直せば準備をやり直せる」。 */
-  function ph1On() { try { return localStorage.getItem('v292DfixPREPHOLD1Off') !== '1' && localStorage.getItem('v292DfixPREPHOLD1On') === '1'; } catch (e) { return false; } }
-  function FAIL_MSG(v) { return ph1On() ? ('この物語の保存の準備がまだ終わっていません（' + v + '）。このまま続けると保存されないため、送信を止めています。ホームへ戻って、もう一度開いてください。')
+  function ph1On() { try { return localStorage.getItem('v292DfixPREPHOLD1Off') !== '1'; } catch (e) { return false; } }   /* 20261124-prephold1on: 全員 既定 ON（実機: 準備中・失敗後とも Enter で送信 0 回・開き直しで run → canonical・CLEAN・通常の物語は影響なし。GPT #127-XM）。kill v292DfixPREPHOLD1Off='1' */
+  function FAIL_MSG(v) { return ph1On() ? ('この物語の保存の準備がまだ完了していません（' + v + '）。保存できなくなる可能性があるため、物語の進行を一時停止しています。ホームへ戻り、もう一度物語を開いてください。')
                                         : ('物語の準備ができませんでした（' + v + '）。ホームへ戻って、もう一度開いてください。'); }
   function fail(v) { prep.done = true; prep.failed = true; prep.verdict = v; overlay(FAIL_MSG(v), true); }
   /* ★PREPHOLD1 r2（実機 F1）: 入力欄の Enter は G.submit を呼ぶが、後から読み込まれる部品が G.submit を差し替えるので、上の wrapG の門を通らずに送信が始まった
