@@ -22,7 +22,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixSPKQ1) return;
-  var VER = 'spkq1-20261124-r2b';
+  var VER = 'spkq1-20261124-r3';
   var ST = { turns: 0, unknown: 0, sfx: 0, flip: 0, guard: 0, kept: {}, why: {}, errors: 0 };
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function on() { return lsg('v292DfixSPKQ1Off') !== '1'; }   /* 20261124-spkq1on: 全員 既定 ON（保存済みの実 AI 出力 684 枚で 9 枚を直し誤り 0・実機 10 ターンで 1 枚を直し誤り 0・後段と再読み込みで戻らない）。止めるのは kill v292DfixSPKQ1Off='1' */
@@ -127,6 +127,20 @@
         var anyNoun = pre.replace(/^[\s　]+/, '').match(/^([^。、「\s　]{1,8}?)(?:が|は)[^。「]*$/);
         if (subjPre) { if (!h.isFormOf(subjPre, xf) && !h.speechBy(postFlat, xf[0])) { hit = 'C3-inline-other-subject'; to = ownerOf(h, spk, subjPre, cast, narr); } }
         else if (anyNoun && !xf.some(function (f) { return pre.indexOf(f) >= 0; }) && !/^(?:彼女|彼|あなた|自分|それ|これ|声|言葉)$/.test(anyNoun[1]) && !xf.some(function (f) { return postFlat.slice(0, 30).indexOf(f) >= 0; })) hit = 'C3-inline-other-subject';
+      }
+      /* ★r3（2026-11-24・実 AI の取り違え 3 件から）
+         C3b 同じ段落の中で、直前の文の主語が Y（「冴の手が一瞬止まり、…動き出す。」）で、台詞の直後が主語なしの「とだけ答えて／と言って…」＝ 話し手は Y。X≠Y なら Y へ（登録人物のとき）・未登録なら ???。
+         C5 台詞が相手への促し（「やってみて」「どうぞ」「〜してください」）で、直後の文の主語が X で、X がその動作を始めている（発話の動詞なし）＝ X は言われた側 → ???。 */
+      if (!hit && pre && h.loose(q.body).length >= 2 && /。[ 　]*$/.test(between)) {
+        var tail3 = between.slice(between.lastIndexOf('\n') + 1);                       /* 同じ段落の、台詞の前の部分 */
+        var cl3 = postFlat.split(/[。\n]/)[0];
+        if (tail3.replace(/[\s　]/g, '').length >= 6 && /^(?:と|って)(?:だけ|小さく|短く|静かに|低く)?[^。、「]{0,4}?(?:答え|言っ|言い|返し|返す|呟い|囁い|付け加え|続け[たてる]|告げ|尋ね|訊)/.test(cl3) && !h.firstSubject(cl3, toks)) {
+          var s3 = h.sentencesOf(tail3), y3 = s3.length ? h.firstSubject(s3[s3.length - 1], toks) : null;
+          if (y3 && !h.isFormOf(y3, xf)) { hit = 'C3b-same-paragraph-subject'; to = ownerOf(h, spk, y3, cast, narr); }
+        }
+      }
+      if (!hit && post1IsX && /(?:てみて|てごらん|てください|て下さい|なさい|てくれ|どうぞ|てみな|ていいよ)[。、！!…]*$/.test(String(q.body).replace(/[\s　]+$/, '')) && !new RegExp(SAYING).test(post1) && !/[？?]/.test(q.body)) {
+        if (/^(?:[^。、「]{0,8}の)?[^。「]{1,12}(?:は|が)(?:まず|早速|さっそく|言われた|促され|頷い|うなず|恐る恐る|おそるおそる|そっと|ゆっくり)/.test(post1.replace(/^[\s　]+/, ''))) hit = 'C5-x-is-told-to-act';
       }
       /* C4 直後の文が「X は…頷いた（だけ）／黙って聞いていた」＝ X は聞き手。台詞の前には X の主語が無い */
       if (!hit && post1IsX && !isHero0(q.body)) {
