@@ -140,7 +140,7 @@
         ['undo','retry'].forEach(function(fn){
           if (typeof g[fn] !== 'function') return;
           var orig = g[fn].bind(g);
-          /* ★RD0 (2026-11-25, default OFF: localStorage v292DfixRD0On='1'): 取消／やり直しが何もせずに戻ったとき（ターン 0 のまま）や、
+          /* ★RD0 (2026-11-25, default ON; kill: localStorage v292DfixRD0Off='1'): 取消／やり直しが何もせずに戻ったとき（ターン 0 のまま）や、
              新しい物語の保存の準備中（bav2.preparing()）は再導出しない。再導出の persist が fix77States を書いて物語を「保存待ち」にし、
              準備（fix756 の昇格）より先に通常の同期がサーバーへ行を作るのを防ぐ（実機 4 本目で確認: retry 直後に DIRTY_LOCAL）。 */
           g[fn] = function(){
@@ -148,7 +148,7 @@
             var r = orig.apply(this, arguments);
             try { setTimeout(function(){
               try {
-                if (localStorage.getItem('v292DfixRD0On') === '1') {
+                if (localStorage.getItem('v292DfixRD0Off') !== '1') {   /* 2026-11-25 実機 PASS → 既定 ON（止め v292DfixRD0Off） */
                   var s1 = getS(); var n1 = (s1 && Array.isArray(s1.turns)) ? s1.turns.length : -1;
                   var prep = false; try { var B = window.__v292Dbav2; prep = !!(B && typeof B.preparing === 'function' && B.preparing()); } catch(e2){}
                   if (prep || (n0 === 0 && n1 === 0)) { rd0.skips++; rd0.last = { at: Date.now(), fn: fn, why: prep ? 'preparing' : 'zero-turns' }; return; }
