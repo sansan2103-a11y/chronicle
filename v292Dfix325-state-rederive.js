@@ -117,6 +117,7 @@
   }
 
   // ---- staleness 検知ポーリング(リロード/スロット切替/保険) ----
+  var rd0 = { skips: 0, last: null }; try { window.__v292Dfix325rd0 = function(){ return JSON.parse(JSON.stringify(rd0)); }; } catch(e){}
   var lastLen = -1;
   try { setInterval(function(){
     if (off()) return;
@@ -139,7 +140,24 @@
         ['undo','retry'].forEach(function(fn){
           if (typeof g[fn] !== 'function') return;
           var orig = g[fn].bind(g);
-          g[fn] = function(){ var r = orig.apply(this, arguments); try { setTimeout(function(){ rederive('after ' + fn); }, 50); } catch(e){} return r; };
+          /* ★RD0 (2026-11-25, default OFF: localStorage v292DfixRD0On='1'): 取消／やり直しが何もせずに戻ったとき（ターン 0 のまま）や、
+             新しい物語の保存の準備中（bav2.preparing()）は再導出しない。再導出の persist が fix77States を書いて物語を「保存待ち」にし、
+             準備（fix756 の昇格）より先に通常の同期がサーバーへ行を作るのを防ぐ（実機 4 本目で確認: retry 直後に DIRTY_LOCAL）。 */
+          g[fn] = function(){
+            var n0 = -1; try { var s0 = getS(); n0 = (s0 && Array.isArray(s0.turns)) ? s0.turns.length : -1; } catch(e){}
+            var r = orig.apply(this, arguments);
+            try { setTimeout(function(){
+              try {
+                if (localStorage.getItem('v292DfixRD0On') === '1') {
+                  var s1 = getS(); var n1 = (s1 && Array.isArray(s1.turns)) ? s1.turns.length : -1;
+                  var prep = false; try { var B = window.__v292Dbav2; prep = !!(B && typeof B.preparing === 'function' && B.preparing()); } catch(e2){}
+                  if (prep || (n0 === 0 && n1 === 0)) { rd0.skips++; rd0.last = { at: Date.now(), fn: fn, why: prep ? 'preparing' : 'zero-turns' }; return; }
+                }
+              } catch(e1){}
+              rederive('after ' + fn);
+            }, 50); } catch(e){}
+            return r;
+          };
         });
         g.__v292Dfix325 = true;
         try { console.log(TAG, 'undo/retry hooks wired'); } catch(_){}

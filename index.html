@@ -357,7 +357,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261124-vicon1on';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261125-rd0';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4722,7 +4722,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix322-state-line-strip.js?cb=20260829-fix748"></script>
 <script src="v292Dfix323-boundary-guards.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix324-show-dont-tell.js?cb=v292Dfix419c"></script>
-<script src="v292Dfix325-state-rederive.js?cb=20261019-bundle31-a"></script>
+<script src="v292Dfix325-state-rederive.js?cb=20261125-rd0"></script>
 <script src="v292Dfix326-story-scroll.js?cb=v292Dfix326"></script>
 <script src="v292DfixJMP-jump-latest.js?cb=20261031-bundle76-jmp-a"></script><!-- v292DfixJMP(bundle76): 展開の描写・会話ログをさかのぼっているときだけ、パネルの下に丸い「↓ 最新へ」ボタン（押すと一番下までスクロール。読むだけ・保存/通信なし）。停止 = localStorage v292DfixJMPOff=1 -->
 <script src="v292Dfix327-turn-counter.js?cb=v292Dfix327"></script>
