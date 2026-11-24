@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261124-r13';
+  var VER = 'exp1-20261124-r13on';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
@@ -341,7 +341,7 @@
     /* ★r12（2026-11-24・既定 OFF・鍵 v292DfixEXP1TaughtKeepOn・kill v292DfixEXP1TaughtKeepOff）: 「律から…を教わった」(taught) と「一人で…できた」(first／learned) は
        同じ漢字が重なると同じ件と見なされ、段階の高い方が taught を上書きして「誰から教わったか」が消えていた（実機 題材_1: KEPT なのに残らず）。
        taught と first／learned は別の事実として両方残す。満杯のときも、taught を first／learned で押し出さない。 */
-    var r12 = lsg('v292DfixEXP1TaughtKeepOff') !== '1' && lsg('v292DfixEXP1TaughtKeepOn') === '1';
+    var r12 = lsg('v292DfixEXP1TaughtKeepOff') !== '1';   /* 20261124-r13on: 全員 既定 ON（実 AI 4 本で taught と first が最後まで両方残り、消えた件 0） */
     for (var i = 0; i < pool.length; i++) if (sameS(pool[i].s, c.s) && !(r12 && ((pool[i].k === 'taught') !== (c.k === 'taught')))) {
       var p = pool[i]; if (p.k === 'first' && c.k === 'first') { ST.dup++; return; }   /* ★r6: 初めてできたのは最初のターンのまま */
       if (c.k === 'failed' || RANK[c.k] >= RANK[p.k]) { if (p.k !== c.k || p.t !== c.t || p.s !== c.s) { p.k = c.k; p.t = c.t; p.s = c.s; ST.upd++; } else ST.dup++; } else ST.dup++; return; }
@@ -448,7 +448,7 @@
      禁止文ではなく、事実の提示だけ（GPT #127-XJ の文面）。既存の覚え書きの節は動かさない（前面でない人物の経験が送られなくなるため＝追加方式）。1 人 2 件・全体 160 字まで。門は EXP1 と同じ（隠した物語・施錠中・長期記憶 OFF では出さない）。
      人物の記録は、覚え書きの節を作るとき（section）に受け取ったものを使う＝このページで一度も覚え書きを作っていなければ出さない。 */
   var FGWI = null, FG_MAX = 160;
-  function fgOn() { return lsg('v292DfixEXP1FgOff') !== '1' && lsg('v292DfixEXP1FgOn') === '1'; }
+  function fgOn() { return lsg('v292DfixEXP1FgOff') !== '1'; }   /* 20261124-r13on: 全員 既定 ON（長期記憶が ON の人）。実 AI 2 対 2: 正答 OFF 3/8 → ON 7/8・経験の作り話 OFF 5 → ON 1。GPT #127-XK (d) */
   function fgLine(names) {
     try {
       if (!fgOn() || !Array.isArray(names) || !names.length || !Array.isArray(FGWI) || !on()) return '';
