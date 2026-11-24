@@ -264,7 +264,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261125-exp1r15on';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261125-tagx2';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -307,7 +307,7 @@
 <script src="v292Dfix893-account-cookie-shim.js?cb=20261113-lim1"></script>
 <script>try { if (localStorage.getItem('v292DfixVAULTUNI1Off') !== '1') document.write('<script src="v292DfixVAULTGATE2-vault-open.js?cb=20261122-vaultsend1r2"><\/script>'); } catch (e) {}</script><!-- ★VAULTUNI1: HOME の VAULTGATE2 は kill の端末では読まない（kill = 土台と同じ HOME） --><script src="v292DfixVAULTUNI1-vault-unify.js?cb=20261123-vaultuni1on"></script><!-- ★VAULTUNI1: HOME の削除・片づけ（DL2・GHOST1・HOLD2・STORE1b）も VAULTGATE2 の共通判定で決める -->
 <!-- ★BAV2 (GPT #127-DV/#127-EE): beta を最初から Asset v2 で始める（client 側は使い勝手だけ。安全は Worker。Worker が features.assetV2Beta を返さない間は何もしない） -->
-<script src="v292Dbav2-beta.js?cb=20261125-prephold2on"></script>
+<script src="v292Dbav2-beta.js?cb=20261125-tagx2"></script>
 <script src="v292DfixS1-entry-notice.js?cb=20261019-bundle31-a"></script><!-- v292DfixS1: github.io でだけ正式な入口の案内（自動転送なし）。OFF=localStorage v292DfixS1Off=1 -->
 <script src="v292Diso2-owner-send-guard.js?cb=20261014-iso2b"></script>
 <script src="v292DfixISO1-local-only-foreign-hide.js?cb=20261107-iso1e"></script><!-- v292DfixISO1: 別アカウントのlocal-only物語を隠す・開かせない。OFF=localStorage v292DfixISO1Off=1 -->

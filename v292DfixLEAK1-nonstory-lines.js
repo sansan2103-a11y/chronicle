@@ -95,7 +95,11 @@
      形: 行の頭（「」の外）が「react who=… 反応=…」「state who=… からだ=…」＝タグ名・who=・もう 1 つの欄名= の並び。物語の文・台詞にこの並びは出ない。
      山括弧つきでも同じ（<react who=… の行）。scene_move・summary は対象にしない（正規の経路がある）。「」『』〔 で始まる行・400 字を超える行は対象にしない。
      止める鍵: v292DfixLEAK1TagxOff='1'（数えるだけに戻す）。適用の鍵（ApplyOff／Off）にも従う。 */
-  var RX_TAGX = /^\s*<?\s*(?:react|state)\s+who\s*[=＝]\s*["“]?[^"”\s=＝]{1,24}["”]?\s+(?:反応|声|からだ|こころ|本能|目的|傷|関係|未解決)\s*[=＝]/;
+  /* ★TAGX2（2026-11-25・実 AI 試験_R15 T6 の実測）: 登録名は「渡瀬 紬」のように空白を含む。who= の名前に空白を許していなかったので、登録名の行が全部素通りしていた。
+     引用符つきの名前は中の空白を許す。欄名は「fromだ=／fromこころ=」（「から」が from に化けた形）も同じ欄として扱う。止める鍵: v292DfixLEAK1Tagx2Off='1'（前の式に戻す）。 */
+  var RX_TAGX_OLD = /^\s*<?\s*(?:react|state)\s+who\s*[=＝]\s*["“]?[^"”\s=＝]{1,24}["”]?\s+(?:反応|声|からだ|こころ|本能|目的|傷|関係|未解決)\s*[=＝]/;
+  var RX_TAGX_NEW = /^\s*<?\s*(?:react|state)\s+who\s*[=＝]\s*(?:["“][^"”=＝]{1,24}["”]|[^"“”\s=＝]{1,24})\s+(?:from)?(?:反応|声|からだ|だ|こころ|本能|目的|傷|関係|未解決)\s*[=＝]/;
+  var RX_TAGX = { test: function (t) { return (ls('v292DfixLEAK1Tagx2Off') === '1' ? RX_TAGX_OLD : RX_TAGX_NEW).test(t); } };
   function isTagx(line){ var t = String(line || ''); return t.length <= 400 && !/^\s*[「『〔]/.test(t) && RX_TAGX.test(t); }
   function tagxOn(){ return ls('v292DfixLEAK1TagxOff') !== '1'; }
   function chkLines(lines){ var strong = false, out = {}; for (var i = 0; i < lines.length; i++){ var t = lines[i]; if (RX_CHK_STRONG.test(t)){ strong = true; out[i] = 1; } else if (RX_CHK_WEAK.test(t)) out[i] = 1; } return strong ? out : {}; }

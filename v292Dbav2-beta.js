@@ -123,6 +123,29 @@
     } catch (e) {}
   }
   try { setInterval(p2Tick, 400); } catch (e) {}
+  /* ★DRAFT1 (2026-11-25, GPT #127-XP 優先 2, default OFF: localStorage v292DfixDRAFT1On='1'): 保存の準備の読み込み直し・「ホームへ戻る」で、入力欄に書いた文が消える。
+     準備の止めが掛かっている間（ph1Block）にページを離れるときだけ、入力欄の文をこのタブの sessionStorage に控え（物語 id ごと・2000 字まで・10 分で無効）、
+     同じ物語を同じタブで開いたとき入力欄が空なら戻して控えを消す。隠した物語（Vault）では控えない。送信はしない。 */
+  var DR = { saved: 0, restored: 0, skipped: null };
+  function drOn() { try { return localStorage.getItem('v292DfixDRAFT1Off') !== '1' && localStorage.getItem('v292DfixDRAFT1On') === '1'; } catch (e) { return false; } }
+  function drHidden() { try { var V = window.__v292DfixVAULTGATE2; return !!(V && typeof V.hidden === 'function' && V.hidden(docId)); } catch (e) { return true; } }
+  function drKey() { return 'v292Dbav2_draft:' + docId; }
+  try {
+    if (isIndex && docId) {
+      window.addEventListener('pagehide', function () { try {
+        if (!drOn() || !ph1Block()) return; var el = document.getElementById('inp'); var v = el ? String(el.value || '') : '';
+        if (!v.trim()) return; if (drHidden()) { DR.skipped = 'vault'; return; }
+        sessionStorage.setItem(drKey(), JSON.stringify({ t: Date.now(), v: v.slice(0, 2000) })); DR.saved++; } catch (e) {} });
+      var drN = 0; (function drTry() { try {
+        if (!drOn()) return; var raw = sessionStorage.getItem(drKey()); if (!raw) return;
+        var el = document.getElementById('inp'); if (!el) { if (++drN < 40) setTimeout(drTry, 250); return; }
+        var o = null; try { o = JSON.parse(raw); } catch (e2) { o = null; }
+        sessionStorage.removeItem(drKey());
+        if (!o || typeof o.v !== 'string' || Date.now() - (+o.t || 0) > 600000 || drHidden()) return;
+        if (!String(el.value || '').trim()) { el.value = o.v; try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (e3) {} DR.restored++; }
+      } catch (e) {} })();
+    }
+  } catch (e) {}
   function ph1Block() { return ph1On() && ((prep.on && (!prep.done || prep.failed)) || (p2On() && (p2.busy || p2.failed))); }
   function ph1Stop(ev, how) { try { ev.preventDefault(); ev.stopImmediatePropagation(); ev.stopPropagation(); } catch (e) {}
     prep.capBlocked = (prep.capBlocked || 0) + 1; prep.capLast = how;
@@ -199,5 +222,5 @@
   window.__v292Dbav2 = { stampNew: stampNew,
     /* ★PREPHOLD1 r3: index.html の G.submit／cont／retry の入口が読む（処理側の関門）。capture の段の止めは二重の守りとして残す */
     sendHeld: function () { try { return ph1Block() && localStorage.getItem('v292DfixPREPHOLD1GateOff') !== '1';   /* 20261125-prephold2on: 実機 PASS（GPT #127-XO の 3 条件）→ 既定 ON */ } catch (e) { return false; } },   /* 処理側の関門は既定 OFF（鍵 v292DfixPREPHOLD1GateOn）→ 実機確認 → ON */
-    notifyHeld: function (how) { try { prep.gateBlocked = (prep.gateBlocked || 0) + 1; prep.gateLast = String(how || ''); var _f = prep.failed || p2.failed; overlay(_f ? FAIL_MSG(prep.verdict || p2.last) : '物語を準備しています。少し待ってから、もう一度送信してください。', !!_f); } catch (e) {} }, p2: function () { return JSON.parse(JSON.stringify(p2)); }, preparing: function () { return prep.on && !prep.done; }, prep: function () { return JSON.parse(JSON.stringify(prep)); }, status: function () { return { mode: mode(), flag: g('v292Dav2On'), mine: g('v292DbAv2'), flagSet: st.flagSet, flagCleared: st.flagCleared, held: st.held, stamped: st.stamped || 0, artStamped: st.artStamped || 0 }; } };
+    notifyHeld: function (how) { try { prep.gateBlocked = (prep.gateBlocked || 0) + 1; prep.gateLast = String(how || ''); var _f = prep.failed || p2.failed; overlay(_f ? FAIL_MSG(prep.verdict || p2.last) : '物語を準備しています。少し待ってから、もう一度送信してください。', !!_f); } catch (e) {} }, p2: function () { return JSON.parse(JSON.stringify(p2)); }, draft: function () { return JSON.parse(JSON.stringify(DR)); }, preparing: function () { return prep.on && !prep.done; }, prep: function () { return JSON.parse(JSON.stringify(prep)); }, status: function () { return { mode: mode(), flag: g('v292Dav2On'), mine: g('v292DbAv2'), flagSet: st.flagSet, flagCleared: st.flagCleared, held: st.held, stamped: st.stamped || 0, artStamped: st.artStamped || 0 }; } };
 })();
