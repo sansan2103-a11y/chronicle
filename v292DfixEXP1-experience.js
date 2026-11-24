@@ -342,7 +342,7 @@
      (b) 同じ件の判定が、句の頭の人名（「紬に…」「紬から…」）と「教わった／教えた」の字で重なり、別の題材（もやい結び／草笛）が 1 件に潰れた。
          → 頭の「登録名＋から／に／と／の」と末尾の「を教わった／を教えた」を外した中身で比べる。
      (c) 逆向きの教え（蓮が紬に教えた）も (a) で教わった側（紬）の経験になる。 */
-  function r15On() { return lsg('v292DfixEXP1TeachRouteOff') !== '1' && lsg('v292DfixEXP1TeachRouteOn') === '1'; }
+  function r15On() { return lsg('v292DfixEXP1TeachRouteOff') !== '1'; }   /* 20261125-exp1r15on: 実 AI 1 本（同じ台本）で 教えた側に残らず・逆向きも回り・潰れ 0・4 問正答 → 全員 既定 ON */
   var TEACH_END = /(教えた|教える|教えてあげた|教えてやった|手ほどきした|見せた)$/;
   function core15(s) {
     var n = norm(s), fs = [];
