@@ -76,7 +76,7 @@
   var SEND = { on: false, label: null };
   function sendState() {   /* #127-DY Q3: 送信の準備（fix892 の判定そのもの）をボタンに映す。タイマーで送信可能にはしない・自動送信しない */
     try { var btn = document.getElementById('sendBtn'); if (!btn) return; var F = window.__v292Dfix892; var k = (F && typeof F.holdKind === 'function') ? F.holdKind() : null;
-      var hold = !!k || (prep.on && !prep.done) || (prep.failed && ph1On());   /* ★PREPHOLD1 */
+      var hold = !!k || (prep.on && !prep.done) || (prep.failed && ph1On()) || (typeof p2 === 'object' && p2 && ph1On() && p2On() && (p2.busy || p2.failed));   /* ★PREPHOLD1 ★PREPHOLD2 r2 */
       if (hold && !SEND.on) { SEND.on = true; SEND.label = btn.textContent; btn.disabled = true; btn.setAttribute('data-bav2-hold', '1'); btn.textContent = '保存準備中…'; }
       else if (!hold && SEND.on) { SEND.on = false; btn.disabled = false; btn.removeAttribute('data-bav2-hold'); if (SEND.label != null) btn.textContent = SEND.label; }
     } catch (e) {}
@@ -109,10 +109,17 @@
       var s = p2State(); var busy = !!s && (s.phase === 'running' || (s.phase === 'waiting' && s.code === 'COPYGATE_UNKNOWN'));
       if (busy) { if (!p2.busy) { p2.busy = true; p2.shown++; p2.t0 = Date.now(); overlay('物語を準備しています…'); }
         else if (!p2.homeShown && Date.now() - p2.t0 > 15000) { p2.homeShown = true; overlay('物語を準備しています…', true); }
-        p2.last = s.phase; return; }
-      if (p2.busy) { p2.busy = false; p2.last = s ? (s.phase + '/' + (s.verdict || s.code || '')) : 'none';
-        if (s && s.phase === 'done' && s.verdict === 'PREPARE_HOLD') { p2.failed = true; overlay(FAIL_MSG(s.code || 'PREPARE_HOLD'), true); }
-        else if (!p2.failed) unOverlay(); }
+        p2.last = s.phase; sendState(); return; }
+      if (p2.busy) {
+        p2.last = s ? (s.phase + '/' + (s.verdict || s.code || '')) : 'none';
+        if (s && s.phase === 'done' && s.verdict === 'PREPARE_HOLD') { p2.busy = false; p2.failed = true; overlay(FAIL_MSG(s.code || 'PREPARE_HOLD'), true); }
+        else if (s && s.phase === 'done') {   /* r2: 完了（MATERIALIZED など）の後は読み込み直しが来る。その間（実機で約 9 秒）も止めたままにし、20 秒たっても来なければ外す */
+          if (!p2.doneAt) p2.doneAt = Date.now();
+          if (Date.now() - p2.doneAt > 20000) { p2.busy = false; p2.released = 'no-reload'; unOverlay(); }
+        }
+        else { p2.busy = false; if (!p2.failed) unOverlay(); }
+      }
+      sendState();
     } catch (e) {}
   }
   try { setInterval(p2Tick, 400); } catch (e) {}
