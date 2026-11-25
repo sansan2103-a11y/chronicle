@@ -895,6 +895,15 @@
       return true;
     } catch(e){ return false; }
   }
+  /* r3（2026-11-25・Owner の iPhone で欄が出ずに始まった件への備え）: アカウントの答え（/auth/me）がまだ届いていないだけのときは、最長 3 秒待ってから判定する。
+     'wait' = fix893 はあるが flagsSnap がまだ無い。待っても来なければ、今までどおり欄なしで始める。 */
+  function pickPending(){
+    try {
+      if (localStorage.getItem('v292DfixSTARTPICK1Off') === '1' || localStorage.getItem('v292DfixSTARTICONOff') === '1') return false;
+      var F = window.__v292Dfix893; if (!F || typeof F.flagsSnap !== 'function') return false;
+      return !F.flagsSnap();
+    } catch(e){ return false; }
+  }
   function pickNames(){
     var out = [], d = S.draft || {}, c = d.cast || {};
     var hn = trim(c.hero && c.hero.name); if (hn) out.push({ name: hn, hero: true });
@@ -983,11 +992,21 @@
       });
       return { ok: true, pending: true, code: 'SYNC_CHECK' };
     }
+    if (!opts.picked && !opts.pickWaited && pickPending() && pickNames().length){   /* ★STARTPICK1 r3: 答え待ち（最長 3 秒） */
+      var _fw = opts.force, _t0w = Date.now();
+      S.busy = 'pickWait'; S.lastNote = '準備しています…'; refreshEdit();
+      (function _pw(){
+        if (pickPending() && Date.now() - _t0w < 3000){ setTimeout(_pw, 200); return; }
+        S.busy = null; S.lastNote = null; refreshEdit();
+        start({ force: _fw, emptyOk: true, syncChecked: true, pickWaited: true });
+      })();
+      return { ok: false, code: 'ICON_PICK_WAIT', pending: true };
+    }
     if (pickOn() && !opts.picked){   /* ★STARTPICK1: 始める直前に、絵を作る人を選ぶ（Story はまだ書かれていない） */
       var _pl = pickNames();
       if (_pl.length){
         var _fp = opts.force;
-        pickSheet(_pl, function(sel){ start({ force: _fp, emptyOk: true, syncChecked: true, picked: sel }); });
+        pickSheet(_pl, function(sel){ start({ force: _fp, emptyOk: true, syncChecked: true, pickWaited: true, picked: sel }); });
         return { ok: false, code: 'ICON_PICK', pending: true };
       }
     }

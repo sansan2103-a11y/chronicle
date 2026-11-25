@@ -77,7 +77,7 @@
      抑止が解けたら（10 分・clear）帯も消す。抑止は今までどおりこのタブのメモリだけ（読み直しで解ける）・手で押す操作は止めない。管理用に最後のコードと held を status() に残す。 */
   if (!root.__v292DfixBILL1 || !(root.__v292DfixBILL1.v >= 3)) root.__v292DfixBILL1 = (function () {
     var HOLD_MS = 10 * 60 * 1000, CODES = { PROVIDER_AUTH_FAILED: 1, PROVIDER_BALANCE_EXHAUSTED: 1 }, ST = {}, noted = false, el = null, pend = null, tries = 0, last = null, shownN = 0, closed = false;   /* ST: 物語 ID → { c, at }（メモリだけ） */
-    var TXT = { PROVIDER_BALANCE_EXHAUSTED: '画像サービス側の請求・利用枠の問題で、いまはキャラの絵を作れません。時間をおいてもう一度お試しください。物語はそのまま続けられます。',
+    var TXT = { PROVIDER_BALANCE_EXHAUSTED: 'いま、キャラの絵を作るサービスが一時的に使えません。時間をおいてもう一度お試しください。物語はそのまま続けられます。',
       PROVIDER_AUTH_FAILED: '画像サービスの認証の問題で、いまはキャラの絵を作れません。時間をおいてもう一度お試しください。物語はそのまま続けられます。' };
     function on() { try { return root.localStorage.getItem('v292DfixBILL1cOff') !== '1'; } catch (e) { return true; } }
     function isCode(c) { return on() && !!CODES[c]; }
