@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261125-r15b';
+  var VER = 'exp1-20261126-r16';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
@@ -167,6 +167,26 @@
       if (x.k === 'learned') { if (okL) return { k: x.k, s: s, t: t }; if (why === 'NOT_IN_TEXT') why = neg ? 'NEGATED' : (shown ? 'SHOWN_ONLY' : 'LEARNED_NOT_SAID'); continue; }
       if (x.k === 'first') { if (okF) return { k: x.k, s: s, t: t }; if (why === 'NOT_IN_TEXT') why = neg ? 'NEGATED' : (shown ? 'SHOWN_ONLY' : 'FIRST_NOT_SAID'); continue; }
     }
+    /* ★r16（2026-11-26・実 AI 観察用_1126 T8/T12 の実測: 入力「律は…紬にフィルムの入れ方（…）を実演しながら教える」に対し本文は手順を見せる描写だけで「教えた」と書かない
+       → taught が NOT_TAUGHT／NOT_IN_TEXT で全部落ち、T26「誰に教わった」が 2 問とも誤答）。既定 OFF: localStorage v292DfixEXP1InputTeachOn='1'・kill v292DfixEXP1InputTeachOff='1'。
+       taught に限り、その回の「入力」の文（「」の外）が「who に … 教える／教えた」で終わり、who が主語でなく、題材が入力の文と本文の両方にあり、本文に断りの語が無いとき採る。 */
+    if (x.k === 'taught' && r16On() && ctx && typeof ctx.pt === 'string' && typeof ctx.nr === 'string' && ctx.pt && ctx.nr && rr) {
+      try {
+        var c16 = norm(typeof core15 === 'function' ? core15(s) : s), g16 = []; for (var q = 0; q + 3 <= c16.length; q++) g16.push(c16.slice(q, q + 3));
+        var nr16 = norm(ctx.nr), nrU = unquote(String(ctx.nr));
+        if (g16.length && !R16_REFUSE.test(nrU) && g16.some(function (z) { return nr16.indexOf(z) >= 0; })) {
+          var ip = sentences(unquote(String(ctx.pt).replace(/<[^>]*>/g, '\n')));
+          for (var j16 = 0; j16 < ip.length; j16++) { var h16 = ip[j16];
+            if (HEDGE_RE.test(h16) || RUMOR_RE.test(h16)) continue;
+            if (!R16_END.test(h16.replace(/[\s　。！？!?]+$/, ''))) continue;
+            if (!rr.test(h16) || ownClause(h16, who) != null) continue;
+            var hn = norm(h16), hit16 = 0; g16.forEach(function (z) { if (hn.indexOf(z) >= 0) hit16++; });
+            if (hit16 < Math.max(1, Math.ceil(g16.length / 2))) continue;
+            cnt(ST, 'inputTeach'); return { k: x.k, s: s, t: t };
+          }
+        }
+      } catch (e16) {}
+    }
     return found ? why : 'NOT_IN_TEXT';
   }
   /* ---- ★r4: ターン番号の数え方のずれと、本人の「できた」 ----
@@ -177,6 +197,9 @@
      ・first だけ、本人の台詞で決める道を足す（selfFirst）: そのターンの会話のタグがその人で、台詞の頭（最初の … 。？ 、 までの部分）が できた・うまくいった・成功 で、
        打ち消し・言い切らない語（HEDGE）が無く、本文でその台詞の直前か直後の文がその人を主語にしていて、句がそのターンの本文（入力か地の文）にある。 */
   function parseT(t) { if (typeof t === 'number') return Math.floor(t) === t ? t : NaN; var m = /^\s*(?:T|Turn\s*)?(\d{1,4})\s*$/i.exec(String(t == null ? '' : t)); return m ? +m[1] : NaN; }
+  function r16On() { return lsg('v292DfixEXP1InputTeachOff') !== '1' && lsg('v292DfixEXP1InputTeachOn') === '1'; }
+  var R16_END = /(教える|教えてあげる|教えてやる|教えてみせる|手ほどきする|手ほどきをする|教えた|教えてあげた|教えてやった|手ほどきした)$/;
+  var R16_REFUSE = /教え(なかっ|られな|ようとしな|ずに|るのをやめ|る気はな)|断っ|断られ|拒ん|首を横に振/;
   function partText(p) { return String((p && p.pt) || '') + '\n' + String((p && p.nr) || ''); }
   function selfFirst(x, p, who) {
     if (!p || !Array.isArray(p.says)) return false; var f = forms(who); if (!f.length) return false;
@@ -311,7 +334,7 @@
     var t0 = parseT(x.t); if (x.t != null && x.t !== '' && isNaN(t0)) return 'BAD_T';
     var pass = {}, n = 0, firstWhy = null, via = {};
     ctx.parts.forEach(function (p) { var y = {}; for (var k in x) if (Object.prototype.hasOwnProperty.call(x, k)) y[k] = x[k]; y.t = p.i;
-      var r = checkItem(y, { from: p.i, to: p.i, text: partText(p) }, who);
+      var r = checkItem(y, { from: p.i, to: p.i, text: partText(p), pt: String((p && p.pt) || ''), nr: String((p && p.nr) || '') }, who);
       if (typeof r === 'string' && x.k === 'first' && (r === 'FIRST_NOT_SAID' || r === 'NOT_SUBJECT' || r === 'NOT_IN_TEXT' || r === 'NEGATED') && selfFirst(x, p, who)) { r = { k: 'first', s: cleanS(x.s), t: p.i }; via[p.i] = 'self'; }
       if (typeof r === 'string' && (r === 'NOT_SUBJECT' || r === 'NOT_IN_TEXT' || r === 'NOT_TAUGHT') && x.k !== 'taught') { var rt = resolveText(p, who, ctx);   /* ★r5: 代名詞・省略の主語 */
         if (rt != null) { var r2 = checkItem(y, { from: p.i, to: p.i, text: String(p.pt || '') + '\n' + rt }, who); if (typeof r2 !== 'string') { r = r2; via[p.i] = 'pron'; } else if (r === 'NOT_SUBJECT' || r === 'NOT_IN_TEXT') r = r2; } }
