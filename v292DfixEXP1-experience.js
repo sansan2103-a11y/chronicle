@@ -565,7 +565,9 @@
       return '【物語内で確認された経験】' + parts.join('　') + '。';   /* GPT #127-XJ: 位置づけの一文は入れない */
     } catch (e) { return ''; }
   }
-  var api = { VER: VER, on: on, why: why, prompt: prompt, wiLine: wiLine, merge: merge, section: section, fgLine: fgLine, checkItem: checkItem, checkLoc: checkLoc, parseT: parseT, last: function () { return JSON.parse(JSON.stringify(LAST)); }, KINDS: KINDS, NOTE_MAX: NOTE_MAX, PER: PER,
+  /* ★CONTRACT1 の EXPQ（GPT #127-XZ 案 D＋E）が読む: 前面の 1 行と同じ門を通った記録（FGWI）から、その人物の経験の写しを返す。門を通っていなければ空 */
+  function expOf(name) { try { if (!on() || !Array.isArray(FGWI)) return []; var w = null; FGWI.forEach(function (z) { if (!w && z && z.type === 'character' && z.name && strip(z.name) === strip(name) && Array.isArray(z.exp)) w = z; }); if (!w) return []; return w.exp.filter(function (x) { return x && KINDS[x.k] && x.s; }).map(function (x) { return { k: x.k, s: String(x.s), t: +x.t || 0 }; }); } catch (e) { return []; } }
+  var api = { VER: VER, on: on, why: why, prompt: prompt, wiLine: wiLine, merge: merge, section: section, fgLine: fgLine, expOf: expOf, checkItem: checkItem, checkLoc: checkLoc, parseT: parseT, last: function () { return JSON.parse(JSON.stringify(LAST)); }, KINDS: KINDS, NOTE_MAX: NOTE_MAX, PER: PER,
     stats: function () { return JSON.parse(JSON.stringify(ST)); } };
   try { Object.defineProperty(root, '__v292DfixEXP1', { value: Object.freeze(api), configurable: false, enumerable: false, writable: false }); } catch (e) { root.__v292DfixEXP1 = api; }
 })(typeof window !== 'undefined' ? window : globalThis);

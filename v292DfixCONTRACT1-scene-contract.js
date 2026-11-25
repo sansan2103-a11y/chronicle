@@ -26,6 +26,9 @@
   function r2on(){ return ls('v292DfixCONTRACT1R2Off') !== '1'; }   /* ★r2（GPT #127-UR）: '1' で r1 と同じ規則に戻す。毎回評価 */
   function ls(k){ try { return G.localStorage.getItem(k); } catch(e){ return '__ERR__'; } }
   function on(){ var o = ls('v292DfixCONTRACT1Off'); if (o === '__ERR__' || o === '1') return false; return ls('v292DfixCONTRACT1On') === '1' || acct1('contract1'); }
+  function expOn(){ return ls('v292DfixCONTRACT1ExpOff') !== '1' && ls('v292DfixCONTRACT1ExpOn') === '1'; }
+  var EXPQ_ASK = /誰に|誰から|だれに|だれから|どなたに|どなたから|教わ|習っ|習い|教えてもら/;
+  var EXPQ_RE = /^(.{1,14}?)(から|に)(.{2,24}?)(?:を|の)?(?:教わった|教わる|習った|教えてもらった|見せてもらった|見せられた|教えられた|手ほどきを受けた)$/;
   function acct1(n){ try { var A = G.__v292DfixACCT1; return !!(A && typeof A.want === 'function' && A.want(n) === true); } catch(e){ return false; } }   /* ★ACCT1 r3: Owner のアカウントなら端末の鍵が無くても PC と同じ */
 
   var RULE = 'sceneContract は、直前の会話の順番と、設定で確定した事実の控え。食い違わせないためだけに使い、本文や台詞に写さない。';
@@ -194,6 +197,31 @@
       rel.push((p.name === hero ? heroLbl() : p.name) + '：' + txt); ev.push({ item: 'relation', who: p.name, from: 'desc', quote: q(txt) });
     });
     rel.forEach(function(x){ items.push(x); });
+
+    // ---- ★EXPQ（2026-11-26・GPT #127-XZ 案 D＋E・既定 OFF: localStorage v292DfixCONTRACT1ExpOn='1'・kill v292DfixCONTRACT1ExpOff='1'）----
+    //   実 AI の実測: 経験の行（sys の末尾）が毎ターン届いていても、「誰に教わったんだっけ」と聞くと AI は新しい過去を作る。
+    //   → 聞かれた回だけ、話しかけた相手の「教わった」経験 1 件を、確定した事実としてこの控えの先頭に入れる。
+    //   条件: 入力に「誰に・誰から・教わ・習」等の語がある／話しかけた相手（登録人物）が 1 人に決まる／その人の確認済みの経験（EXP1 が門を通した記録）の題材が入力にある。
+    //   どれか 1 つでも決まらなければ何も足さない。禁止文は足さない。
+    try {
+      if (expOn() && ctx.cur && ctx.cur.text && EXPQ_ASK.test(String(ctx.cur.text))) {
+        var txq = String(ctx.cur.text), NH = G.__v292Dfix333api && G.__v292Dfix333api.nameHit, EX = G.__v292DfixEXP1;
+        if (typeof NH === 'function' && EX && typeof EX.expOf === 'function') {
+          var addr = npcs.map(function(n){ return n.name; }).filter(function(nm){ return NH(txq, nm, names) === 2; });
+          if (addr.length === 1) {
+            var who = addr[0], tn = txq.replace(/[\s　、。，．,.「」『』（）()！？!?…]+/g, ''), best = null;
+            EX.expOf(who).forEach(function(x){ if (x.k !== 'taught') return; var m = EXPQ_RE.exec(String(x.s)); if (!m) return;
+              var topic = m[3].replace(/[\s　]+/g, ''), hits = 0; for (var i = 0; i + 3 <= topic.length; i++){ var g3 = topic.slice(i, i + 3); if (/[一-鿿々ァ-ヶ]/.test(g3) && tn.indexOf(g3) >= 0) hits++; }
+              if (hits >= 1 && (!best || hits > best.hits)) best = { hits: hits, x: x, teacher: m[1], topic: m[3] }; });
+            if (best) {
+              var short = who.split(/[\s　]+/).filter(Boolean).pop() || who;
+              var line = 'T' + (best.x.t + 1) + '：' + best.teacher + 'が' + short + 'に' + best.topic + 'を教えた。' + short + 'は' + best.teacher + 'から指導を受けた。技能の習得は未確認。';
+              items.unshift(line); ev.push({ item: 'expq', who: who, turn: best.x.t + 1, quote: q(best.x.s) }); stats.expq = (stats.expq || 0) + 1;
+            } else stats.expqNoTopic = (stats.expqNoTopic || 0) + 1;
+          } else stats.expqNoAddr = (stats.expqNoAddr || 0) + 1;
+        }
+      }
+    } catch (eXQ) {}
 
     // ---- 上限 ----
     var out = [], n = 0;
