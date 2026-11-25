@@ -22,7 +22,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixSPKQ1) return;
-  var VER = 'spkq1-20261125-r4';
+  var VER = 'spkq1-20261125-r4b';
   var ST = { turns: 0, unknown: 0, sfx: 0, flip: 0, guard: 0, kept: {}, why: {}, errors: 0 };
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function on() { return lsg('v292DfixSPKQ1Off') !== '1'; }   /* 20261124-spkq1on: 全員 既定 ON（保存済みの実 AI 出力 684 枚で 9 枚を直し誤り 0・実機 10 ターンで 1 枚を直し誤り 0・後段と再読み込みで戻らない）。止めるのは kill v292DfixSPKQ1Off='1' */
@@ -50,7 +50,15 @@
   function heroQuotes(inp) {
     var out = []; if (!inp || !inp.text) return out; var t = String(inp.text);
     var re = /[『「]([^』」]{1,200})[』」]/g, m, any = false;
-    while ((m = re.exec(t))) { any = true; var pre = t.slice(Math.max(0, m.index - 3), m.index).replace(/\s+$/, ''); if (/(が|は|も)$/.test(pre)) continue; out.push(m[1]); }
+    /* r4b（実 AI 試験_SQ4 T3 の実測: 「紬が蓮に『…』と言う」で紬の台詞を主人公に替えた）: 引用の前が「（主人公の名前＋が／は）＋（相手＋に／へ）」か空のときだけ対象。
+       それ以外（別の人が主語・文の途中・2 つ目以降の引用）は対象外。 */
+    var last = 0, hf = (inp.heroForms || []).slice().sort(function (a, b) { return b.length - a.length; });
+    while ((m = re.exec(t))) { any = true;
+      var pre = t.slice(last, m.index).replace(/[\s、,。]+/g, ''); var first = (last === 0); last = m.index + m[0].length;
+      if (!first) continue;
+      for (var i = 0; i < hf.length; i++) { if (hf[i] && pre.indexOf(hf[i]) === 0 && /^(が|は)/.test(pre.slice(hf[i].length))) { pre = pre.slice(hf[i].length + 1); break; } }
+      if (pre && !/^[^がはもをでと]{1,14}(に|へ|に向かって|に向けて|に対して)$/.test(pre)) continue;
+      out.push(m[1]); }
     if (!any && String(inp.type || '').toUpperCase() === 'SAY') out.push(t);
     return out;
   }
@@ -62,6 +70,7 @@
     var spk = root.__v292DfixSPKCHK1;
     var narrOnly = narr.replace(/「[^」]*」/g, '。');
     var labels = spk.labelsIn(narrOnly, castForms);
+    try { if (inp && hero) { var _hf = [String(hero).replace(/\s+/g, '')]; String(hero).split(/[\s　]+/).forEach(function (z) { if (z && _hf.indexOf(z) < 0) _hf.push(z); }); inp.heroForms = _hf; } } catch (eHf) {}
     var HQ = in1On() ? heroQuotes(inp).map(function (q) { return h.loose(q); }).filter(function (q) { return q && q.length >= 6; }) : [];
     for (var ci = 0; ci < cards.length; ci++) {
       var c = cards[ci]; if (!c) continue;
