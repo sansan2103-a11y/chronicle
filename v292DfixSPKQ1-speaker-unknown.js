@@ -22,7 +22,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixSPKQ1) return;
-  var VER = 'spkq1-20261125-r4c';
+  var VER = 'spkq1-20261126-r4d';
   var ST = { turns: 0, unknown: 0, sfx: 0, flip: 0, guard: 0, kept: {}, why: {}, errors: 0 };
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function on() { return lsg('v292DfixSPKQ1Off') !== '1'; }   /* 20261124-spkq1on: 全員 既定 ON（保存済みの実 AI 出力 684 枚で 9 枚を直し誤り 0・実機 10 ターンで 1 枚を直し誤り 0・後段と再読み込みで戻らない）。止めるのは kill v292DfixSPKQ1Off='1' */
@@ -58,6 +58,10 @@
       if (!first) continue;
       for (var i = 0; i < hf.length; i++) { if (hf[i] && pre.indexOf(hf[i]) === 0 && /^(が|は)/.test(pre.slice(hf[i].length))) { pre = pre.slice(hf[i].length + 1); break; } }
       if (pre && !/^[^がはもをでと]{1,14}(に|へ|に向かって|に向けて|に対して)$/.test(pre)) continue;
+      /* r4d（実 AI 観察用_1126 T18 の実測: 「『…』と冴が紬に言う」＝引用の前が空・後ろに別の人の主語、で冴の台詞を主人公に替えた）:
+         引用の直後が「（と）＋主語＋が／は」で、その主語が主人公の名前で始まらないときは対象外。 */
+      var suf = t.slice(last).replace(/[\s、,]+/g, ''), ms = /^と?([^がはをにへでも。「『]{1,14})(が|は)/.exec(suf);
+      if (ms) { var sh = false; for (var j = 0; j < hf.length; j++) { if (hf[j] && ms[1].indexOf(hf[j]) === 0) { sh = true; break; } } if (!sh) continue; }
       out.push(m[1]); }
     if (!any && String(inp.type || '').toUpperCase() === 'SAY') out.push(t);
     return out;
