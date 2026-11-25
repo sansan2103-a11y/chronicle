@@ -144,7 +144,7 @@
     var budget=dense?1:2;
     var scored=names.map(function(n){ var a=states[n]; var k=a.karada||'';
       var relevance=(playerText && String(playerText).indexOf(n)>=0)?1.0:0;
-      if(playerText && rel2On()){ var h2=nameHit(String(playerText), n, allNames.concat(hero?[hero]:[])); if(h2===2) relevance=1.3; else if(h2===1 && !relevance) relevance=1.0; }   /* ★REL2 r2: 2 = 話しかけ先・行為の相手（「紬に」「紬さん、」）・1 = 名前が出ただけ */
+      if(playerText && rel2On()){ var h2=nameHit(String(playerText), n, allNames.concat(hero?[hero]:[])); if(h2===2) relevance=3.0;   /* r3（実 AI 観察用_1126b T32・T39: 話しかけた相手 1.3 が、状態が変わった＋けがの人 0.85+0.45=1.3 と同点になり、並び順で負けて外れた）: 話しかけた相手は必ず先頭 */ else if(h2===1 && !relevance) relevance=1.0; }   /* ★REL2 r2: 2 = 話しかけ先・行為の相手（「紬に」「紬さん、」）・1 = 名前が出ただけ */
       var changed=(__prevKarada[n]!==undefined && __prevKarada[n]!==k)?0.85:0;
       var bodyEvent=(a.restrained||a.injured||a.freeHands<2)?0.45:0;
       return {n:n, imp:relevance+changed+bodyEvent};

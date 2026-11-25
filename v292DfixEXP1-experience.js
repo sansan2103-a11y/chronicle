@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261126-r16e';
+  var VER = 'exp1-20261126-r17';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
@@ -174,7 +174,7 @@
       try {
         var c16 = norm(typeof core15 === 'function' ? core15(s) : s), g16 = []; for (var q = 0; q + 3 <= c16.length; q++) g16.push(c16.slice(q, q + 3));
         var nr16 = norm(ctx.nr), nrU = unquote(String(ctx.nr));
-        if (g16.length && !R16_REFUSE.test(nrU) && g16.some(function (z) { return nr16.indexOf(z) >= 0; }) && r16Shown(ctx.pt, nrU, who, g16)) {
+        if (g16.length && !R16_HARD.test(nrU) && g16.some(function (z) { return nr16.indexOf(z) >= 0; }) && r16Shown(ctx.pt, nrU, who, g16)) {   /* r17: SOFT の語は r16Shown が成り立てば無視 */
           var ip = sentences(unquote(String(ctx.pt).replace(/<[^>]*>/g, '\n')));
           for (var j16 = 0; j16 < ip.length; j16++) { var h16 = ip[j16];
             if (HEDGE_RE.test(h16) || RUMOR_RE.test(h16)) continue;
@@ -201,6 +201,11 @@
   function parseT(t) { if (typeof t === 'number') return Math.floor(t) === t ? t : NaN; var m = /^\s*(?:T|Turn\s*)?(\d{1,4})\s*$/i.exec(String(t == null ? '' : t)); return m ? +m[1] : NaN; }
   function r16On() { return lsg('v292DfixEXP1InputTeachOff') !== '1'; }   /* 20261126-exp1r16on: GPT #127-XV の条件（本文で実際に教わった・試みだけは採らない）を入れ、実 AI 3 本（R16・R16c・R16d）で誤った記憶 0・フィルム＝律／レンズ＝店主が残る → 既定 ON */
   var R16_END = /(教える|教えてあげる|教えてやる|教えてみせる|手ほどきする|手ほどきをする|教えた|教えてあげた|教えてやった|手ほどきした)$/;
+  /* r17（2026-11-26・実 AI 観察用_1126b の実測）: T8 = 本文に「紬は首を横に振った」（「入れたことある？」への返事）があるだけで断り扱いになり、実演＋紬が身を乗り出して見ている回が落ちた。
+     T18 = 最後まで教わった直後に電話が鳴った回が、中断扱いで落ちた（GPT #127-XW の観察対象）。
+     → はっきり「教えなかった」と書く語（HARD）だけを無条件の不採用にし、電話・遮る・首を横に振る等（SOFT）は、実演と教わる人の反応（r16Shown）が本文に無いときだけ不採用にする。
+     入力が「教えようとした」だけの回は、今までどおり不採用（attemptOnly）。 */
+  var R16_HARD = /教え(なかっ|られな|ようとしな|ずに|るのをやめ|る気はな|る暇|そびれ|損ね)/;
   var R16_REFUSE = /教え(なかっ|られな|ようとしな|ずに|るのをやめ|る気はな|る暇|そびれ|損ね)|断っ|断られ|拒ん|首を横に振|中断|携帯が(震|鳴)|スマホが(震|鳴)|着信|電話に出|遮っ|遮られ|席を外|その場を離れ|立ち去っ|出て行っ|出ていっ|電話が鳴|呼び出され|後にし|あとにし|また今度|やめておく|やめた/;
   /* r16d（実 AI 試験_R16c T8 の実データ: 入力「律は紬に、露出の合わせ方を教えようとカメラを構えるが、そのとき携帯が鳴り…席を外す」。要約が「教わった」を返せば a2 の道が採る）:
      入力の文（「」の外）で、題材の語がある文に「教えよう（と）・教えかけ・教えるつもり・教える前に」があれば、試みただけ。taught はどの道でも採らない（本文の地の文に過去形の「教えた／教わった」がある場合の r3 の道は別）。 */
@@ -284,7 +289,7 @@
     if (lsg('v292DfixEXP1ShownOff') === '1') return true;
     if (attemptOnly(p.pt, g3of(x.s))) { cnt(ST, 'inputTryOnly'); return false; }
     try { var c5 = norm(typeof core15 === 'function' ? core15(cleanS(x.s)) : cleanS(x.s)), g5 = []; for (var q5 = 0; q5 + 3 <= c5.length; q5++) g5.push(c5.slice(q5, q5 + 3));
-      var nu5 = unquote(String(p.nr || '')); if (R16_REFUSE.test(nu5) || !r16Shown(String(p.pt || ''), nu5, who, g5)) { cnt(ST, 'inputNotShown'); return false; } } catch (e5) { return false; }
+      var nu5 = unquote(String(p.nr || '')); if (R16_HARD.test(nu5) || !r16Shown(String(p.pt || ''), nu5, who, g5)) { cnt(ST, 'inputNotShown'); return false; } } catch (e5) { return false; }
     return true;
   }
   /* ---- ★r6: 案 A2（E1_REALAI_ANALYSIS.md §5・統括の採用）。要約 AI は本文の語をほとんど使わずに言い換えるので、句の文字の一致は求めない。
@@ -334,7 +339,7 @@
     /* ★SPKCHK1 と同梱（2026-11-22・VX1_B3 の実測）: 句が「…だと話した／言った」＝台詞の申告の写しなら、first・learned にしない（A2 は「」の中も手がかりに数えるので、
        「糊って触るのも今日が初めてなんですよ」という台詞が first「糊を触るのが今日初めてだと話した」として残った）。kill: v292DfixEXP1SaidOff='1' で r7 のまま */
     /* ★r16d: taught は、入力が「教えようとした」だけの回・本文（「」の外）に中断や断りの語がある回は採らない。kill: v292DfixEXP1ShownOff='1' */
-    if (k === 'taught' && lsg('v292DfixEXP1ShownOff') !== '1') { try { if (attemptOnly(p.pt, g3of(s))) return 'A2_TRY_ONLY'; if (R16_REFUSE.test(unquote(String(p.nr || '')))) return 'A2_INTERRUPTED'; } catch (e16d) {} }
+    if (k === 'taught' && lsg('v292DfixEXP1ShownOff') !== '1') { try { if (attemptOnly(p.pt, g3of(s))) return 'A2_TRY_ONLY'; var nu17 = unquote(String(p.nr || '')); if (R16_HARD.test(nu17) || (R16_REFUSE.test(nu17) && !r16Shown(String(p.pt || ''), nu17, who, g3of(s)))) return 'A2_INTERRUPTED'; } catch (e16d) {} }
     if ((k === 'first' || k === 'learned') && lsg('v292DfixEXP1SaidOff') !== '1' && /(?:と|って)(?:話し|言っ|語っ|答え|打ち明け|明かし|告げ|口にし|漏らし|こぼし)た$/.test(s)) return 'A2_SAID';
     if ((k === 'first' || k === 'learned') && !A2_OK.test(text)) return 'A2_NO_SUCCESS';
     if (k === 'learned' && !live.some(function (z) { return A2_LEARN.test(z); })) { k = 'first'; ST.a2Down++; }
