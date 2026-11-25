@@ -22,7 +22,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixSPKQ1) return;
-  var VER = 'spkq1-20261125-r4b';
+  var VER = 'spkq1-20261125-r4c';
   var ST = { turns: 0, unknown: 0, sfx: 0, flip: 0, guard: 0, kept: {}, why: {}, errors: 0 };
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function on() { return lsg('v292DfixSPKQ1Off') !== '1'; }   /* 20261124-spkq1on: 全員 既定 ON（保存済みの実 AI 出力 684 枚で 9 枚を直し誤り 0・実機 10 ターンで 1 枚を直し誤り 0・後段と再読み込みで戻らない）。止めるのは kill v292DfixSPKQ1Off='1' */
@@ -72,6 +72,8 @@
     var labels = spk.labelsIn(narrOnly, castForms);
     try { if (inp && hero) { var _hf = [String(hero).replace(/\s+/g, '')]; String(hero).split(/[\s　]+/).forEach(function (z) { if (z && _hf.indexOf(z) < 0) _hf.push(z); }); inp.heroForms = _hf; } } catch (eHf) {}
     var HQ = in1On() ? heroQuotes(inp).map(function (q) { return h.loose(q); }).filter(function (q) { return q && q.length >= 6; }) : [];
+    var IN1_USED = false;
+    try { if (HQ.length && hero) for (var pc = 0; pc < cards.length; pc++) { var pk = cards[pc] && h.nrm(cards[pc].who) === h.nrm(hero) ? h.loose(cards[pc].say) : ''; if (pk && pk.length >= 6) for (var ph = 0; ph < HQ.length; ph++) if (pk === HQ[ph] || pk.indexOf(HQ[ph]) >= 0) IN1_USED = true; } } catch (ePu) {}   /* 主人公のカードがもうその台詞を持っているなら、ほかのカード（復唱）は替えない */
     for (var ci = 0; ci < cards.length; ci++) {
       var c = cards[ci]; if (!c) continue;
       var X = String(c.who || '');
@@ -80,7 +82,20 @@
       if (HQ.length && hero && c._rv !== 1 && h.nrm(X) !== h.nrm(hero)) {   /* ★r4 IN1 */
         var k1 = h.loose(c.say), echo = false;
         if (k1 && k1.length >= 6) for (var hq = 0; hq < HQ.length; hq++) { var lq = HQ[hq]; if (k1 === lq || k1.indexOf(lq) >= 0 || (lq.indexOf(k1) >= 0 && k1.length >= lq.length * 0.6)) { echo = true; break; } }
-        if (echo) { res.push({ ci: ci, act: 'flip', why: 'input-echo', from: X, to: hero }); continue; }
+        /* r4c（GPT #127-XQ の除外条件）: (1) 同じ入力の台詞で替えるのは 1 ターンに 1 枚だけ（最初の 1 枚。復唱・複数人の同じ台詞は替えない）
+           (2) 本文がその台詞の話し手を別の登録人物と明記しているとき（「…」の直前の「名前＋は／が」・直後の「と＋名前＋は／が」）は替えない */
+        if (echo && IN1_USED) echo = false;
+        if (echo) { try {
+          var qpos = narr.indexOf('「' + String(c.say)); if (qpos < 0) qpos = narr.indexOf(String(c.say).slice(0, 12));
+          if (qpos >= 0) {
+            var bef = narr.slice(Math.max(0, qpos - 30), qpos).split(/[。\n」]/).pop(), aft = narr.slice(qpos + String(c.say).length + 1, qpos + String(c.say).length + 26).split(/[。\n「]/)[0];
+            var hfN = (inp && inp.heroForms) || [];
+            for (var cf = 0; cf < cast.length && echo; cf++) { if (h.nrm(cast[cf]) === h.nrm(hero)) continue;
+              var fs = [String(cast[cf]).replace(/\s+/g, '')].concat(String(cast[cf]).split(/[\s　]+/));
+              for (var fi = 0; fi < fs.length; fi++) { var f = fs[fi]; if (!f || hfN.indexOf(f) >= 0) continue;
+                if (bef.indexOf(f + 'は') >= 0 || bef.indexOf(f + 'が') >= 0 || /^」?と/.test(aft) && (aft.indexOf(f + 'は') >= 0 || aft.indexOf(f + 'が') >= 0)) { echo = false; break; } } }
+          } } catch (eEx) {} }
+        if (echo) { IN1_USED = true; res.push({ ci: ci, act: 'flip', why: 'input-echo', from: X, to: hero }); continue; }
       }
       if (!(m && GATE[m.sourceKind])) { out('keep', 'not-bare'); continue; }
       if (c._rv === 1) { out('keep', 'rv'); continue; }

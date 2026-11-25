@@ -111,7 +111,7 @@
      印: 行の全体が括弧 1 組で、中が 20 字以下、「誤出力／再出力／出力し直／出力をやり直／本文のみ」のどれかを含む（物語の文には出ない、出力そのものについての語だけ）。
      条件: 印より前に物語の行が 150 字以上ある（前が短いときは、後ろが本体かもしれないので触らない＝数えるだけ）。止める鍵: v292DfixLEAK1RedoOff='1'（数えるだけ）。 */
   var RX_REDO = /^\s*[（(]\s*[^（）()「」『』]{0,20}[）)]\s*$/, RX_REDO_W = /誤出力|再出力|出力し直|出力をやり直|本文のみ\s*[）)]\s*$/;   /* 「本文のみ」は括弧の末尾に来る形だけ（（本文のみを読み上げる声がした）は対象外） */
-  function redoOn(){ return ls('v292DfixLEAK1RedoOff') !== '1'; }
+  function redoOn(){ return ls('v292DfixLEAK1RedoOff') !== '1' && ls('v292DfixLEAK1RedoOn') === '1'; }   /* 20261125-redo1s（GPT #127-XQ: HOLD）: 既定は数えるだけ。実測 1 件では、前半が誤りで後半が正しい書き直しの場合に正しい方を消す危険を否定できない。落とすのは v292DfixLEAK1RedoOn='1' のときだけ */
   function redoAt(lines){ for (var i = 0, pre = 0; i < lines.length; i++){ var t = String(lines[i] || ''); if (RX_REDO.test(t) && RX_REDO_W.test(t)) return { line: i, pre: pre }; pre += t.replace(/\s/g, '').length; } return null; }
   function optOn(){ return ls('v292DfixLEAK1OptOff') !== '1'; }
   var RX_OPT_HEAD = /^\s*[（(【〔]\s*[^（）()【】〔〕「」]{0,20}(?:問いかけ|行動選択|選択肢|次の行動|主人公への|プレイヤーへの)[^（）()【】〔〕「」]{0,20}[）)】〕]\s*$/;
