@@ -70,6 +70,12 @@
   function d2() { return ls('v292DfixNPRESd2Off') !== '1'; }   /* ★d2 kill（その場で効く） */
   function d3() { return ls('v292DfixNPRESd3Off') !== '1'; }   /* ★d3 kill（その場で効く） */
   function d4() { return ls('v292DfixNPRESd4Off') !== '1'; }   /* ★d4 kill（その場で効く） */
+  /* ★W1（2026-11-26・既定 OFF: localStorage v292DfixNPRESw1On='1'・kill v292DfixNPRESw1Off='1'）: 実 AI 観察用_1126d T3 / 試験_N1CH T4・T10 —
+     場に居て台詞もある人が、そのターンで本人に触れた最後の文に「待つ・残る・向かう」の語があるだけで「確かめられない」になり、次の一手で前面の行ごと消えた。
+     (1) 弱い語が 待つ/残る/置いて/向かっ の類だけで、同じターンに本人の（離れた所からでない）台詞があり、本文に通話の語が無いとき →「いる」。
+     (2) fgRestrict: (b) でも、入力で話しかけた相手（名前＋敬称＋「、」「に」「へ」）で、直近 3 ターンに本文か台詞の証拠があり、通話の声でないなら外さない。(c) は今までどおり外す。 */
+  function w1() { return lsg1('v292DfixNPRESw1Off') !== '1' && lsg1('v292DfixNPRESw1On') === '1'; }
+  var WAIT1 = /待って|待つ|待ち|残っ|残る|残し|置いて|向かっ/g;
   function admfOn() { try { var A = G.__v292DfixADMF1; return !!(A && typeof A.gate === 'function' && A.gate('npres1', false) === true); } catch (e) { return false; } }   /* ★admf2: 管理者画面の ON だけ（ADMF1 が無い・例外 = OFF） */
   function on() { return !killed() && admfOn(); }
   function lsg1(k) { try { return G.localStorage.getItem(k); } catch (e) { return null; } }
@@ -184,7 +190,7 @@
   }
   /* そのターンの証拠: 'strong' | 'weak' | 'present' | '' */
   function evidenceOf(t, fs, name, D1, others, D3, info, D4) {
-    var nar = String((t && t.narrative) || ''), last = '', ownR = null;
+    var nar = String((t && t.narrative) || ''), last = '', lastS = '', ownR = null;
     var own = function () { if (ownR === null) ownR = remoteOwn(nar, sayHit(t, fs, name, true), others || []); return ownR; };   /* ★d1(r-d2) */
     var rem = function (cue) { ST.d1Remote++; if (!D3) return 'weak'; if (info) info.cue = String(cue || ''); return 'remote'; };   /* ★d3: 離れた声は 'remote'（グループは b） */
     var ss = sentences(nar), qm = (D1 || D3) ? sentences(maskQ(nar)) : null; if (qm && qm.length !== ss.length) qm = null;   /* ★d1/d3: 分け方がずれたら c333 のまま */
@@ -197,7 +203,11 @@
         if (D1 && VR.test(qm[i]) && !hit(qm[i], others || [])) c = rem(VR.exec(qm[i])[0]);
         else { c = lexWeak3(qm[i], fs); if (c === 'present') ST.d3Kept++; }
       }
-      last = c; });
+      last = c; lastS = s; });
+    if (last === 'weak' && lastS && w1()) { try {
+      var z1 = false; try { var Zx = G.__v292DfixSCENE1; z1 = !!(Zx && typeof Zx.exitHit === 'function' && Zx.exitHit(lastS, fs)); } catch (eZx) {}
+      if (!z1 && !absHit(lastS, fs) && !WEAK.test(lastS.replace(WAIT1, '')) && !CALL.test(nar) && sayHit(t, fs, name) && !remoteOwn(nar, sayHit(t, fs, name, true), others || [], VRC3)) { ST.w1Kept = (ST.w1Kept || 0) + 1; return 'present'; }
+    } catch (eW1) {} }
     if (last) return last;
     if (sayHit(t, fs, name) || voice) {
       if (D3) { var w = remoteOwn(nar, sayHit(t, fs, name, true), others || [], D1 ? VRC3 : CALL); if (w) return D1 ? rem(w) : 'weak'; if (CALL.test(nar)) ST.d3Kept++; if (info) info.logOnly = true; return 'present'; }   /* ★d3: CALL もその台詞と前後 1 文だけ。★d4: 会話ログ（声）だけの「いる」に印 */
@@ -310,6 +320,10 @@
           } catch (e3) { ST.errors++; return false; }
         },
         out: function (name, entry) { var g = this.group(name, entry); return g === 'b' || g === 'c'; },
+        /* ★W1(2): 直近 3 ターンに、通話でない証拠（本文の「いる」か会話ログの台詞）があるか */
+        recent: function (name) { try { var n = String(name == null ? '' : name), fs = formsOf(n), oth = D1 ? othersOf(n) : null; if (Object.prototype.hasOwnProperty.call(rmemo, n)) return false;
+          for (var i = L - 1; i >= 0 && i >= L - 3; i--) { var inf = {}, ev = evidenceOf(turns[i], fs, n, D1, oth, D3, inf, D4); if (ev === 'strong' || ev === 'remote') return false; if (ev === 'present' || ev === 'weak') return !CALL.test(String((turns[i] && turns[i].narrative) || '')); } return false; } catch (eR) { return false; } },
+        forms: function (name) { return formsOf(String(name == null ? '' : name)).slice(); },
         /* ★d3: (b) のうち、最新ターンで通話が続いている人の一行（無ければ ''） */
         note: function (name, entry) { var n = String(name == null ? '' : name); if (this.group(name, entry) !== 'b' || !Object.prototype.hasOwnProperty.call(rmemo, n)) return ''; ST.d3Note++; return rmemo[n] + 'の向こうにいる。この場にはいない。声だけで会話に加われる'; },
         /* ★d2: (a) だが、最後の「いる」の証拠より新しいターンで書かれた値の描写が ✎ で消えた（orphan と同じ合図） */
@@ -332,7 +346,10 @@
     try {
       ST.fgCalls++;
       var rs = realStore(), out = {}, ex = 0, D2 = d2();
-      Object.keys(states).forEach(function (k) { if (g.out(k, rs[k])) ex++; else if (D2 && g.edited(k, rs[k])) { ex++; ST.d2Excluded++; } else out[k] = states[k]; });   /* ★d2 */
+      var W1 = w1() && typeof text === 'string' && text;
+      var addr1 = function (k) { if (!W1 || g.group(k, rs[k]) !== 'b') return false; var fs = g.forms(k), ps = String(k).split(/[\s　・]+/).filter(Boolean); if (ps.length === 2 && ps[1].length === 1) fs = fs.concat([ps[1]]);
+        for (var i = 0; i < fs.length; i++) { if (!fs[i]) continue; var re = new RegExp((fs[i].length === 1 ? '(^|[^一-鿿々ァ-ヶー])' : '()') + esc(fs[i]) + '(?:さん|ちゃん|くん|君|様|さま|先輩|先生)?(?:、|,|，|に(?![一-鿿ぁ-ん]*(?:ついて|関して))|へ)'); if (re.test(text)) return g.recent(k); } return false; };
+      Object.keys(states).forEach(function (k) { if (addr1(k)) { ST.w1Addr = (ST.w1Addr || 0) + 1; out[k] = states[k]; } else if (g.out(k, rs[k])) ex++; else if (D2 && g.edited(k, rs[k])) { ex++; ST.d2Excluded++; } else out[k] = states[k]; });   /* ★d2 */
       if (!ex) return null;
       ST.fgFiltered++; ST.fgExcluded += ex; return out;
     } catch (e) { ST.errors++; return null; }
