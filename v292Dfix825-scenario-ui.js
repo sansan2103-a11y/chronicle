@@ -882,7 +882,19 @@
      「全員」「なし」で一度に切り替え・1 人ずつのチェック。最初は前回の選び方（全員／なし。初めては全員）。「やめる」は overlay を閉じるだけ（書込 0）。
      選んだ名前は、作った物語の id ごとに、このタブの sessionStorage 'v292DfixSTARTPICK1:<id>' に置く（STARTICON が読む。端末にも Cloud にも残さない）。
      費用・消費の文言は出さない（トークンの仕組みができたら data-sc-pk="token" の行に出す）。 */
-  function pickOn(){ try { return localStorage.getItem('v292DfixSTARTPICK1Off') !== '1' && localStorage.getItem('v292DfixSTARTPICK1On') === '1'; } catch(e){ return false; } }
+  /* 20261125-startpick1on: 実機（2 人だけ → その 2 人だけ・約 131 秒／なし → 0 枚／全員 5 人 → 5 枚・約 232 秒・キャラ一覧は自動で開かない）→ 既定 ON（kill v292DfixSTARTPICK1Off）。
+     欄を出すのは、そのアカウントで最初の絵の自動作成（鍵 starticon1・管理者画面）が ON のときだけ（OFF のアカウントに「絵を作る人」を聞かない）。
+     判定は fix893 の /auth/me の答え（flagsSnap: 読むだけ）。答えがまだ無い・別アカウント・端末の STARTICON の止め → 欄は出さず、今までどおり始まる。 */
+  function pickOn(){
+    try {
+      if (localStorage.getItem('v292DfixSTARTPICK1Off') === '1' || localStorage.getItem('v292DfixSTARTICONOff') === '1') return false;
+      var F = window.__v292Dfix893; if (!F || typeof F.flagsSnap !== 'function') return false;
+      var sn = F.flagsSnap(), me = typeof F.me === 'function' ? F.me() : null;
+      if (!sn || sn.st !== 'ok' || !sn.flags || sn.flags.starticon1 !== 1) return false;
+      if (!me || !me.accountId || String(me.accountId) !== String(sn.acct)) return false;
+      return true;
+    } catch(e){ return false; }
+  }
   function pickNames(){
     var out = [], d = S.draft || {}, c = d.cast || {};
     var hn = trim(c.hero && c.hero.name); if (hn) out.push({ name: hn, hero: true });
