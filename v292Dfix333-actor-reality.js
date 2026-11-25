@@ -109,7 +109,8 @@
     try{ var S=getS(); var last=S&&S.turns&&S.turns.length?(S.turns[S.turns.length-1].narrative||''):'';
       return /襲(い|う|っ)|攻撃|斬りかか|斬りつけ|斬り(下ろ|上げ)|刃を(振|突|向)|悲鳴|絶叫|咆哮|迫っ(て|た)|掴みかか|飛びかか|振り下ろ|突進|交戦|殴りかか|喰らいつ|牙を|爪を(振|立)/.test(last.slice(-220));
     }catch(e){ return false; } }
-  function lastBeat(fg,n){ return (fg[n]&&typeof fg[n].lastBeatTurn==='number')?fg[n].lastBeatTurn:-99; }
+  var __lbNow=null;   /* r5: 回し順の記録（v292Dfix333Fg）は端末で 1 つで、ほかの物語のターン番号が混ざる（実測 231 人）。今のターンより先の番号は、ほかの物語のものとして「出ていない」扱いにする */
+  function lastBeat(fg,n){ var v=(fg[n]&&typeof fg[n].lastBeatTurn==='number')?fg[n].lastBeatTurn:-99; try{ if(__lbNow!=null && v>__lbNow && localStorage.getItem('v292Dfix333RelOff')!=='1') return -99; }catch(e){} return v; }
   // Phase2.2 ①: eligibility候補制約(DeepResearch 3回目)。反応できないNPC(意識なし/死亡/不在)を前面化候補から外す物理ゲート。矯正再生成はしない・背景としては残る。OFF退避=v292Dfix333Elig='0'
   function eligOff(){ try{ return localStorage.getItem('v292Dfix333Elig')==='0'; }catch(e){ return false; } }
   function isEligible(a){ var k=(a&&a.karada)||''; if(/気絶|失神|意識を失|昏倒|気を失|昏睡|生き絶え|絶命|事切れ|死亡|死んで/.test(k)) return false; if(/その場にいない|立ち去っ|退場|姿を消し|去っていっ|不在/.test(k)) return false; return true; }
@@ -124,7 +125,10 @@
     var SUF='(さん|ちゃん|くん|君|様|殿)?', best=0;
     function esc(p){ return p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
     function partsOf(x){ return String(x).split(/[\s　・]+/).filter(Boolean); }
-    function shared(p){ var c=0; (all||[]).forEach(function(o){ if(o!==n && partsOf(o).indexOf(p)>=0) c++; }); return c>0; }
+    /* r5（2026-11-26・実 AI 試験_R17_REL4 の切り分け）: 候補の一覧には、状態の記録の名札（「紬」「霧島」のような短い形）も混ざる。
+       それを「同じ名を持つ別の人物」と数えると、本人の名（紬）が毎回使えなくなり、話しかけても当たらない。
+       1 語だけの名札で、本人の姓か名とちょうど同じものは、別の人物に数えない（2 語以上の別の登録名に同じ語があるときだけ「同じ姓・名」とみる）。 */
+    function shared(p){ var c=0, mine=partsOf(n); (all||[]).forEach(function(o){ if(o===n) return; var po=partsOf(o); if(po.length<2 && mine.indexOf(String(o).replace(/[\s　・]+/g,''))>=0) return; if(po.indexOf(p)>=0) c++; }); return c>0; }
     function grade(p, one){ var e=esc(p), pre=one?'(^|[^一-鿿々])':'()';
       if(new RegExp(pre+e+SUF+'(に(?!な|よ|つ|お|と|対|関)|へ(?!ん)|、|，|,|！|!|？|\\?)').test(text)) return 2;
       if(one){ if(new RegExp(pre+e+'(さん|ちゃん|くん|君|様|殿|は|が|を|と|も|の|。|」|』|$)').test(text)) return 1; return 0; }
@@ -138,10 +142,12 @@
      直し: 入力で話しかけた相手（nameHit が 2）が登録人物で、候補に居なければ、状態なしの候補として足す。足した後に、今までどおりの不在の絞り込み
      （CP1・NPRES・SCENE1 の fgFilter）を通すので、退出・不在の人は落ちる。人数の上限は selectForeground のまま。 */
   function rel4On(){ try{ return rel2On() && localStorage.getItem('v292Dfix333Rel4Off')!=='1' && localStorage.getItem('v292Dfix333Rel4On')==='1'; }catch(e){ return false; } }
-  var REL4 = { added: 0, last: null };
+  var REL4 = { added: 0, last: null, calls: 0, noText: 0, names: 0 };
   function rel4Aug(states, text){ try{
+    try{ REL4.calls++; if(!text) REL4.noText++; }catch(eD){}
     if(!rel4On() || !text || !states || typeof states!=='object') return states;
     var hero=heroName(), all=presentNames(), add=[];
+    REL4.names=all.length;
     all.forEach(function(n){ if(n===hero || Object.prototype.hasOwnProperty.call(states,n)) return; if(nameHit(String(text), n, all)===2) add.push(n); });
     if(!add.length) return states;
     var o={}; Object.keys(states).forEach(function(k){ o[k]=states[k]; });
@@ -155,7 +161,7 @@
     // eligibility候補制約: 反応可能なNPCだけを前面化候補に(全滅時は全員にフォールバック)。bgは全present。
     var names = eligOff() ? allNames : allNames.filter(function(n){ return isEligible(states[n]); });
     if(!names.length) names = allNames;
-    var fg=loadFg();
+    var fg=loadFg(); __lbNow=(typeof turnNum==='number')?turnNum:null;
     var dense=isDenseTurn(states);
     var budget=dense?1:2;
     var scored=names.map(function(n){ var a=states[n]; var k=a.karada||'';
@@ -396,6 +402,6 @@
       return {total:arr.length, byScene:by};
     }catch(e){ return {err:e.message}; }
   }
-  window.__v292Dfix333api={ nameHit:nameHit, rel4Aug:rel4Aug, rel4:function(){ return { on: rel4On(), added: REL4.added, last: REL4.last }; }, compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, analyzeEnsemble:analyzeEnsemble, classifyScene:classifyScene, qualStats:qualStats, mode:mode, _pending:function(){return pending;}, cp1Hook:'fg333-r6' };   /* ★bundle43-a r2 (GPT #127-LA §3): 受け口 fgStates333 を持つ版の印（CP1 はこれが無い fix333 と組み合わさると CP1 全体を OFF） */
+  window.__v292Dfix333api={ nameHit:nameHit, rel4Aug:rel4Aug, rel4:function(){ return { on: rel4On(), added: REL4.added, last: REL4.last, calls: REL4.calls, noText: REL4.noText, names: REL4.names }; }, compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, analyzeEnsemble:analyzeEnsemble, classifyScene:classifyScene, qualStats:qualStats, mode:mode, _pending:function(){return pending;}, cp1Hook:'fg333-r6' };   /* ★bundle43-a r2 (GPT #127-LA §3): 受け口 fgStates333 を持つ版の印（CP1 はこれが無い fix333 と組み合わさると CP1 全体を OFF） */
   try{ console.log(TAG,'loaded (v2/fix333h); mode=',mode()); }catch(e){}
 })();
