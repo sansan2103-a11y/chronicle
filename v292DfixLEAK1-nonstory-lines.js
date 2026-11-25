@@ -106,6 +106,13 @@
   /* ★OPT1（SMOKE6 K6-A T1 の実測・kill v292DfixLEAK1OptOff='1'・適用の鍵 ApplyOff／Off にも従う）: 本文の末尾にある、プレイヤーへ選択を促すまとまりを取り除く。
      形は 2 つだけ: ①括弧の見出し行（問いかけ・行動選択・選択肢・次の行動・主人公への …）＋その後ろが箇条書き 2 行以上（と最後の問いかけ 1 行）だけで本文が終わる
      ②箇条書き 2 行以上＋最後の行が「あなた／プレイヤー …どうする？」の問いかけで本文が終わる。途中にあるもの・台詞（「」）の中・物語の行が混ざるものは取り除かない。 */
+  /* ★REDO1（2026-11-25・GPT #127-XP e・実 AI 試験_R15 T3 の実測 1 件）: 本文の途中に「（誤出力回避：本文のみ）」のような、出力についての括弧だけの行が入り、
+     その後ろに同じ場面の書き直し（句読点の抜けた崩れた文）が続いた。印の行と、その後ろを全部落とす。
+     印: 行の全体が括弧 1 組で、中が 20 字以下、「誤出力／再出力／出力し直／出力をやり直／本文のみ」のどれかを含む（物語の文には出ない、出力そのものについての語だけ）。
+     条件: 印より前に物語の行が 150 字以上ある（前が短いときは、後ろが本体かもしれないので触らない＝数えるだけ）。止める鍵: v292DfixLEAK1RedoOff='1'（数えるだけ）。 */
+  var RX_REDO = /^\s*[（(]\s*[^（）()「」『』]{0,20}[）)]\s*$/, RX_REDO_W = /誤出力|再出力|出力し直|出力をやり直|本文のみ\s*[）)]\s*$/;   /* 「本文のみ」は括弧の末尾に来る形だけ（（本文のみを読み上げる声がした）は対象外） */
+  function redoOn(){ return ls('v292DfixLEAK1RedoOff') !== '1'; }
+  function redoAt(lines){ for (var i = 0, pre = 0; i < lines.length; i++){ var t = String(lines[i] || ''); if (RX_REDO.test(t) && RX_REDO_W.test(t)) return { line: i, pre: pre }; pre += t.replace(/\s/g, '').length; } return null; }
   function optOn(){ return ls('v292DfixLEAK1OptOff') !== '1'; }
   var RX_OPT_HEAD = /^\s*[（(【〔]\s*[^（）()【】〔〕「」]{0,20}(?:問いかけ|行動選択|選択肢|次の行動|主人公への|プレイヤーへの)[^（）()【】〔〕「」]{0,20}[）)】〕]\s*$/;
   var RX_OPT_BUL = /^\s*(?:[-・*＊●○◆]|[0-9０-９]{1,2}[.．)）]|[①-⑩]|[A-CＡ-Ｃa-c][.．)）])\s*[^「」\s]/;
@@ -215,6 +222,8 @@
         else if (memoAll){ var x = norm(l); if (x.length >= 6 && memoAll.indexOf(x) >= 0 && body.indexOf(x) < 0){ k = 'meta'; ok = rem(x); } }   // 作業メモの残り（英語のメモだけ限定 Apply ②）
         if (k){ kinds[k]++; nL++; nC += l.length; if (ok){ drop[i] = 1; dL++; dC += l.length; } }
       }
+      var rd = redoAt(lines);   /* ★REDO1 */
+      if (rd){ kinds.redo = 1; _stat.redo = (_stat.redo || 0) + 1; if (redoOn() && rd.pre >= 150){ for (var ri = rd.line; ri < lines.length; ri++){ if (!drop[ri] && String(lines[ri]).trim()){ nL++; nC += lines[ri].length; drop[ri] = 1; dL++; dC += lines[ri].length; } } kinds.redoCut = 1; } }
       if (optOn()){ var ob = optBlock(lines); if (ob.length){ kinds.opt = 1; ob.forEach(function(ix){ if (!drop[ix] && String(lines[ix]).trim()){ nL++; nC += lines[ix].length; drop[ix] = 1; dL++; dC += lines[ix].length; } }); } }   /* ★OPT1 */
       var jm = jpMeta(narr), jpC = 0;
       if (jm && !drop[jm.line] && !(lines[jm.line] && (isLabel(lines[jm.line]) || isFrag(lines[jm.line])))){ kinds.jpmeta = 1; jpC = jm.chars; }
@@ -235,6 +244,7 @@
       if (!ap || !dL) return narr;
       var out = []; for (i = 0; i < lines.length; i++) if (!drop[i]) out.push(lines[i]);
       _stat.removedLines += dL; _stat.removedChars += dC;
+      try { if (plan && Array.isArray(plan.narrative) && kinds.redoCut){ var rp = redoAt(plan.narrative.map(function(z){ return typeof z === 'string' ? z : ''; })); if (rp) plan.narrative = plan.narrative.slice(0, rp.line); } } catch(eRd){}
       try { if (plan && Array.isArray(plan.narrative)) plan.narrative = plan.narrative.filter(function(pl){ if (typeof pl !== 'string') return true; if (isKnownLabel(pl)) return false; if (jkvOn() && isJkv(pl)) return false; if (tagxOn() && isTagx(pl)) return false; var y = norm(pl); if (rem(y)) return false; return true; }); } catch(e2){}
       return out.join('\n').replace(/[ \t]*\n{3,}/g, '\n\n').trim();
     } catch(e){ _stat.err++; return narr; }
