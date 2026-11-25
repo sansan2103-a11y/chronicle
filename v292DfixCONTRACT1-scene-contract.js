@@ -26,7 +26,7 @@
   function r2on(){ return ls('v292DfixCONTRACT1R2Off') !== '1'; }   /* ★r2（GPT #127-UR）: '1' で r1 と同じ規則に戻す。毎回評価 */
   function ls(k){ try { return G.localStorage.getItem(k); } catch(e){ return '__ERR__'; } }
   function on(){ var o = ls('v292DfixCONTRACT1Off'); if (o === '__ERR__' || o === '1') return false; return ls('v292DfixCONTRACT1On') === '1' || acct1('contract1'); }
-  function expOn(){ return ls('v292DfixCONTRACT1ExpOff') !== '1' && ls('v292DfixCONTRACT1ExpOn') === '1'; }
+  function expOn(){ var o = ls('v292DfixCONTRACT1ExpOff'); return o !== '1' && o !== '__ERR__'; }   /* 20261126-expqon: 同じ場面の引き直し 12 回（OFF 6・ON 6 交互）で 教え手を正しく答えた回 OFF 4/6・ON 6/6、台詞への写り込み 0 → 既定 ON（CONTRACT1 が働くアカウントだけ） */
   var EXPQ_ASK = /誰に|誰から|だれに|だれから|どなたに|どなたから|教わ|習っ|習い|教えてもら/;
   var EXPQ_RE = /^(.{1,14}?)(から|に)(.{2,24}?)(?:を|の)?(?:教わった|教わる|習った|教えてもらった|見せてもらった|見せられた|教えられた|手ほどきを受けた)$/;
   function acct1(n){ try { var A = G.__v292DfixACCT1; return !!(A && typeof A.want === 'function' && A.want(n) === true); } catch(e){ return false; } }   /* ★ACCT1 r3: Owner のアカウントなら端末の鍵が無くても PC と同じ */
