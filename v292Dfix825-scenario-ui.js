@@ -903,11 +903,13 @@
     return out;
   }
   function pickSheet(list, onGo){
-    var last = 'all'; try { last = localStorage.getItem('v292DfixSTARTPICK1_last') === 'none' ? 'none' : 'all'; } catch(e){}
+    /* r2（GPT #127-XR・お客さまのアカウントが既にあるため）: 初めての端末は「主人公＋NPC の先頭 3 人」（＝今までの自動と同じ枚数）にチェック。以後は前回の選び方（全員／なし／主な人）。 */
+    var last = 'main'; try { var _lv = localStorage.getItem('v292DfixSTARTPICK1_last'); last = (_lv === 'none' || _lv === 'all') ? _lv : 'main'; } catch(e){}
+    var _npcSeen = 0;
     var rows = '';
     for (var i = 0; i < list.length; i++){
       rows += '<label style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid rgba(128,128,128,.25);cursor:pointer">'
-            + '<input type="checkbox" data-sc-pk="c" data-i="' + i + '"' + (last === 'all' ? ' checked' : '') + ' style="width:20px;height:20px;flex:none">'
+            + '<input type="checkbox" data-sc-pk="c" data-i="' + i + '"' + ((last === 'all' || (last === 'main' && (list[i].hero || _npcSeen++ < 3))) ? ' checked' : '') + ' style="width:20px;height:20px;flex:none">'
             + '<span>' + esc(list[i].name) + (list[i].hero ? '<span style="opacity:.6;font-size:12px">（主人公）</span>' : '') + '</span></label>';
     }
     overlay('<h3>登場人物の絵</h3><div>絵を作る人を選んでください。あとからキャラ一覧でも作れます。</div>'
@@ -928,7 +930,7 @@
         p.querySelector('[data-sc-pk="back"]').addEventListener('click', closeOverlay, false);
         p.querySelector('[data-sc-pk="go"]').addEventListener('click', function(){
           var sel = []; for (var k = 0; k < boxes.length; k++) if (boxes[k].checked) sel.push(list[+boxes[k].getAttribute('data-i')].name);
-          try { localStorage.setItem('v292DfixSTARTPICK1_last', sel.length ? 'all' : 'none'); } catch(e){}
+          try { localStorage.setItem('v292DfixSTARTPICK1_last', !sel.length ? 'none' : (sel.length === list.length ? 'all' : 'main')); } catch(e){}
           closeOverlay(); onGo({ names: sel, total: list.length });
         }, false);
         count();
