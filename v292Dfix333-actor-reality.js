@@ -132,6 +132,22 @@
     var full=String(n).replace(/[\s　・]+/g,''); if(full.length>=2){ best=Math.max(best, grade(full,false)); var sp=String(n); if(sp!==full && text.indexOf(sp)>=0) best=Math.max(best, grade(sp,false)||1); }
     var ps=partsOf(n); if(ps.length>=2){ for(var i=0;i<ps.length;i++){ var p=ps[i]; if(shared(p)) continue; best=Math.max(best, grade(p, p.length<2)); } }
     return best; }catch(e){ return 0; } }
+  /* ★REL4（2026-11-26・既定 OFF: localStorage v292Dfix333Rel4On='1'・kill v292Dfix333Rel4Off='1'。REL2 が止まっていれば働かない）:
+     実 AI 観察用_1126b（40 ターン）の実測 — T24〜T36 の前面人物は毎回「早瀬 透」だけで、「律が紬に『…』と言う」「紬さん、…」と話しかけても紬が入らない
+     （紬の経験の行も送られず、「誰に教わったの」が誤答）。原因: 前面の候補は「身体・負傷の状態の記録がある人」だけ（compileActorStates）。状態の記録が無い人は候補にすらならない。
+     直し: 入力で話しかけた相手（nameHit が 2）が登録人物で、候補に居なければ、状態なしの候補として足す。足した後に、今までどおりの不在の絞り込み
+     （CP1・NPRES・SCENE1 の fgFilter）を通すので、退出・不在の人は落ちる。人数の上限は selectForeground のまま。 */
+  function rel4On(){ try{ return rel2On() && localStorage.getItem('v292Dfix333Rel4Off')!=='1' && localStorage.getItem('v292Dfix333Rel4On')==='1'; }catch(e){ return false; } }
+  var REL4 = { added: 0, last: null };
+  function rel4Aug(states, text){ try{
+    if(!rel4On() || !text || !states || typeof states!=='object') return states;
+    var hero=heroName(), all=presentNames(), add=[];
+    all.forEach(function(n){ if(n===hero || Object.prototype.hasOwnProperty.call(states,n)) return; if(nameHit(String(text), n, all)===2) add.push(n); });
+    if(!add.length) return states;
+    var o={}; Object.keys(states).forEach(function(k){ o[k]=states[k]; });
+    add.forEach(function(n){ o[n]={restrained:false, suspended:false, freeHands:2, dropped:[], injured:false, posture:'unknown', karada:''}; });
+    REL4.added+=add.length; REL4.last=add.slice(0,3);
+    return o; }catch(e){ return states; } }
   function selectForeground(states, playerText, turnNum){
     var hero=heroName();
     var allNames=Object.keys(states).filter(function(n){ return n!==hero; });
@@ -246,7 +262,7 @@
           var authority=_ab927(p.states);
           if(authority && sys.indexOf('【身体状態・正史')<0) sys=sys+'\n\n'+authority;
           if(npcAutonomyOn()){
-            var sel=selectForeground(fgStates333(p.states, p.text), p.text, p.turnNum);   /* ★CP1-R6 */
+            var sel=selectForeground(fgStates333(rel4Aug(p.states, p.text), p.text), p.text, p.turnNum);   /* ★CP1-R6 */
             try{ p.__sel=sel; }catch(_ps){}   /* ★fix333n(RC-2): 品質分析で再計算せず再利用する */
             var fb=foregroundBlock(sel);
             if(fb && sys.indexOf('【この一手で前面に出す')<0) sys=sys+'\n\n'+fb;
@@ -281,7 +297,7 @@
           var _sel2=null;
           try{ var _once=(localStorage.getItem('v292Dfix333SelOnceOff')!=='1');
                _sel2=(_once && p.__sel!==undefined && p.__sel!==null) ? p.__sel
-                     : selectForeground(fgStates333(p.states, p.text), p.text, p.turnNum); }catch(_s){}   /* ★CP1-R6 */
+                     : selectForeground(fgStates333(rel4Aug(p.states, p.text), p.text), p.text, p.turnNum); }catch(_s){}   /* ★CP1-R6 */
           var _budget=_sel2?_sel2.budget:2;
           var _hero=heroName();
           var _npcs=presentNames().filter(function(n){ return n && n!==_hero; });
@@ -380,6 +396,6 @@
       return {total:arr.length, byScene:by};
     }catch(e){ return {err:e.message}; }
   }
-  window.__v292Dfix333api={ nameHit:nameHit, compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, analyzeEnsemble:analyzeEnsemble, classifyScene:classifyScene, qualStats:qualStats, mode:mode, _pending:function(){return pending;}, cp1Hook:'fg333-r6' };   /* ★bundle43-a r2 (GPT #127-LA §3): 受け口 fgStates333 を持つ版の印（CP1 はこれが無い fix333 と組み合わさると CP1 全体を OFF） */
+  window.__v292Dfix333api={ nameHit:nameHit, rel4Aug:rel4Aug, rel4:function(){ return { on: rel4On(), added: REL4.added, last: REL4.last }; }, compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, analyzeEnsemble:analyzeEnsemble, classifyScene:classifyScene, qualStats:qualStats, mode:mode, _pending:function(){return pending;}, cp1Hook:'fg333-r6' };   /* ★bundle43-a r2 (GPT #127-LA §3): 受け口 fgStates333 を持つ版の印（CP1 はこれが無い fix333 と組み合わさると CP1 全体を OFF） */
   try{ console.log(TAG,'loaded (v2/fix333h); mode=',mode()); }catch(e){}
 })();
