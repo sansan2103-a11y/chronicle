@@ -113,6 +113,18 @@
   // Phase2.2 ①: eligibility候補制約(DeepResearch 3回目)。反応できないNPC(意識なし/死亡/不在)を前面化候補から外す物理ゲート。矯正再生成はしない・背景としては残る。OFF退避=v292Dfix333Elig='0'
   function eligOff(){ try{ return localStorage.getItem('v292Dfix333Elig')==='0'; }catch(e){ return false; } }
   function isEligible(a){ var k=(a&&a.karada)||''; if(/気絶|失神|意識を失|昏倒|気を失|昏睡|生き絶え|絶命|事切れ|死亡|死んで/.test(k)) return false; if(/その場にいない|立ち去っ|退場|姿を消し|去っていっ|不在/.test(k)) return false; return true; }
+  /* ★REL2（2026-11-26・既定 OFF: localStorage v292Dfix333RelOn='1'・kill v292Dfix333RelOff='1'）: 実 AI 試験_R16c_ON T9 の実測 —
+     入力「『…誰に教わったんでしたっけ』と律が紬に言う」で前面が「店主・霧島 冴」になり、話しかけた相手の紬が外れた（紬の経験の行も送られなかった）。
+     原因: 名指しの判定が登録名の全体（「渡瀬 紬」）の一致だけ。入力は「紬」「渡瀬さん」と書く。
+     直し: 空白を除いた全体・姓・名のどれかが入力にあれば名指しとみる。1 字の名は、直前が漢字でなく、直後が助詞・敬称・区切りのときだけ。 */
+  function rel2On(){ try{ return localStorage.getItem('v292Dfix333RelOff')!=='1' && localStorage.getItem('v292Dfix333RelOn')==='1'; }catch(e){ return false; } }
+  function nameHit(text, n){ try{
+    var full=String(n).replace(/[\s　・]+/g,''); if(full.length>=2 && text.indexOf(full)>=0) return true;
+    var parts=String(n).split(/[\s　・]+/).filter(Boolean); if(parts.length<2) return false;
+    for(var i=0;i<parts.length;i++){ var p=parts[i], esc=p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      var re = p.length>=2 ? new RegExp(esc) : new RegExp('(^|[^一-鿿々])'+esc+'(さん|ちゃん|くん|君|様|は|が|に|を|へ|と|も|の|、|。|」|』|$)');
+      if(re.test(text)) return true; }
+    return false; }catch(e){ return false; } }
   function selectForeground(states, playerText, turnNum){
     var hero=heroName();
     var allNames=Object.keys(states).filter(function(n){ return n!==hero; });
@@ -125,6 +137,7 @@
     var budget=dense?1:2;
     var scored=names.map(function(n){ var a=states[n]; var k=a.karada||'';
       var relevance=(playerText && String(playerText).indexOf(n)>=0)?1.0:0;
+      if(!relevance && playerText && rel2On() && nameHit(String(playerText), n)) relevance=1.0;   /* ★REL2 */
       var changed=(__prevKarada[n]!==undefined && __prevKarada[n]!==k)?0.85:0;
       var bodyEvent=(a.restrained||a.injured||a.freeHands<2)?0.45:0;
       return {n:n, imp:relevance+changed+bodyEvent};

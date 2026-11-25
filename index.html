@@ -359,7 +359,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261126-exp1r16c';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261126-exp1r16d';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4569,7 +4569,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <!-- ★MEM4R r2（既定 ON・kill v292DfixMEM4ROff）: 長期記憶を、その物語の本文から 0 ターン目より分けて作り直す（印の無い記憶・空の記憶・大きく遅れた記憶） -->
 <script src="v292DfixMEM4R-rebuild.js?cb=20261122-mem4r3"></script>
 <!-- ★EXP1（既定 OFF・鍵 v292DfixEXP1aOn・kill v292DfixEXP1Off）: 長期記憶の人物の欄に「経験と習得」の 1 項目（今の worldinfo の中だけ） -->
-<script src="v292DfixEXP1-experience.js?cb=20261126-exp1r16c"></script>
+<script src="v292DfixEXP1-experience.js?cb=20261126-exp1r16d"></script>
 <!-- ★MEMSTATE1（既定 ON・kill v292DfixMEMSTATE1Off）: 長期記憶の人物の状態を、いまの状態に書き換える -->
 <script src="v292DfixMEMSTATE1-longmem-state.js?cb=20261122-memstate1"></script>
 <!-- ★MEMFIX1（既定 ON・kill v292DfixMEMFIX1Off）: 長期記憶の作り直しが止まり続ける穴（途中で切れた応答・やり直しの上限・summary の長さ） -->
@@ -4732,7 +4732,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292Dfix298-roster.js?cb=20261001-ac34"></script>
 <script src="v292Dfix330-somatic-guard.js?cb=v292Dfix419c"></script>
 <script src="v292Dfix332-uifold.js?cb=v292Dfix332"></script>
-<script src="v292Dfix333-actor-reality.js?cb=20261124-exp1r13"></script>
+<script src="v292Dfix333-actor-reality.js?cb=20261126-exp1r16d"></script>
 <script src="v292Dfix334-entryhub.js?cb=20261101-bundle81-admg-a"></script>
 <!-- ★lane 15 / sp10A(GPT 裁定 #L15entry): 設定の 3 段畳み + 公開文面。どちらも DOM 移動と文字列だけ。
      kill: localStorage['v292Dfix880Off']='1' / localStorage['v292Dfix881Off']='1' -->
