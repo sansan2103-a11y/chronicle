@@ -39,7 +39,7 @@
      鍵の数と microtask で使い回す方式はやめた。使い回すのは batch(fn) の中だけ。batch は「読むだけ」と確かめた繰り返し（fix660 の usage の走査）だけが使う。
      batch の外では毎回取り直す（今までどおり）。既定 OFF: localStorage v292DfixPERF1bOn='1'・kill v292DfixPERF1bOff='1'／v292DfixPERF1Off='1'。 */
   var KC = { depth: 0, list: null, live: null, hit: 0, liveHit: 0, runs: 0 };
-  function batchOn(){ return lsg('v292DfixPERF1Off') !== '1' && lsg('v292DfixPERF1bOff') !== '1' && lsg('v292DfixPERF1bOn') === '1'; }
+  function batchOn(){ return lsg('v292DfixPERF1Off') !== '1' && lsg('v292DfixPERF1bOff') !== '1'; }   /* 20261126-perf1con: 実機で usage 3.13 秒 → 16.7 ms・数字は置いた鍵 1 個ぶん（+17 字）以外すべて同じ → 既定 ON */
   function batch(fn){
     if (!batchOn()) return fn();
     KC.depth++; if (KC.depth === 1) { KC.list = null; KC.live = null; KC.runs++; }
