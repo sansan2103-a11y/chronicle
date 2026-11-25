@@ -117,14 +117,21 @@
      入力「『…誰に教わったんでしたっけ』と律が紬に言う」で前面が「店主・霧島 冴」になり、話しかけた相手の紬が外れた（紬の経験の行も送られなかった）。
      原因: 名指しの判定が登録名の全体（「渡瀬 紬」）の一致だけ。入力は「紬」「渡瀬さん」と書く。
      直し: 空白を除いた全体・姓・名のどれかが入力にあれば名指しとみる。1 字の名は、直前が漢字でなく、直後が助詞・敬称・区切りのときだけ。 */
-  function rel2On(){ try{ return localStorage.getItem('v292Dfix333RelOff')!=='1' && localStorage.getItem('v292Dfix333RelOn')==='1'; }catch(e){ return false; } }
-  function nameHit(text, n){ try{
-    var full=String(n).replace(/[\s　・]+/g,''); if(full.length>=2 && text.indexOf(full)>=0) return true;
-    var parts=String(n).split(/[\s　・]+/).filter(Boolean); if(parts.length<2) return false;
-    for(var i=0;i<parts.length;i++){ var p=parts[i], esc=p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-      var re = p.length>=2 ? new RegExp(esc) : new RegExp('(^|[^一-鿿々])'+esc+'(さん|ちゃん|くん|君|様|は|が|に|を|へ|と|も|の|、|。|」|』|$)');
-      if(re.test(text)) return true; }
-    return false; }catch(e){ return false; } }
+  function rel2On(){ try{ return localStorage.getItem('v292Dfix333RelOff')!=='1'; }catch(e){ return false; } }   /* 20261126-rel2on: 実 AI 1 本＋GPT #127-XW の 3 条件を Local で確認 → 既定 ON */
+  /* r2（GPT #127-XW の 3 条件）: (1) 姓や名が、ほかの人物（主人公を含む）と同じなら、その形だけでは当てない (2) 名前の直後が「に・へ・、（呼びかけ）」なら話しかけ先として 2 を返す
+     (3) 候補は states にいる人だけ（退出・不在は fgStates333 と isEligible が先に外す）＝名指しで同席扱いにはならない。 */
+  function nameHit(text, n, all){ try{
+    var SUF='(さん|ちゃん|くん|君|様|殿)?', best=0;
+    function esc(p){ return p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+    function partsOf(x){ return String(x).split(/[\s　・]+/).filter(Boolean); }
+    function shared(p){ var c=0; (all||[]).forEach(function(o){ if(o!==n && partsOf(o).indexOf(p)>=0) c++; }); return c>0; }
+    function grade(p, one){ var e=esc(p), pre=one?'(^|[^一-鿿々])':'()';
+      if(new RegExp(pre+e+SUF+'(に(?!な|よ|つ|お|と|対|関)|へ(?!ん)|、|，|,|！|!|？|\\?)').test(text)) return 2;
+      if(one){ if(new RegExp(pre+e+'(さん|ちゃん|くん|君|様|殿|は|が|を|と|も|の|。|」|』|$)').test(text)) return 1; return 0; }
+      return new RegExp(e).test(text)?1:0; }
+    var full=String(n).replace(/[\s　・]+/g,''); if(full.length>=2){ best=Math.max(best, grade(full,false)); var sp=String(n); if(sp!==full && text.indexOf(sp)>=0) best=Math.max(best, grade(sp,false)||1); }
+    var ps=partsOf(n); if(ps.length>=2){ for(var i=0;i<ps.length;i++){ var p=ps[i]; if(shared(p)) continue; best=Math.max(best, grade(p, p.length<2)); } }
+    return best; }catch(e){ return 0; } }
   function selectForeground(states, playerText, turnNum){
     var hero=heroName();
     var allNames=Object.keys(states).filter(function(n){ return n!==hero; });
@@ -137,7 +144,7 @@
     var budget=dense?1:2;
     var scored=names.map(function(n){ var a=states[n]; var k=a.karada||'';
       var relevance=(playerText && String(playerText).indexOf(n)>=0)?1.0:0;
-      if(!relevance && playerText && rel2On() && nameHit(String(playerText), n)) relevance=1.0;   /* ★REL2 */
+      if(playerText && rel2On()){ var h2=nameHit(String(playerText), n, allNames.concat(hero?[hero]:[])); if(h2===2) relevance=1.3; else if(h2===1 && !relevance) relevance=1.0; }   /* ★REL2 r2: 2 = 話しかけ先・行為の相手（「紬に」「紬さん、」）・1 = 名前が出ただけ */
       var changed=(__prevKarada[n]!==undefined && __prevKarada[n]!==k)?0.85:0;
       var bodyEvent=(a.restrained||a.injured||a.freeHands<2)?0.45:0;
       return {n:n, imp:relevance+changed+bodyEvent};
@@ -373,6 +380,6 @@
       return {total:arr.length, byScene:by};
     }catch(e){ return {err:e.message}; }
   }
-  window.__v292Dfix333api={ compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, analyzeEnsemble:analyzeEnsemble, classifyScene:classifyScene, qualStats:qualStats, mode:mode, _pending:function(){return pending;}, cp1Hook:'fg333-r6' };   /* ★bundle43-a r2 (GPT #127-LA §3): 受け口 fgStates333 を持つ版の印（CP1 はこれが無い fix333 と組み合わさると CP1 全体を OFF） */
+  window.__v292Dfix333api={ nameHit:nameHit, compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, analyzeEnsemble:analyzeEnsemble, classifyScene:classifyScene, qualStats:qualStats, mode:mode, _pending:function(){return pending;}, cp1Hook:'fg333-r6' };   /* ★bundle43-a r2 (GPT #127-LA §3): 受け口 fgStates333 を持つ版の印（CP1 はこれが無い fix333 と組み合わさると CP1 全体を OFF） */
   try{ console.log(TAG,'loaded (v2/fix333h); mode=',mode()); }catch(e){}
 })();
