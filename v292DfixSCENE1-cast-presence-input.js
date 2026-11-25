@@ -248,6 +248,16 @@
   var REMOTE = /声|聞こえ|電話|通話|画面|写真|手紙|思い出|回想|夢|噂|のこと|について|の話|向こう|遠く|二階から|階上|階下|外から|窓の外/;
   var MOVE_OUT = /出て|出た|去っ|立ち去|帰っ|戻っ|離れ|向かっ|行っ|いっ|消え/;
   var IN_ARRIVE = /(?:来る|来て|来た|くる|きて|きた|入って|入る|現れ|戻って|戻る|下りて|降りて|やって|合流|顔を出|姿を見せ|連れて)/;
+  /* ★W1(3)（既定 OFF・鍵 v292DfixNPRESw1On）: 入力の「戻り」は、その人が主語（名＋は/が/も）の文に 来る・戻る の語があり、その入力に通話の語が無いときだけ
+     （実 AI 試験_W1 T10:「律のスマホが鳴る。相手は冴で、車の準備ができたと…」の「できた」の「きた」で、出ていった冴が戻った扱いになった）。OFF のときは今までどおり true。 */
+  function w1On() { return ls('v292DfixNPRESw1Off') !== '1' && ls('v292DfixNPRESw1On') === '1'; }
+  function w1In(pt, fb) {
+    if (!w1On()) return true;
+    var t = maskQ(str(pt)); if (/電話|通話|スマホ|携帯|着信|受話器|メッセージ|メール/.test(t)) { ST.w1In = (ST.w1In || 0) + 1; return false; }
+    var ss = sents(t);
+    for (var i = 0; i < ss.length; i++) { if (!IN_ARRIVE.test(ss[i])) continue; for (var k = 0; k < fb.length; k++) { if (fb[k] && new RegExp(esc(fb[k]) + HON + '(?:は|が|も|と|を)').test(ss[i])) return true; } }
+    ST.w1In = (ST.w1In || 0) + 1; return false;
+  }
   function qStrip(s) {   /* ★NAME1CH: 最上位の「…」『…』を、中の句点ごと 1 字（＿）に畳む。閉じていない括弧はそのまま */
     var a = String(s), out = '', depth = 0, start = -1;
     for (var i = 0; i < a.length; i++) { var ch = a.charAt(i);
@@ -421,8 +431,13 @@
                  戻すのは今までの根拠（入力で来る・その人の台詞・本文で戻る・主人公と一緒・その場で動く）と、6 ターン何も無いときの期限だけ。 */
               if (ls('v292DfixHMOVE1Off') !== '1') {   /* 20261124: 全員 既定 ON（実 AI 4 本: 移動の後に前面へ戻る 6/6 → 0/6・戻りは認識・退行 0） */ if (!st.moved) { st.moved = tn; ST.bMovedKept = (ST.bMovedKept || 0) + 1; } }
               else { st = null; noteBack(n, tn, 'heroMoved'); } }
-            else if ((ty === 'DO' || ty === 'STORY') && hasAny(maskQ(str(t.playerText)), fb) && IN_ARRIVE.test(str(t.playerText)) && !/(?:ない|なかった)/.test(str(t.playerText))) { st = null; noteBack(n, tn, 'input'); }
-            else if (Array.isArray(t._convSays) && t._convSays.some(function (c) { return c && fb.indexOf(str(c.who).trim()) >= 0; })) { st = null; noteBack(n, tn, 'speaker'); }
+            else if ((ty === 'DO' || ty === 'STORY') && hasAny(maskQ(str(t.playerText)), fb) && IN_ARRIVE.test(str(t.playerText)) && !/(?:ない|なかった)/.test(str(t.playerText)) && w1In(t.playerText, fb)) { st = null; noteBack(n, tn, 'input'); }
+            else if (Array.isArray(t._convSays) && t._convSays.some(function (c) { return c && fb.indexOf(str(c.who).trim()) >= 0; })) {
+              /* ★W1(3)（2026-11-26・既定 OFF・鍵 v292DfixNPRESw1On・kill v292DfixNPRESw1Off）: 実 AI 試験_W1 T10・観察用_1126d T35 —
+                 出ていった人が電話で話しただけで「戻った」になり、次の回に前面と状態の行へ入った。その回の本文（かっこの外）に通話の語があるときは、
+                 台詞だけでは戻さない（本文で戻る・主人公と一緒・その場で動く、は今までどおり下で読む）。 */
+              if (w1On() && /電話|通話|受話器|着信/.test(maskQ(str(t.narrative)))) { ST.w1Phone = (ST.w1Phone || 0) + 1; }
+              else { st = null; noteBack(n, tn, 'speaker'); } }
             else if (ty === 'DO' && objHere(t.playerText, fb)) { st = null; noteBack(n, tn, 'obj'); }   /* ★r5 */
             else if (ty === 'SAY' && vocHere(t.playerText, fb)) { st = null; noteBack(n, tn, 'voc'); }   /* ★r5 */
           }

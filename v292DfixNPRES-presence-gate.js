@@ -75,6 +75,7 @@
      (1) 弱い語が 待つ/残る/置いて/向かっ の類だけで、同じターンに本人の（離れた所からでない）台詞があり、本文に通話の語が無いとき →「いる」。
      (2) fgRestrict: (b) でも、入力で話しかけた相手（名前＋敬称＋「、」「に」「へ」）で、直近 3 ターンに本文か台詞の証拠があり、通話の声でないなら外さない。(c) は今までどおり外す。 */
   function w1() { return lsg1('v292DfixNPRESw1Off') !== '1' && lsg1('v292DfixNPRESw1On') === '1'; }
+  var W1NAME = null;   /* gate() のたびに作り直す: 1 字の名 → 登録名（登録人物の中で 1 人だけのもの） */
   var WAIT1 = /待って|待つ|待ち|残っ|残る|残し|置いて|向かっ/g;
   function admfOn() { try { var A = G.__v292DfixADMF1; return !!(A && typeof A.gate === 'function' && A.gate('npres1', false) === true); } catch (e) { return false; } }   /* ★admf2: 管理者画面の ON だけ（ADMF1 が無い・例外 = OFF） */
   function on() { return !killed() && admfOn(); }
@@ -185,7 +186,7 @@
   function hit(txt, fs) { for (var k = 0; k < fs.length; k++) if (fs[k] && txt.indexOf(fs[k]) >= 0) return true; return false; }
   function sayHit(t, fs, name, all) {
     var cs = t && t._convSays; if (!Array.isArray(cs)) return all ? [] : false; var r = [];
-    for (var i = 0; i < cs.length; i++) { var c = cs[i]; if (!c) continue; var w = String(c.who == null ? '' : c.who); if (w === name || fs.indexOf(w) >= 0) { if (!all) return true; r.push(String(c.say == null ? '' : c.say)); } }
+    for (var i = 0; i < cs.length; i++) { var c = cs[i]; if (!c) continue; var w = String(c.who == null ? '' : c.who); if (w === name || fs.indexOf(w) >= 0 || (W1NAME && W1NAME[w] === name)) {   /* ★W1(4): 名札が 1 字の名（「冴」）のカードも本人の台詞に数える（実 AI 1126d 後半: 姓なしの名札 7 枚） */ if (!all) return true; r.push(String(c.say == null ? '' : c.say)); } }
     return all ? r : false;
   }
   /* そのターンの証拠: 'strong' | 'weak' | 'present' | '' */
@@ -255,6 +256,7 @@
           all1.forEach(function (nm) { String(nm).split(/[\s　・]+/).filter(Boolean).forEach(function (p) { cnt1[p] = (cnt1[p] || 0) + 1; }); });
           all1.forEach(function (nm) { if (isHero(nm, sp(S.cast && S.cast.hero && S.cast.hero.name))) return; var ps = String(nm).split(/[\s　・]+/).filter(Boolean); if (ps.length !== 2) return;
             ps.forEach(function (p) { if (p.length === 1 && /[一-鿿々ぁ-んァ-ヶ]/.test(p) && cnt1[p] === 1) map1.push([new RegExp('(^|[^一-鿿々ァ-ヶー])' + p + '(?=(?:さん|ちゃん|くん|君|様|さま|先輩|先生|は|が|も|の|に|を|へ|と|や|、|。|，|．|！|？|!|\\?|…|」|』|\\s|$))', 'g'), nm]); }); });
+          W1NAME = null; if (w1()) { W1NAME = {}; all1.forEach(function (nm) { if (isHero(nm, sp(S.cast && S.cast.hero && S.cast.hero.name))) return; var ps = String(nm).split(/[\s　・]+/).filter(Boolean); if (ps.length === 2 && ps[1].length === 1 && cnt1[ps[1]] === 1) W1NAME[ps[1]] = nm; }); }
           if (map1.length) { ST.n1ch = (ST.n1ch || 0) + 1; turns = turns.map(function (t) { if (!t || typeof t.narrative !== 'string') return t; var nr = t.narrative, ch = false; map1.forEach(function (m) { var n2 = nr.replace(m[0], function (_, a) { return a + m[1]; }); if (n2 !== nr) { nr = n2; ch = true; } }); if (!ch) return t; var o = {}; for (var k1 in t) if (Object.prototype.hasOwnProperty.call(t, k1)) o[k1] = t[k1]; o.narrative = nr; return o; }); }
         }
       } catch (e1ch) { turns = S.turns; }
