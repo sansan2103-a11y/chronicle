@@ -66,14 +66,18 @@
     try {
       var ks = rawKeys(), I = inv();
       count = ks.length;
-      for (var i = 0; i < ks.length; i++){
-        var v = rawGet(ks[i]);
-        var b = (ks[i].length + (v == null ? 0 : v.length));
-        bytes += b;
-        var fam = 'unknown';
-        try { if (I && I.classifyKey) fam = I.classifyKey(ks[i], v).family || 'unknown'; } catch(e){}
-        byFamily[fam] = (byFamily[fam] || 0) + b;
-      }
+      var scan = function(){
+        for (var i = 0; i < ks.length; i++){
+          var v = rawGet(ks[i]);
+          var b = (ks[i].length + (v == null ? 0 : v.length));
+          bytes += b;
+          var fam = 'unknown';
+          try { if (I && I.classifyKey) fam = I.classifyKey(ks[i], v).family || 'unknown'; } catch(e){}
+          byFamily[fam] = (byFamily[fam] || 0) + b;
+        }
+      };
+      /* ★PERF1 r2: この走査は読むだけ（rawGet と classifyKey）。その間だけ fix562 に鍵の一覧と liveSlots を使い回させる（fix562.batch が無ければ今までどおり） */
+      if (I && typeof I.batch === 'function') I.batch(scan); else scan();
     } catch(e){}
     return { bytes: bytes, kb: Math.round(bytes / 1024), keys: count, byFamily: byFamily };
   }

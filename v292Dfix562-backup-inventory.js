@@ -35,15 +35,20 @@
   /* ★PERF1（2026-11-26・既定 OFF: localStorage v292DfixPERF1On='1'・kill v292DfixPERF1Off='1'）: 鍵 1 個を分類するたびに Object.keys(localStorage) を取り直していた
      （HOME の容量の計算で 鍵の数 × 鍵の数。Local の CPU の記録で約 1 秒・鍵 1,400 個）。同じ 1 回の同期処理の中で、鍵の数が変わっていなければ前の一覧を使う。
      その同期処理が終われば捨てる（microtask）。返すのは毎回写し（呼び手が並べ替えても影響しない）。 */
-  var KC = { n: -1, list: null, armed: false, hit: 0 };
+  /* ★PERF1 r2（GPT #127-XX: 「鍵の数が同じでも中身が同じとは限らない＝1 個消して 1 個足せば数は変わらない」）:
+     鍵の数と microtask で使い回す方式はやめた。使い回すのは batch(fn) の中だけ。batch は「読むだけ」と確かめた繰り返し（fix660 の usage の走査）だけが使う。
+     batch の外では毎回取り直す（今までどおり）。既定 OFF: localStorage v292DfixPERF1bOn='1'・kill v292DfixPERF1bOff='1'／v292DfixPERF1Off='1'。 */
+  var KC = { depth: 0, list: null, live: null, hit: 0, liveHit: 0, runs: 0 };
+  function batchOn(){ return lsg('v292DfixPERF1Off') !== '1' && lsg('v292DfixPERF1bOff') !== '1' && lsg('v292DfixPERF1bOn') === '1'; }
+  function batch(fn){
+    if (!batchOn()) return fn();
+    KC.depth++; if (KC.depth === 1) { KC.list = null; KC.live = null; KC.runs++; }
+    try { return fn(); } finally { KC.depth--; if (KC.depth <= 0) { KC.depth = 0; KC.list = null; KC.live = null; } }
+  }
   function keys(){
     try {
-      if (lsg('v292DfixPERF1Off') === '1') return Object.keys(localStorage);   /* 20261126-perf1on: 既定 ON */
-      var n = localStorage.length;
-      if (KC.list && KC.n === n) { KC.hit++; return KC.list.slice(); }
-      KC.list = Object.keys(localStorage); KC.n = n;
-      if (!KC.armed) { KC.armed = true; Promise.resolve().then(function(){ KC.list = null; KC.n = -1; KC.armed = false; KC.live = null; KC.liveOf = null; }); }
-      return KC.list.slice();
+      if (KC.depth > 0) { if (!KC.list) KC.list = Object.keys(localStorage); else KC.hit++; return KC.list.slice(); }
+      return Object.keys(localStorage);
     } catch(e){ return []; }
   }
   function bytes(k){ var v = lsg(k); return v == null ? 0 : v.length; }
@@ -67,16 +72,9 @@
 
   /* ---- スロット ------------------------------------------------------- */
   var SLOT_RE = /^chr6_slot_([A-Za-z0-9]+)$/;
-  /* ★PERF1b（2026-11-26・既定 OFF: localStorage v292DfixPERF1bOn='1'・kill v292DfixPERF1bOff='1'。PERF1 が止まっていれば働かない）:
-     実機（Owner PC・2,629 鍵）: fix660 の usage() が 1 回 1.83 秒・status() も 1.82 秒（HOME の約 4.6 秒の大半）。usage は鍵 1 個ごとに classifyKey を呼び、
-     classifyKey は毎回 liveSlots()（全部の鍵に正規表現）を作り直す＝鍵の数の 2 乗（liveSlots 1 回 0.7 ms × 2,629）。
-     直し: keys() の使い回しが効いている間（同じ 1 回の同期処理・鍵の数が同じ）は、liveSlots の結果も使い回す。返すのは写し。 */
   function liveSlots(){
+    if (KC.depth > 0) { try { if (KC.live) { KC.liveHit++; return KC.live.slice(); } var o2 = []; keys().forEach(function(k){ var m = k.match(SLOT_RE); if (m) o2.push(m[1]); }); KC.live = o2; return o2.slice(); } catch(eL){} }
     var ks = keys();
-    try { if (lsg('v292DfixPERF1bOff') !== '1' && lsg('v292DfixPERF1bOn') === '1' && KC.list) {
-      if (KC.live && KC.liveOf === KC.list) { KC.liveHit = (KC.liveHit || 0) + 1; return KC.live.slice(); }
-      var o2 = []; KC.list.forEach(function(k){ var m = k.match(SLOT_RE); if (m) o2.push(m[1]); });
-      KC.live = o2; KC.liveOf = KC.list; return o2.slice(); } } catch(eL){}
     var out = [];
     ks.forEach(function(k){ var m = k.match(SLOT_RE); if (m) out.push(m[1]); });
     return out;
@@ -1178,6 +1176,7 @@
     snapshotOf: snapshotOf,
     sideStoreKeys: sideStoreKeys,
     liveSlots: liveSlots,
+    batch: batch, perf: function(){ return { on: batchOn(), depth: KC.depth, runs: KC.runs, hit: KC.hit, liveHit: KC.liveHit }; },
     protectedSet: protectedSet,
     snapshotsBySlot: snapshotsBySlot,
     dryRun: dryRun,
