@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261126-r16b';
+  var VER = 'exp1-20261126-r16c';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
@@ -174,7 +174,7 @@
       try {
         var c16 = norm(typeof core15 === 'function' ? core15(s) : s), g16 = []; for (var q = 0; q + 3 <= c16.length; q++) g16.push(c16.slice(q, q + 3));
         var nr16 = norm(ctx.nr), nrU = unquote(String(ctx.nr));
-        if (g16.length && !R16_REFUSE.test(nrU) && g16.some(function (z) { return nr16.indexOf(z) >= 0; })) {
+        if (g16.length && !R16_REFUSE.test(nrU) && g16.some(function (z) { return nr16.indexOf(z) >= 0; }) && r16Shown(ctx.pt, nrU, who, g16)) {
           var ip = sentences(unquote(String(ctx.pt).replace(/<[^>]*>/g, '\n')));
           for (var j16 = 0; j16 < ip.length; j16++) { var h16 = ip[j16];
             if (HEDGE_RE.test(h16) || RUMOR_RE.test(h16)) continue;
@@ -199,7 +199,22 @@
   function parseT(t) { if (typeof t === 'number') return Math.floor(t) === t ? t : NaN; var m = /^\s*(?:T|Turn\s*)?(\d{1,4})\s*$/i.exec(String(t == null ? '' : t)); return m ? +m[1] : NaN; }
   function r16On() { return lsg('v292DfixEXP1InputTeachOff') !== '1' && lsg('v292DfixEXP1InputTeachOn') === '1'; }
   var R16_END = /(教える|教えてあげる|教えてやる|教えてみせる|手ほどきする|手ほどきをする|教えた|教えてあげた|教えてやった|手ほどきした)$/;
-  var R16_REFUSE = /教え(なかっ|られな|ようとしな|ずに|るのをやめ|る気はな)|断っ|断られ|拒ん|首を横に振/;
+  var R16_REFUSE = /教え(なかっ|られな|ようとしな|ずに|るのをやめ|る気はな|る暇|そびれ|損ね)|断っ|断られ|拒ん|首を横に振|中断|遮っ|遮られ|席を外|その場を離れ|立ち去っ|出て行っ|出ていっ|電話が鳴|呼び出され|後にし|あとにし|また今度|やめておく|やめた/;
+  /* r16 v2（GPT #127-XV: 教える意図と、実際に教わったことを分ける）: 本文（「」の外）に (A) 実演・説明の語、または入力の文の手順の語が 4 つ以上あり、かつ (B) 教わる人が主語で、見る・聞く・試す動きがある */
+  var R16_DEMO = /みせ|見せ|示し|示す|実演|手本|説明し|説明す|指し示|指で示|手を取っ|手を添え|やり方を|コツを|順に|ゆっくりと/;
+  var R16_ATTEND = /覗き込|のぞき込|覗い|見つめ|見てい|見て、|見ながら|見守|目で追|目を追|目が.{0,10}追|視線.{0,12}(追|向|行き来|落と)|身を.{0,6}乗り出|耳を傾け|聞いてい|聞き入|頷|うなず|真似|まね|なぞ|やってみ|試し|受け取|手を伸ば|握っ|持ち直|差し込|回し|拭|結ん|押し|引い/;
+  var R16_WATCH = /覗き込|のぞき込|見つめ|目で追|目を追|目が.{0,10}追|視線.{0,12}(追|行き来)|身を.{0,6}乗り出|耳を傾け|聞き入|頷きながら|うなずきながら|真似/;
+  function r16Shown(pt, nrU, who, gCore) {
+    try {
+      var ss = sentences(nrU), nn = norm(nrU), A = false, B = false, sr = subjRe(who);
+      for (var i = 0; i < ss.length && !A; i++) { if (!R16_DEMO.test(ss[i])) continue; var near = norm((i > 0 ? ss[i - 1] : '') + ss[i] + (i + 1 < ss.length ? ss[i + 1] : '')); if (gCore.some(function (z) { return near.indexOf(z) >= 0; })) A = true; }
+      if (!A) { var up = unquote(String(pt)), rr0 = recipRe(who), m0 = rr0 ? rr0.exec(up) : null, ip = norm(m0 ? up.slice(m0.index + m0[0].length) : ''), seen = {}, hits = 0; for (var q = 0; q + 3 <= ip.length; q++) { var g = ip.slice(q, q + 3); if (seen[g]) continue; seen[g] = 1; if (gCore.indexOf(g) >= 0) continue; if (/^[ぁ-ん]+$/.test(g)) continue; if (nn.indexOf(g) >= 0) hits++; } if (hits >= 4) A = true; }
+      if (!A || !sr) return false;
+      for (var j = 0; j < ss.length && !B; j++) { var own = ownClause(ss[j], who); if (own != null && R16_ATTEND.test(own)) { B = true; break; }
+        var mj = sr.exec(ss[j]); if (mj && R16_WATCH.test(ss[j].slice(mj.index + mj[0].length))) B = true; }   /* ownClause は「上がって」の「が」で切れることがある（実データ T8）ので、見る・聞くの語だけは文の残り全体で見る */
+      return B;
+    } catch (e) { return false; }
+  }
   function partText(p) { return String((p && p.pt) || '') + '\n' + String((p && p.nr) || ''); }
   function selfFirst(x, p, who) {
     if (!p || !Array.isArray(p.says)) return false; var f = forms(who); if (!f.length) return false;
@@ -256,7 +271,13 @@
     var m = re.exec(pt); if (!m) return false;
     var clause = m[0]; if (HEDGE_RE.test(clause) || RUMOR_RE.test(clause) || /教えな|教えず|教えられな/.test(clause)) return false;
     if (!f.some(function (z) { return String(p.nr || '').indexOf(z) >= 0; })) return false;
-    return phraseIn(cleanS(x.s), pt + '\n' + unquote(String(p.nr || '')));
+    if (!phraseIn(cleanS(x.s), pt + '\n' + unquote(String(p.nr || '')))) return false;
+    /* ★r16c（GPT #127-XV 優先 1: 「教える」と入力しても、本文で実際に教わっていなければ採らない。例: 取り出したが電話が鳴って席を外した）: r5 のこの道にも、
+       本文の「実演・説明＋教わる人が見ている」と「中断・断りの語が無い」を求める。kill: localStorage v292DfixEXP1ShownOff='1'（今までどおり） */
+    if (lsg('v292DfixEXP1ShownOff') === '1') return true;
+    try { var c5 = norm(typeof core15 === 'function' ? core15(cleanS(x.s)) : cleanS(x.s)), g5 = []; for (var q5 = 0; q5 + 3 <= c5.length; q5++) g5.push(c5.slice(q5, q5 + 3));
+      var nu5 = unquote(String(p.nr || '')); if (R16_REFUSE.test(nu5) || !r16Shown(String(p.pt || ''), nu5, who, g5)) { cnt(ST, 'inputNotShown'); return false; } } catch (e5) { return false; }
+    return true;
   }
   /* ---- ★r6: 案 A2（E1_REALAI_ANALYSIS.md §5・統括の採用）。要約 AI は本文の語をほとんど使わずに言い換えるので、句の文字の一致は求めない。
      r5 の検査（checkLoc の前半）で通らなかったときだけ、次の緩い検査で通す（r5 で通るものはそのまま＝r5 が通していた件は減らない）:
