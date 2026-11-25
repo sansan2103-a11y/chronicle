@@ -102,8 +102,22 @@
     ].join('\n');
   }
   var __prevKarada={};
-  function loadFg(){ try{ return JSON.parse(localStorage.getItem('v292Dfix333Fg')||'{}'); }catch(e){ return {}; } }
-  function saveFg(o){ try{ localStorage.setItem('v292Dfix333Fg', JSON.stringify(o)); }catch(e){} }
+  /* ★FGISO1（2026-11-26・GPT #127-XY 優先 1・既定 ON・kill: localStorage v292Dfix333FgIsoOff='1' で今までの共通の鍵へ）:
+     回し順の記録（v292Dfix333Fg・v292Dfix333Rot）は端末で 1 つで、物語をまたいで混ざっていた（実測: 231 人・別の物語のターン番号）。
+     → 物語 id ごとに分ける（新しい鍵 v292Dfix333Fg2／Rot2 の中に物語ごとの枠・新しい順に 8 物語まで）。古い共通の記録は読まない・写さない・消さない。
+     Vault で隠した物語（VAULTGATE2.hidden が false 以外）では端末に書かず、このページのメモリだけに持つ（人物名を端末の平文の鍵に残さない）。 */
+  var FGISO={ mem:{}, memRot:{} };
+  function fgIsoOn(){ try{ return localStorage.getItem('v292Dfix333FgIsoOff')!=='1'; }catch(e){ return false; } }
+  function fgSid(){ try{ var m=/[?&]story=([A-Za-z0-9_-]+)/.exec(String(location.search||'')); if(m) return m[1]; }catch(e){} try{ var F=window.__v292Dfix697; var st=F&&typeof F.status==='function'?F.status():null; if(st&&st.storyId) return String(st.storyId); }catch(e2){} return '_'; }
+  function fgHidden(id){ try{ var V=window.__v292DfixVAULTGATE2; if(V&&typeof V.hidden==='function') return V.hidden(id)!==false; }catch(e){ return true; } return false; }
+  function isoRead(key, id, mem){ if(fgHidden(id)) return mem[id]||null; try{ var o=JSON.parse(localStorage.getItem(key)||'null'); return (o&&o.by&&o.by[id])?o.by[id].d:null; }catch(e){ return null; } }
+  function isoWrite(key, id, mem, d){ if(fgHidden(id)){ mem[id]=d; return; } try{ var o=JSON.parse(localStorage.getItem(key)||'null'); if(!o||typeof o!=='object'||!o.by) o={v:2,by:{}}; o.by[id]={d:d,at:Date.now()};
+      var ids=Object.keys(o.by); if(ids.length>8){ ids.sort(function(x,y){ return (o.by[y].at||0)-(o.by[x].at||0); }); ids.slice(8).forEach(function(z){ delete o.by[z]; }); }
+      localStorage.setItem(key, JSON.stringify(o)); }catch(e){} }
+  function loadFg(){ if(fgIsoOn()){ return isoRead('v292Dfix333Fg2', fgSid(), FGISO.mem)||{}; } try{ return JSON.parse(localStorage.getItem('v292Dfix333Fg')||'{}'); }catch(e){ return {}; } }
+  function saveFg(o){ if(fgIsoOn()){ isoWrite('v292Dfix333Fg2', fgSid(), FGISO.mem, o); return; } try{ localStorage.setItem('v292Dfix333Fg', JSON.stringify(o)); }catch(e){} }
+  function rotLoad(){ if(fgIsoOn()){ return isoRead('v292Dfix333Rot2', fgSid(), FGISO.memRot)||{win:[]}; } try{ return JSON.parse(localStorage.getItem('v292Dfix333Rot')||'{"win":[]}'); }catch(e){ return {win:[]}; } }
+  function rotSave(r){ if(fgIsoOn()){ isoWrite('v292Dfix333Rot2', fgSid(), FGISO.memRot, r); return; } try{ localStorage.setItem('v292Dfix333Rot', JSON.stringify(r)); }catch(e){} }
   function isDenseTurn(states){
     // dense=戦闘/救出の「今まさに動いている」状態=能動的な脅威語のみ(拘束/負傷が在るだけではdenseにしない=緊張の休止でローテを殺さない・DeepResearch)。
     try{ var S=getS(); var last=S&&S.turns&&S.turns.length?(S.turns[S.turns.length-1].narrative||''):'';
@@ -148,7 +162,11 @@
     if(!rel4On() || !text || !states || typeof states!=='object') return states;
     var hero=heroName(), all=presentNames(), add=[];
     REL4.names=all.length;
-    all.forEach(function(n){ if(n===hero || Object.prototype.hasOwnProperty.call(states,n)) return; if(nameHit(String(text), n, all)===2) add.push(n); });
+    /* r6（GPT #127-XY の条件）: 足すのは「いまの場面に居ると本文で確かめられる人」だけ ＝ 直近 3 ターンの本文か会話ログの話者に、その人の名前（空白なしの全体・姓・名）が出ている。
+       所在が分からない人・まだ出ていない人・しばらく出ていない人は、名指しでも足さない（同席を勝手に決めない）。足す候補に身体の状態は付けない（karada は空）。 */
+    var recent=''; try{ var S6=getS(), ts=(S6&&S6.turns)||[]; ts.slice(-3).forEach(function(t){ recent+='\n'+String((t&&t.narrative)||'')+'\n'+(Array.isArray(t&&t._convSays)?t._convSays.map(function(c){ return c?String(c.who||''):''; }).join('\n'):''); }); }catch(eR){ recent=''; }
+    function seen6(n){ var full=String(n).replace(/[\s　・]+/g,''); if(full && recent.indexOf(full)>=0) return true; if(recent.indexOf(String(n))>=0) return true; var ps=String(n).split(/[\s　・]+/).filter(Boolean); if(ps.length<2) return false; return ps.some(function(p){ return p.length>=2 ? recent.indexOf(p)>=0 : new RegExp('(^|[^一-鿿々])'+p+'(さん|ちゃん|くん|君|様|は|が|に|を|へ|と|も|の|、|。|\\n|$)').test(recent); }); }
+    all.forEach(function(n){ if(n===hero || Object.prototype.hasOwnProperty.call(states,n)) return; if(nameHit(String(text), n, all)!==2) return; if(!seen6(n)){ REL4.notSeen=(REL4.notSeen||0)+1; return; } add.push(n); });
     if(!add.length) return states;
     var o={}; Object.keys(states).forEach(function(k){ o[k]=states[k]; });
     add.forEach(function(n){ o[n]={restrained:false, suspended:false, freeHands:2, dropped:[], injured:false, posture:'unknown', karada:''}; });
@@ -214,7 +232,7 @@
     return lines.join('\n');
   }
   function logRotation(chosen, names, turnNum){
-    try{ var k='v292Dfix333Rot'; var r=JSON.parse(localStorage.getItem(k)||'{"win":[]}');
+    try{ var r=rotLoad(); if(!r||!Array.isArray(r.win)) r={win:[]};
       r.win.push({t:turnNum, fg:chosen}); if(r.win.length>14) r.win=r.win.slice(-14);
       var streak={}; names.forEach(function(n){ var last=-1; r.win.forEach(function(w,i){ if(w.fg.indexOf(n)>=0) last=i; }); streak[n]=(r.win.length-1)-last; });
       r.streak=streak;
@@ -224,10 +242,10 @@
       r.jain = (sq>0 && names.length>0) ? +((sum*sum)/(names.length*sq)).toFixed(3) : 1;   // 1=完全均等・低い=偏り
       r.maxStreak = Math.max.apply(null, names.map(function(n){ return streak[n]; }).concat([0]));
       r.counts = cnt;
-      localStorage.setItem(k, JSON.stringify(r));
+      rotSave(r);
     }catch(e){}
   }
-  function rotSnapshot(){ try{ var r=JSON.parse(localStorage.getItem('v292Dfix333Rot')||'{}'); return {jain:r.jain, maxStreak:r.maxStreak}; }catch(e){ return {}; } }
+  function rotSnapshot(){ try{ var r=rotLoad()||{}; return {jain:r.jain, maxStreak:r.maxStreak}; }catch(e){ return {}; } }
   var pending=null;
   function getP(){ try{ return window.Planner||(typeof Planner!=='undefined'?Planner:null); }catch(e){ return null; } }
   function getApi(){ try{ return window.Api||(typeof Api!=='undefined'?Api:null); }catch(e){ return null; } }
@@ -402,6 +420,6 @@
       return {total:arr.length, byScene:by};
     }catch(e){ return {err:e.message}; }
   }
-  window.__v292Dfix333api={ nameHit:nameHit, rel4Aug:rel4Aug, rel4:function(){ return { on: rel4On(), added: REL4.added, last: REL4.last, calls: REL4.calls, noText: REL4.noText, names: REL4.names }; }, compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, analyzeEnsemble:analyzeEnsemble, classifyScene:classifyScene, qualStats:qualStats, mode:mode, _pending:function(){return pending;}, cp1Hook:'fg333-r6' };   /* ★bundle43-a r2 (GPT #127-LA §3): 受け口 fgStates333 を持つ版の印（CP1 はこれが無い fix333 と組み合わさると CP1 全体を OFF） */
+  window.__v292Dfix333api={ nameHit:nameHit, rel4Aug:rel4Aug, rel4:function(){ return { on: rel4On(), added: REL4.added, last: REL4.last, calls: REL4.calls, noText: REL4.noText, names: REL4.names, notSeen: REL4.notSeen||0 }; }, fgIso:function(){ return { on: fgIsoOn(), sid: fgSid()==='_'?'_':'(id)', hidden: fgHidden(fgSid()) }; }, compileActorStates:compileActorStates, validateAll:validateAll, authorityBlock:authorityBlock, foregroundBlock:foregroundBlock, selectForeground:selectForeground, analyzeEnsemble:analyzeEnsemble, classifyScene:classifyScene, qualStats:qualStats, mode:mode, _pending:function(){return pending;}, cp1Hook:'fg333-r6' };   /* ★bundle43-a r2 (GPT #127-LA §3): 受け口 fgStates333 を持つ版の印（CP1 はこれが無い fix333 と組み合わさると CP1 全体を OFF） */
   try{ console.log(TAG,'loaded (v2/fix333h); mode=',mode()); }catch(e){}
 })();

@@ -543,6 +543,7 @@
      人物の記録は、覚え書きの節を作るとき（section）に受け取ったものを使う＝このページで一度も覚え書きを作っていなければ出さない。 */
   var FGWI = null, FG_MAX = 160;
   function fgOn() { return lsg('v292DfixEXP1FgOff') !== '1'; }   /* 20261124-r13on: 全員 既定 ON（長期記憶が ON の人）。実 AI 2 対 2: 正答 OFF 3/8 → ON 7/8・経験の作り話 OFF 5 → ON 1。GPT #127-XK (d) */
+  function factOn() { return lsg('v292DfixEXP1FactOff') !== '1' && lsg('v292DfixEXP1FactOn') === '1'; }
   function fgLine(names) {
     try {
       if (!fgOn() || !Array.isArray(names) || !names.length || !Array.isArray(FGWI) || !on()) return '';
@@ -554,7 +555,7 @@
           .sort(function (a, b) { return (+a.t || 0) - (+b.t || 0); });
         if (!xs.length) return;
         var seg = String(n) + '＝' + xs.map(function (x) {
-          return 'T' + ((+x.t || 0) + 1) + ' ' + String(x.s).replace(/[\r\n【】]/g, ' ') + (x.k === 'taught' ? '（習得未確認）' : (x.k === 'first' ? '（初めて成功）' : '（身についた）'));
+          return 'T' + ((+x.t || 0) + 1) + ' ' + String(x.s).replace(/[\r\n【】]/g, ' ') + (x.k === 'taught' ? (factOn() ? '。技能の習得は未確認' : '（習得未確認）') : (x.k === 'first' ? '（初めて成功）' : '（身についた）'));   /* ★FACT1（GPT #127-XY 案 A・既定 OFF: localStorage v292DfixEXP1FactOn='1'・kill v292DfixEXP1FactOff='1'）: 教わった事実と、技能の習得を別の文に */
         }).join('／');
         if (used + seg.length > FG_MAX) return;
         parts.push(seg); used += seg.length;
