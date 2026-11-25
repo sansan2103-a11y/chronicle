@@ -439,9 +439,24 @@
     }
     return !!(o.cloud === true);
   }
+  /* ★PERF1（2026-11-26・既定 OFF: localStorage v292DfixPERF1On='1'・kill v292DfixPERF1Off='1'）:
+     実測（Owner PC・保存 約 466 万字・物語の枠 57・chr6_slots_meta 約 25 万字）: 物語を開くと約 0.3 秒の処理が 0.4 秒おきに約 20 本（約 8〜10 秒）、
+     HOME は 8 秒の処理が 1 本。Local の CPU の記録で、provenLocalOnly が「1 行ごとに chr6_slots_meta 全体・revs・その物語の本文を JSON.parse」しており、
+     一覧の全行を見る側（ISO1 の heldSummary・HOME の mayShowRow ほか）が起動中に何度も呼ぶ（行数の 2 乗）と分かった。
+     直し: 読んだ文字列が前回と完全に同じなら、前回の parse の結果（本文は「クラウドの印があるか」の真偽だけ）を使う。文字列が 1 字でも違えば今までどおり parse し直す。
+     判定の中身・順番・fail-closed は変えない。返す行は読むだけ（書き換えない）。 */
+  var PERF1 = { hit: 0, miss: 0, c: {} };
+  function perf1On() { return lsg('v292DfixPERF1Off') !== '1' && lsg('v292DfixPERF1On') === '1'; }
+  /* fn(raw) の結果を、key と raw（完全一致）で覚える。fn が投げたら覚えずに投げ直す */
+  function perf1(key, raw, fn) {
+    if (!perf1On()) return fn(raw);
+    var e = PERF1.c[key];
+    if (e && e.raw === raw) { PERF1.hit++; return e.v; }
+    var v = fn(raw); PERF1.miss++; PERF1.c[key] = { raw: raw, v: v }; return v;
+  }
   function metaRow(id) {
     var m = null;
-    try { m = JSON.parse(lsg('chr6_slots_meta') || '[]'); } catch (e) { return undefined; }
+    try { m = perf1('meta', lsg('chr6_slots_meta') || '[]', function (r) { return JSON.parse(r); }); } catch (e) { return undefined; }
     if (Object.prototype.toString.call(m) !== '[object Array]') return undefined;
     for (var i = 0; i < m.length; i++) if (m[i] && String(m[i].id) === String(id)) return m[i];
     return null;                                   /* 行が無い（undefined = 読めなかった） */
@@ -454,7 +469,7 @@
       var revs = null;
       var raw = lsg(REVS_KEY);
       if (raw != null) {
-        try { revs = JSON.parse(raw); } catch (e) { return false; }     /* 壊れていたら不成立 */
+        try { revs = perf1('revs', raw, function (r) { return JSON.parse(r); }); } catch (e) { return false; }     /* 壊れていたら不成立 */
         if (!revs || typeof revs !== 'object') return false;
         if (Object.prototype.hasOwnProperty.call(revs, s)) return false;
       }
@@ -474,9 +489,9 @@
       /* P5 */
       var bodyRaw = lsg(bodyKeyOf(s));
       if (bodyRaw != null) {
-        var b = null;
-        try { b = JSON.parse(bodyRaw); } catch (e) { return false; }
-        if (b && typeof b === 'object' && hasCloudField(b)) return false;
+        var bc = false;
+        try { bc = perf1('body:' + s, bodyRaw, function (r) { var b = JSON.parse(r); return !!(b && typeof b === 'object' && hasCloudField(b)); }); } catch (e) { return false; }
+        if (bc) return false;
       }
       /* P3 は呼び出し側（一覧行の x.cloud）で判定する。行そのものを渡せる口も出す。 */
       return true;
@@ -2158,7 +2173,7 @@
                ns: { active: NS.active, epoch: NS.epoch, confirmed: (NS.at > 0), probed: NS.probed,
                      seenManifest: NS.seenManifest, need: NS.need, stale: NS.stale, lazyArmed: NS.lazyArmed },
                confirm: { stopped: confirmStop, stories: Object.keys(confirmDone).length },
-               bo1: { off: bo1Off(), n: BO.n, pending: BO.pending },   /* ★BOOTOFF1 観測（読み取りのみ） */
+               bo1: { off: bo1Off(), n: BO.n, pending: BO.pending }, perf1: { on: perf1On(), hit: PERF1.hit, miss: PERF1.miss },   /* ★BOOTOFF1 観測（読み取りのみ） */
                stats: stats };
     }
   };

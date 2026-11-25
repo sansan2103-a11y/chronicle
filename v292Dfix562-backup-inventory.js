@@ -32,7 +32,20 @@
 
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
   function off(){ return lsg('v292Dfix562Off') === '1'; }
-  function keys(){ try { return Object.keys(localStorage); } catch(e){ return []; } }
+  /* ★PERF1（2026-11-26・既定 OFF: localStorage v292DfixPERF1On='1'・kill v292DfixPERF1Off='1'）: 鍵 1 個を分類するたびに Object.keys(localStorage) を取り直していた
+     （HOME の容量の計算で 鍵の数 × 鍵の数。Local の CPU の記録で約 1 秒・鍵 1,400 個）。同じ 1 回の同期処理の中で、鍵の数が変わっていなければ前の一覧を使う。
+     その同期処理が終われば捨てる（microtask）。返すのは毎回写し（呼び手が並べ替えても影響しない）。 */
+  var KC = { n: -1, list: null, armed: false, hit: 0 };
+  function keys(){
+    try {
+      if (lsg('v292DfixPERF1Off') === '1' || lsg('v292DfixPERF1On') !== '1') return Object.keys(localStorage);
+      var n = localStorage.length;
+      if (KC.list && KC.n === n) { KC.hit++; return KC.list.slice(); }
+      KC.list = Object.keys(localStorage); KC.n = n;
+      if (!KC.armed) { KC.armed = true; Promise.resolve().then(function(){ KC.list = null; KC.n = -1; KC.armed = false; }); }
+      return KC.list.slice();
+    } catch(e){ return []; }
+  }
   function bytes(k){ var v = lsg(k); return v == null ? 0 : v.length; }
   /* ★KEY1 (GPT #127-SG Q10): キーの持ち主を完全一致で決める共通判定（v292DfixKEY1-story-key.js）。
      居ない・kill（v292DfixKEY1Off='1'）なら null ＝ 下の各所は今日の部分一致の式をそのまま使う。 */

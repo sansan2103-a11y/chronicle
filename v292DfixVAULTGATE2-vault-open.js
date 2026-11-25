@@ -144,7 +144,22 @@
     state = function (id) { try { return kNov() ? (f889(id).h ? 'hidden' : 'visible') : 'hidden'; } catch (e) { return 'hidden'; } };
     authorize = function (id) { try { if (!kNov()) return Promise.resolve('hidden'); var a = f889(id); return Promise.resolve(a.h ? (a.why ? 'hidden' : 'open') : 'visible'); } catch (e) { return Promise.resolve('unknown'); } };
   }
+  /* ★EAGER1（2026-11-26・既定 OFF: localStorage v292DfixVAULTGATE2EagerOn='1'・kill v292DfixVAULTGATE2EagerOff='1'）:
+     実測（outputs/quality/vaultwait）: vault2status は「誰かが hidden() を聞いたとき」に初めて出る。物語を開いた後、最初に聞かれるのが約 10.5 秒目で、
+     それまで自動アイコン・経験の記憶・書きかけの文の復帰が「まだ分からない＝隠してある扱い」で待つ。往復そのものは約 0.1 秒。
+     直し: 読み込み後、アカウントの答えと CopyGate の答え（vault）が揃ったら 1 回だけ先に問い合わせる（読むだけ・答えの使い方と 15 秒の期限は不変）。
+     Vault の無いアカウント（novault）では何もしない。25 秒で打ち切り。 */
+  var EAGER = { on: false, tries: 0, done: null };
+  try {
+    EAGER.on = !KILLED && root.localStorage.getItem('v292DfixVAULTGATE2EagerOff') !== '1' && root.localStorage.getItem('v292DfixVAULTGATE2EagerOn') === '1';
+    if (EAGER.on) (function eagerTick() { try {
+      if (EAGER.done) return; if (++EAGER.tries > 100) { EAGER.done = 'TIMEOUT'; return; }
+      var c = cg(); if (c.e === 'novault') { EAGER.done = 'NOVAULT'; return; }
+      if (c.e === 'vault' && acct()) { if (fresh() || V2.inflight) { EAGER.done = 'ALREADY'; return; } probe(); if (V2.inflight) { EAGER.done = 'PROBED'; stats.eager = (stats.eager || 0) + 1; return; } }
+      setTimeout(eagerTick, 250);
+    } catch (eE) { EAGER.done = 'THREW'; } })();
+  } catch (eE0) {}
   root.__v292DfixVaultHidden = hidden;
   root.__v292DfixVAULTGATE2 = { ver: VER, killed: KILLED, hidden: hidden, openWhy: openWhy, state: state, authorize: function (id) { return authorize(id); },
-    status: function () { return { ver: VER, cg: cg().e, v2: V2.st ? { hasVault: V2.st.hasVault, unlocked: V2.st.unlocked, n: V2.st.ids ? V2.st.ids.length : null, complete: V2.st.complete, age: Date.now() - V2.at } : null, stats: JSON.parse(JSON.stringify(stats)) }; } };
+    status: function () { return { ver: VER, eager: { on: EAGER.on, tries: EAGER.tries, done: EAGER.done }, cg: cg().e, v2: V2.st ? { hasVault: V2.st.hasVault, unlocked: V2.st.unlocked, n: V2.st.ids ? V2.st.ids.length : null, complete: V2.st.complete, age: Date.now() - V2.at } : null, stats: JSON.parse(JSON.stringify(stats)) }; } };
 })();
