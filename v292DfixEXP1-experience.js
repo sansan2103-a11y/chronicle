@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261126-r16d';
+  var VER = 'exp1-20261126-r16e';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
@@ -199,7 +199,7 @@
      ・first だけ、本人の台詞で決める道を足す（selfFirst）: そのターンの会話のタグがその人で、台詞の頭（最初の … 。？ 、 までの部分）が できた・うまくいった・成功 で、
        打ち消し・言い切らない語（HEDGE）が無く、本文でその台詞の直前か直後の文がその人を主語にしていて、句がそのターンの本文（入力か地の文）にある。 */
   function parseT(t) { if (typeof t === 'number') return Math.floor(t) === t ? t : NaN; var m = /^\s*(?:T|Turn\s*)?(\d{1,4})\s*$/i.exec(String(t == null ? '' : t)); return m ? +m[1] : NaN; }
-  function r16On() { return lsg('v292DfixEXP1InputTeachOff') !== '1' && lsg('v292DfixEXP1InputTeachOn') === '1'; }
+  function r16On() { return lsg('v292DfixEXP1InputTeachOff') !== '1'; }   /* 20261126-exp1r16on: GPT #127-XV の条件（本文で実際に教わった・試みだけは採らない）を入れ、実 AI 3 本（R16・R16c・R16d）で誤った記憶 0・フィルム＝律／レンズ＝店主が残る → 既定 ON */
   var R16_END = /(教える|教えてあげる|教えてやる|教えてみせる|手ほどきする|手ほどきをする|教えた|教えてあげた|教えてやった|手ほどきした)$/;
   var R16_REFUSE = /教え(なかっ|られな|ようとしな|ずに|るのをやめ|る気はな|る暇|そびれ|損ね)|断っ|断られ|拒ん|首を横に振|中断|携帯が(震|鳴)|スマホが(震|鳴)|着信|電話に出|遮っ|遮られ|席を外|その場を離れ|立ち去っ|出て行っ|出ていっ|電話が鳴|呼び出され|後にし|あとにし|また今度|やめておく|やめた/;
   /* r16d（実 AI 試験_R16c T8 の実データ: 入力「律は紬に、露出の合わせ方を教えようとカメラを構えるが、そのとき携帯が鳴り…席を外す」。要約が「教わった」を返せば a2 の道が採る）:
@@ -384,7 +384,7 @@
   /* ★EXP1 r14（2026-11-24・既定 OFF・鍵 v292DfixEXP1TaughtFromOn・kill v292DfixEXP1TaughtFromOff）: 教えた側の taught を教わった側へ回すとき（TAUGHT_TO）、
      句から「紬に」「を教えた」を外すだけで、教えた人の名前が付かなかった（実機 2 本: T4〜T6 の行に「律から」が無く、次の作り直しまで誰から教わったかが渡らない）。 */
   function r14On() { return lsg('v292DfixEXP1TaughtFromOff') !== '1' && lsg('v292DfixEXP1TaughtFromOn') === '1'; }
-  function taughtPhrase(s, to) { var f = forms(to), t = cleanS(s); f.forEach(function (z) { t = t.replace(new RegExp('^' + esc(z) + '(さん|ちゃん|くん|君)?に[、，,]?'), ''); }); return t.replace(/(を|の)?(教えた|教える|教えてあげた|教えてやった|手ほどきした|見せた)$/, '').trim(); }
+  function taughtPhrase(s, to) { var f = forms(to), t = cleanS(s); f.forEach(function (z) { t = t.replace(new RegExp('^' + esc(z) + '(さん|ちゃん|くん|君)?に[、，,]?'), ''); }); return t.replace(/(を|の)?(教えた|教える|教え始めた|教えはじめた|教えていた|教えている|教えてみせた|教えてあげた|教えてやった|手ほどきした|手ほどきを始めた|説明した|説明し始めた|実演した|実演してみせた|やってみせた|見せた)$/, '').trim(); }
   /* ---- (3) 引き継ぎ（★r2: 段階の優先で入れ替える・同じ話題は 1 件・戻すのは経験を持つ人だけ・30 件の内側） ----
      1 人の枠: 主の枠 3 件（learned > first > taught の順に大事）と、failed の別枠 1 件。
      同じ件: 句が同じ／片方が片方を含む／先頭の漢字の語（話題）が同じ → 重ねない。段階が上がるか同じなら、新しい方の段階とターンに置き換える（下がる知らせは無視）。
@@ -397,13 +397,13 @@
          → 頭の「登録名＋から／に／と／の」と末尾の「を教わった／を教えた」を外した中身で比べる。
      (c) 逆向きの教え（蓮が紬に教えた）も (a) で教わった側（紬）の経験になる。 */
   function r15On() { return lsg('v292DfixEXP1TeachRouteOff') !== '1'; }   /* 20261125-exp1r15on: 実 AI 1 本（同じ台本）で 教えた側に残らず・逆向きも回り・潰れ 0・4 問正答 → 全員 既定 ON */
-  var TEACH_END = /(教えた|教える|教えてあげた|教えてやった|手ほどきした|見せた)$/;
+  var TEACH_END = /(教えた|教える|教え始めた|教えはじめた|教えていた|教えている|教えてみせた|教えてあげた|教えてやった|手ほどきした|手ほどきを始めた|説明した|説明し始めた|実演した|実演してみせた|やってみせた|見せた)$/;
   function core15(s) {
     var n = norm(s), fs = [];
     REGN.forEach(function (r) { forms(r).forEach(function (z) { z = norm(z); if (z && fs.indexOf(z) < 0) fs.push(z); }); });
     fs.sort(function (a, b) { return b.length - a.length; });
     for (var i = 0; i < fs.length; i++) { var re = new RegExp('^' + esc(fs[i]) + '(さん|ちゃん|くん|君)?(から|に|と|の)'); if (re.test(n)) { n = n.replace(re, ''); break; } }
-    n = n.replace(/(を|の)?(教わった|教わる|習った|教えてもらった|見せてもらった|見せられた|教えられた|手ほどきを受けた|教えた|教える|教えてあげた|教えてやった|手ほどきした|見せた)$/, '');
+    n = n.replace(/(を|の)?(教わった|教わる|習った|教えてもらった|見せてもらった|見せられた|教えられた|手ほどきを受けた|教えた|教える|教え始めた|教えはじめた|教えていた|教えている|教えてみせた|教えてあげた|教えてやった|手ほどきした|手ほどきを始めた|説明した|説明し始めた|実演した|実演してみせた|やってみせた|見せた)$/, '');
     return n;
   }
   /* r15b（GPT #127-XP の回帰条件）: 句の頭の登録名（教え手・相手）が両方にあって別の人なら、中身が同じでも別の件（紬から教わった結び方／透から教わった結び方） */
