@@ -908,7 +908,7 @@
      最初は前回選んだもの（初めてはダーク＝選ばないときの今までの絵柄）。選んだ値は runtime.artPreset として fix819 へ渡り、新しい物語の cfg.artPreset になる。 */
   var ART_LABEL = { beautiful: 'デフォルト', cool: 'クール', dark: 'ダーク' };
   var ART_NOTE = { beautiful: 'やわらかく上品', cool: 'くっきり都会的', dark: '暗く重い雰囲気' };
-  function artOn(){ try { return localStorage.getItem('v292DfixSTARTPICK1ArtOff') !== '1' && localStorage.getItem('v292DfixSTARTPICK1ArtOn') === '1'; } catch(e){ return false; } }
+  function artOn(){ try { return localStorage.getItem('v292DfixSTARTPICK1ArtOff') !== '1'; } catch(e){ return false; } }   /* 2026-11-26: 既定 ON（実機: cfg 'cool'/'beautiful'・サーバーの絵の記録 style_source 'cfg' を確認）。kill = v292DfixSTARTPICK1ArtOff */
   function pickNames(){
     var out = [], d = S.draft || {}, c = d.cast || {};
     var hn = trim(c.hero && c.hero.name); if (hn) out.push({ name: hn, hero: true });
