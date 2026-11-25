@@ -157,7 +157,7 @@
      （紬の経験の行も送られず、「誰に教わったの」が誤答）。原因: 前面の候補は「身体・負傷の状態の記録がある人」だけ（compileActorStates）。状態の記録が無い人は候補にすらならない。
      直し: 入力で話しかけた相手（nameHit が 2）が登録人物で、候補に居なければ、状態なしの候補として足す。足した後に、今までどおりの不在の絞り込み
      （CP1・NPRES・SCENE1 の fgFilter）を通すので、退出・不在の人は落ちる。人数の上限は selectForeground のまま。 */
-  function rel4On(){ try{ return rel2On() && localStorage.getItem('v292Dfix333Rel4Off')!=='1' && localStorage.getItem('v292Dfix333Rel4On')==='1'; }catch(e){ return false; } }
+  function rel4On(){ try{ return rel2On() && localStorage.getItem('v292Dfix333Rel4Off')!=='1'; }catch(e){ return false; } }   /* 20261126-rel4on: GPT #127-XY の 4 条件を Local で確認・鍵 ON の実 AI 3 本（R17・REL5・FACT1）で人数は 2 まで・不自然な反応の強要なし → 既定 ON */
   var REL4 = { added: 0, last: null, calls: 0, noText: 0, names: 0 };
   function rel4Aug(states, text){ try{
     try{ REL4.calls++; if(!text) REL4.noText++; }catch(eD){}
