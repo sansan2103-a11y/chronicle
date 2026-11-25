@@ -485,6 +485,14 @@ var VSAFE1 = (function () {
     X.busy = true; X.bDone = true; var a0 = acct();
     var so = X.bCounted ? soOf(id) : soSet(id, function (s) { s.bt = (s.bt || 0) + 1; }); X.bCounted = true;   /* tries are counted per page load */
     if (so.bt > CAP.bTries) { soSet(id, function (s) { s.p = 'stop'; s.why = 'B_TRIES'; }); return finish('B_TRIES'); }
+    /* ★SENTFIX1（2026-11-25・実機 試験_PICK2 M1: 10 人ぶんを作っている途中でページを読み込み直すと、そのとき応答待ちだった 1 人が 'SENT' のまま残り、絵が付かなかった）
+       既定 OFF: localStorage v292DfixSTARTICONSentRetryOn='1'。前のページ読み込みから残った 'SENT'（まだ 1 回もやり直していない人）を、93-j の IN_FLIGHT と同じ扱いにする:
+       送ってから 125 秒（Worker の札 LEASE_MS 120 秒より後）まで待つ → まずサーバーに絵があるか読む（あれば FILLED・何も送らない）→ 無ければ 1 回だけ送り直す（r[h]=1・2 回目は無い）。
+       Worker は、絵が既にあれば EXISTS、別の作成が進行中なら IN_FLIGHT を返し、どちらも作らない・課金しない。 */
+    if (!X.sentChecked) { X.sentChecked = true;
+      if (lsGet('v292DfixSTARTICONSentRetryOn') === '1' && retryOn()) {
+        var nLeft = 0; soSet(id, function (s) { Object.keys(s.b || {}).forEach(function (h) { if (s.b[h] === 'SENT' && !(s.r && s.r[h])) { s.b[h] = 'IN_FLIGHT'; s.ra = s.ra || {}; s.ra[h] = Math.max(Date.now() + 5000, (((s.st || {})[h]) || 0) + 125000); nLeft++; } }); });
+        if (nLeft) { stats.sentLeft = (stats.sentLeft || 0) + nLeft; note({ kind: 'SENT_LEFT', n: nLeft }); so = soOf(id); } } }
     /* ★93-j: a character whose first send got IN_FLIGHT and was not retried yet (the page closed while waiting) is still to do — its one retry */
     var todo = chars().filter(function (c) { var h = hk(c.id); var b = so.b[h], r = so.r || {}; return so.t.indexOf(h) >= 0 && (so.a[h] === 'set' || so.a[h] === 'conf') && (!b || (b === 'IN_FLIGHT' && !r[h] && retryOn())); });
     var i = 0, transient = 0, serial = 0;   /* ★ICONFIX2 c: serial = per-character failures in a row */
@@ -499,7 +507,7 @@ var VSAFE1 = (function () {
     var endB2 = function (why, hold) { if (!fx2cOn() || why === 'RECHECK') return endB(why, hold); reconcileUnknown(id, a0, function () { endB(why, hold); }); };
     var send = function (c, h, again) { vgAuth(id, function () { send0(c, h, again); }, function (w) { stats.vgAuthStop = (stats.vgAuthStop || 0) + 1; note({ kind: 'VG_AUTH_STOP', why: w }); finish('VAULT_AUTH'); }); };   /* ★VAULTSEND1 */
     var send0 = function (c, h, again) {   /* the one billable request for this character (again = the ONE retry after IN_FLIGHT) */
-      soSet(id, function (s) { if (again) { s.r = s.r || {}; s.r[h] = 1; } s.b[h] = 'SENT'; });
+      soSet(id, function (s) { if (again) { s.r = s.r || {}; s.r[h] = 1; } s.b[h] = 'SENT'; s.st = s.st || {}; s.st[h] = Date.now(); });   /* st = 送った時刻（★SENTFIX1） */
       if (X.promo && !again) promoSent(id);   /* ★LIM1b: 昇格の絵も物語の枠に数える（送る前に） */   /* written BEFORE the call: a page closed mid-call never resends (and never retries twice) */
       stats.ef++; if (again) stats.ifRetry++; if (inFlight()) stats.sentWhileInFlight++; note({ kind: again ? 'EF_RETRY' : 'EF', hero: c.hero });
       var ti0 = Date.now();
