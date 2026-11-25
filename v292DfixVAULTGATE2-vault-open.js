@@ -151,7 +151,7 @@
      Vault の無いアカウント（novault）では何もしない。25 秒で打ち切り。 */
   var EAGER = { on: false, tries: 0, done: null };
   try {
-    EAGER.on = !KILLED && root.localStorage.getItem('v292DfixVAULTGATE2EagerOff') !== '1' && root.localStorage.getItem('v292DfixVAULTGATE2EagerOn') === '1';
+    EAGER.on = !KILLED && root.localStorage.getItem('v292DfixVAULTGATE2EagerOff') !== '1';   /* 20261126-perf1on: 実機で PROBED・表示不変 → 既定 ON */
     if (EAGER.on) (function eagerTick() { try {
       if (EAGER.done) return; if (++EAGER.tries > 100) { EAGER.done = 'TIMEOUT'; return; }
       var c = cg(); if (c.e === 'novault') { EAGER.done = 'NOVAULT'; return; }

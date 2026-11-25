@@ -295,9 +295,9 @@
        あの 6 本は読み込み時に window.fetch を掴むので、この位置が
        「絵の送信に物語の印を必ず添える」（D-C4）の成立条件そのものである。
      ★kill = localStorage['v292Dfix889Off']='1' は **UI だけ**を消す。絞り込みと扉は止まらない。 -->
-<script src="v292Dfix889-secret-vault.js?cb=20261126-perf1"></script>
+<script src="v292Dfix889-secret-vault.js?cb=20261126-perf1on"></script>
 <!-- ★VAULTGATE2: 「隠した物語か・解錠中で開いてよいか」の 1 か所（vault2 と fix889）。kill = localStorage v292DfixVAULTGATE2Off=1 -->
-<script src="v292DfixVAULTGATE2-vault-open.js?cb=20261126-perf1"></script>
+<script src="v292DfixVAULTGATE2-vault-open.js?cb=20261126-perf1on"></script>
 <script src="v292DfixVAULTUNI1-vault-unify.js?cb=20261123-vaultuni1on"></script><!-- ★VAULTUNI1（既定 ON・kill v292DfixVAULTUNI1Off=1）: v1 だけだった 8 か所の Vault 判定を VAULTGATE2 にそろえる -->
 <!-- ★av2 (GPT 904 C1): Asset v2 client data plane. save core (fix697/fix705/fix743) が呼ぶ純関数 + registrar。kill = localStorage v292Dav2Off=1 -->
 <script src="v292Dav2-data.js?cb=20261125-startpick1r3"></script>
@@ -359,7 +359,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261126-perf1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261126-perf1on';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -4298,7 +4298,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
      それらは new Response で応答を作り直すので、後から読み込むと「出口ガード後の本文」しか見えず
      モデルの生出力が取れない。本文は1文字も書き換えない。OFF=v292Dfix553Off -->
 <script src="v292Dfix553-punct-probe.js?cb=20260913-q119b5"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=20261126-perf1"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=20261126-perf1on"></script>
 <script src="v292Dfix564-snapshot.js?cb=20261112-key1"></script>
 <!-- v292Dfix721(STEP4F): SAFE RESTORE ENGINE。fix291のimportAllを委譲で受け、
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。

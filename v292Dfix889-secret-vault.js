@@ -446,7 +446,7 @@
      直し: 読んだ文字列が前回と完全に同じなら、前回の parse の結果（本文は「クラウドの印があるか」の真偽だけ）を使う。文字列が 1 字でも違えば今までどおり parse し直す。
      判定の中身・順番・fail-closed は変えない。返す行は読むだけ（書き換えない）。 */
   var PERF1 = { hit: 0, miss: 0, c: {} };
-  function perf1On() { return lsg('v292DfixPERF1Off') !== '1' && lsg('v292DfixPERF1On') === '1'; }
+  function perf1On() { return lsg('v292DfixPERF1Off') !== '1'; }   /* 20261126-perf1on: 実機（Owner PC）で件数・表示が不変、物語 A の重い処理 6.46 秒 → 0.26 秒 → 既定 ON */
   /* fn(raw) の結果を、key と raw（完全一致）で覚える。fn が投げたら覚えずに投げ直す */
   function perf1(key, raw, fn) {
     if (!perf1On()) return fn(raw);

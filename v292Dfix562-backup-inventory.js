@@ -38,7 +38,7 @@
   var KC = { n: -1, list: null, armed: false, hit: 0 };
   function keys(){
     try {
-      if (lsg('v292DfixPERF1Off') === '1' || lsg('v292DfixPERF1On') !== '1') return Object.keys(localStorage);
+      if (lsg('v292DfixPERF1Off') === '1') return Object.keys(localStorage);   /* 20261126-perf1on: 既定 ON */
       var n = localStorage.length;
       if (KC.list && KC.n === n) { KC.hit++; return KC.list.slice(); }
       KC.list = Object.keys(localStorage); KC.n = n;

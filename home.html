@@ -264,7 +264,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261126-perf1';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261126-perf1on';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -305,7 +305,7 @@
 <script src="v292Dfix654-storage-trap.js?cb=v292Dfix731"></script>
 <!-- v292Dfix893: Pages origin（*.pages.dev）でだけ動く cookie session shim。github.io では何もしない。 -->
 <script src="v292Dfix893-account-cookie-shim.js?cb=20261113-lim1"></script>
-<script>try { if (localStorage.getItem('v292DfixVAULTUNI1Off') !== '1') document.write('<script src="v292DfixVAULTGATE2-vault-open.js?cb=20261126-perf1"><\/script>'); } catch (e) {}</script><!-- ★VAULTUNI1: HOME の VAULTGATE2 は kill の端末では読まない（kill = 土台と同じ HOME） --><script src="v292DfixVAULTUNI1-vault-unify.js?cb=20261123-vaultuni1on"></script><!-- ★VAULTUNI1: HOME の削除・片づけ（DL2・GHOST1・HOLD2・STORE1b）も VAULTGATE2 の共通判定で決める -->
+<script>try { if (localStorage.getItem('v292DfixVAULTUNI1Off') !== '1') document.write('<script src="v292DfixVAULTGATE2-vault-open.js?cb=20261126-perf1on"><\/script>'); } catch (e) {}</script><!-- ★VAULTUNI1: HOME の VAULTGATE2 は kill の端末では読まない（kill = 土台と同じ HOME） --><script src="v292DfixVAULTUNI1-vault-unify.js?cb=20261123-vaultuni1on"></script><!-- ★VAULTUNI1: HOME の削除・片づけ（DL2・GHOST1・HOLD2・STORE1b）も VAULTGATE2 の共通判定で決める -->
 <!-- ★BAV2 (GPT #127-DV/#127-EE): beta を最初から Asset v2 で始める（client 側は使い勝手だけ。安全は Worker。Worker が features.assetV2Beta を返さない間は何もしない） -->
 <script src="v292Dbav2-beta.js?cb=20261125-draft1on"></script>
 <script src="v292DfixS1-entry-notice.js?cb=20261019-bundle31-a"></script><!-- v292DfixS1: github.io でだけ正式な入口の案内（自動転送なし）。OFF=localStorage v292DfixS1Off=1 -->
@@ -327,7 +327,7 @@
 <script src="v292Dfix569-gc-shadow.js?cb=20261116-discard2"></script>
 <!-- ★fix660(A): DeleteGateway。物理削除の唯一の実行者（fix569 が捕捉済みの native を借りる） -->
 <script src="v292Dfix660-delete-gateway.js?cb=v292Dfix680"></script>
-<script src="v292Dfix562-backup-inventory.js?cb=20261126-perf1"></script>
+<script src="v292Dfix562-backup-inventory.js?cb=20261126-perf1on"></script>
 <script src="v292Dfix564-snapshot.js?cb=20261112-key1"></script>
 <!-- v292Dfix721(STEP4F): SAFE RESTORE ENGINE。fix291のimportAllを委譲で受け、
      NON-DESTRUCTIVE MERGE + default-deny + durable journal + boot rollbackで復元する。
@@ -428,7 +428,7 @@
 <script src="v292Dfix823-scenario-seed-adapter.js?cb=20261111-seedhero1"></script>
 <!-- ★★sp18 v292Dfix889 SECRET_STORY_VAULT（v7.2）: HOME の可視性 authority。
      ★下の inline script より **前**（あちらは parse 時に render() を呼ぶ）。 -->
-<script src="v292Dfix889-secret-vault.js?cb=20261126-perf1"></script>
+<script src="v292Dfix889-secret-vault.js?cb=20261126-perf1on"></script>
 <script src="v292DfixGHOST1-legacy-slot-ghost.js?cb=20261123-vaultuni1off"></script><!-- GHOST1: 旧固定スロット(スロット A/B/C)の本文なし・クラウドなしの空行だけを一覧から外す。kill v292DfixGHOST1Off=1 -->
 <script>
 (function(){
