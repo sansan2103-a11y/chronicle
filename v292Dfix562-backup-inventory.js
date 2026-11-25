@@ -42,7 +42,7 @@
       var n = localStorage.length;
       if (KC.list && KC.n === n) { KC.hit++; return KC.list.slice(); }
       KC.list = Object.keys(localStorage); KC.n = n;
-      if (!KC.armed) { KC.armed = true; Promise.resolve().then(function(){ KC.list = null; KC.n = -1; KC.armed = false; }); }
+      if (!KC.armed) { KC.armed = true; Promise.resolve().then(function(){ KC.list = null; KC.n = -1; KC.armed = false; KC.live = null; KC.liveOf = null; }); }
       return KC.list.slice();
     } catch(e){ return []; }
   }
@@ -67,9 +67,18 @@
 
   /* ---- スロット ------------------------------------------------------- */
   var SLOT_RE = /^chr6_slot_([A-Za-z0-9]+)$/;
+  /* ★PERF1b（2026-11-26・既定 OFF: localStorage v292DfixPERF1bOn='1'・kill v292DfixPERF1bOff='1'。PERF1 が止まっていれば働かない）:
+     実機（Owner PC・2,629 鍵）: fix660 の usage() が 1 回 1.83 秒・status() も 1.82 秒（HOME の約 4.6 秒の大半）。usage は鍵 1 個ごとに classifyKey を呼び、
+     classifyKey は毎回 liveSlots()（全部の鍵に正規表現）を作り直す＝鍵の数の 2 乗（liveSlots 1 回 0.7 ms × 2,629）。
+     直し: keys() の使い回しが効いている間（同じ 1 回の同期処理・鍵の数が同じ）は、liveSlots の結果も使い回す。返すのは写し。 */
   function liveSlots(){
+    var ks = keys();
+    try { if (lsg('v292DfixPERF1bOff') !== '1' && lsg('v292DfixPERF1bOn') === '1' && KC.list) {
+      if (KC.live && KC.liveOf === KC.list) { KC.liveHit = (KC.liveHit || 0) + 1; return KC.live.slice(); }
+      var o2 = []; KC.list.forEach(function(k){ var m = k.match(SLOT_RE); if (m) o2.push(m[1]); });
+      KC.live = o2; KC.liveOf = KC.list; return o2.slice(); } } catch(eL){}
     var out = [];
-    keys().forEach(function(k){ var m = k.match(SLOT_RE); if (m) out.push(m[1]); });
+    ks.forEach(function(k){ var m = k.match(SLOT_RE); if (m) out.push(m[1]); });
     return out;
   }
 
