@@ -72,6 +72,7 @@
   function d4() { return ls('v292DfixNPRESd4Off') !== '1'; }   /* ★d4 kill（その場で効く） */
   function admfOn() { try { var A = G.__v292DfixADMF1; return !!(A && typeof A.gate === 'function' && A.gate('npres1', false) === true); } catch (e) { return false; } }   /* ★admf2: 管理者画面の ON だけ（ADMF1 が無い・例外 = OFF） */
   function on() { return !killed() && admfOn(); }
+  function lsg1(k) { try { return G.localStorage.getItem(k); } catch (e) { return null; } }
   var LOAD_ON = false; try { LOAD_ON = on(); } catch (e) { LOAD_ON = false; }   /* 診断用: 読み込み時の値（ふつうは答えが届く前なので false） */
   var ST = { gates: 0, a: 0, b: 0, c: 0, cp1c: 0, orphanVals: 0, fgCalls: 0, fgFiltered: 0, fgExcluded: 0, rosterHidden: 0, d1Skip: 0, d1Remote: 0, d2Excluded: 0, d3Kept: 0, d3Note: 0, d3Ended: 0, d4Call: 0, d4After: 0, errors: 0 };
 
@@ -232,6 +233,21 @@
       var S = getS(); if (!S || !Array.isArray(S.turns) || !S.turns.length) return null;
       ST.gates++;
       var turns = S.turns, L = turns.length, tbl = formTable(castNames(S));
+      /* ★N1CH（2026-11-26・既定 OFF: localStorage v292DfixNPRES1chOn='1'・kill v292DfixNPRES1chOff='1'）:
+         実 AI 観察用_1126c の実測 — 紬・冴が場に居て台詞もあるのに、fgRestrict が 2 人を「確かめられない」として前面化から外し続けた（T21〜T40）。
+         原因: 名前の形は 2 字以上だけ（「渡瀬 紬」→「渡瀬」）。本文は「紬は…」「冴が…」と 1 字の名で書くので、体の登場の証拠が 1 つも取れない。
+         すると台詞だけの人＝声だけの扱いになり、以前の電話の場面までさかのぼって「離れた声」の続きと読まれる。
+         直し: 判定に使う本文の写しの中でだけ、1 字の名（姓と名の 2 語の登録名で、その 1 字が登録人物の中で 1 人だけのもの）を、
+         直前が漢字でなく直後が助詞・敬称・区切りのとき、登録名の全体に読み替える。保存・S・ほかの部品には触らない。 */
+      try {
+        if (lsg1('v292DfixNPRES1chOff') !== '1' && lsg1('v292DfixNPRES1chOn') === '1') {
+          var all1 = castNames(S), cnt1 = {}, map1 = [];
+          all1.forEach(function (nm) { String(nm).split(/[\s　・]+/).filter(Boolean).forEach(function (p) { cnt1[p] = (cnt1[p] || 0) + 1; }); });
+          all1.forEach(function (nm) { if (isHero(nm, sp(S.cast && S.cast.hero && S.cast.hero.name))) return; var ps = String(nm).split(/[\s　・]+/).filter(Boolean); if (ps.length !== 2) return;
+            ps.forEach(function (p) { if (p.length === 1 && /[一-鿿々ぁ-んァ-ヶ]/.test(p) && cnt1[p] === 1) map1.push([new RegExp('(^|[^一-鿿々ァ-ヶー])' + p + '(?=(?:さん|ちゃん|くん|君|様|さま|先輩|先生|は|が|も|の|に|を|へ|と|や|、|。|，|．|！|？|!|\\?|…|」|』|\\s|$))', 'g'), nm]); }); });
+          if (map1.length) { ST.n1ch = (ST.n1ch || 0) + 1; turns = turns.map(function (t) { if (!t || typeof t.narrative !== 'string') return t; var nr = t.narrative, ch = false; map1.forEach(function (m) { var n2 = nr.replace(m[0], function (_, a) { return a + m[1]; }); if (n2 !== nr) { nr = n2; ch = true; } }); if (!ch) return t; var o = {}; for (var k1 in t) if (Object.prototype.hasOwnProperty.call(t, k1)) o[k1] = t[k1]; o.narrative = nr; return o; }); }
+        }
+      } catch (e1ch) { turns = S.turns; }
       var hero = ''; try { hero = sp(S.cast && S.cast.hero && S.cast.hero.name); } catch (e) {}
       var abs = cp1Absent(S), moves = null, memo = {}, omemo = {}, tmemo = {}, rmemo = {}, D1 = d1(), D3 = d3(), D4 = D3 && d4();
       var formsOf = function (n) { return Object.prototype.hasOwnProperty.call(tbl, n) ? tbl[n] : [n]; };
