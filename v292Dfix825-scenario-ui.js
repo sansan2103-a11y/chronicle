@@ -904,6 +904,11 @@
       return !F.flagsSnap();
     } catch(e){ return false; }
   }
+  /* ★STARTPICK1 ART（既定 OFF: localStorage v292DfixSTARTPICK1ArtOn='1'・kill v292DfixSTARTPICK1ArtOff）: 欄に「絵の雰囲気」の 3 択（FG-3 と同じ 3 値・同じ呼び名）。
+     最初は前回選んだもの（初めてはダーク＝選ばないときの今までの絵柄）。選んだ値は runtime.artPreset として fix819 へ渡り、新しい物語の cfg.artPreset になる。 */
+  var ART_LABEL = { beautiful: 'デフォルト', cool: 'クール', dark: 'ダーク' };
+  var ART_NOTE = { beautiful: 'やわらかく上品', cool: 'くっきり都会的', dark: '暗く重い雰囲気' };
+  function artOn(){ try { return localStorage.getItem('v292DfixSTARTPICK1ArtOff') !== '1' && localStorage.getItem('v292DfixSTARTPICK1ArtOn') === '1'; } catch(e){ return false; } }
   function pickNames(){
     var out = [], d = S.draft || {}, c = d.cast || {};
     var hn = trim(c.hero && c.hero.name); if (hn) out.push({ name: hn, hero: true });
@@ -925,12 +930,23 @@
           + '<div class="sc-acts" style="justify-content:flex-start;margin:10px 0 4px"><button class="sc-btn" data-sc-pk="all">全員</button><button class="sc-btn" data-sc-pk="none">なし</button>'
           + '<span data-sc-pk="n" style="align-self:center;opacity:.75;font-size:13px"></span></div>'
           + '<div style="max-height:40vh;overflow:auto;margin:4px 0 8px">' + rows + '</div>'
+          + (artOn() ? ('<div style="margin:10px 0 4px">絵の雰囲気</div><div class="sc-acts" style="justify-content:flex-start;margin:0 0 8px" data-sc-pk="arts">'
+              + ['beautiful', 'cool', 'dark'].map(function(k){ return '<button class="sc-btn" data-sc-pk="art" data-v="' + k + '">' + ART_LABEL[k] + '</button>'; }).join('') + '</div>'
+              + '<div data-sc-pk="artnote" style="opacity:.75;font-size:12.5px;margin:0 0 8px"></div>') : '')
           + '<div style="opacity:.75;font-size:12.5px">外見の情報が足りない人は自動で補います。</div>'
           + '<div data-sc-pk="token" style="display:none;opacity:.75;font-size:12.5px"></div>'
           + '<div class="sc-acts"><button class="sc-btn" data-sc-pk="back">やめる</button>'
           + '<button class="sc-btn sc-primary" data-sc-pk="go">この内容で始める</button></div>',
       function(p){
         var boxes = p.querySelectorAll('input[data-sc-pk="c"]'), nEl = p.querySelector('[data-sc-pk="n"]');
+        var art = null;
+        if (artOn()){
+          try { var _la = localStorage.getItem('v292DfixSTARTPICK1_art'); art = (_la === 'beautiful' || _la === 'cool' || _la === 'dark') ? _la : 'dark'; } catch(e){ art = 'dark'; }
+          var abs = p.querySelectorAll('[data-sc-pk="art"]'), an = p.querySelector('[data-sc-pk="artnote"]');
+          var paint = function(){ for (var q = 0; q < abs.length; q++){ var on = abs[q].getAttribute('data-v') === art; abs[q].className = 'sc-btn' + (on ? ' sc-primary' : ''); abs[q].setAttribute('aria-pressed', on ? 'true' : 'false'); } if (an) an.textContent = ART_NOTE[art] + '（物語の中の 🖌 であとから変えられます）'; };
+          for (var q0 = 0; q0 < abs.length; q0++) abs[q0].addEventListener('click', function(ev){ art = ev.currentTarget.getAttribute('data-v'); paint(); }, false);
+          paint();
+        }
         function count(){ var n = 0; for (var k = 0; k < boxes.length; k++) if (boxes[k].checked) n++; if (nEl) nEl.textContent = n + ' / ' + boxes.length + ' 人'; return n; }
         function setAll(v){ for (var k = 0; k < boxes.length; k++) boxes[k].checked = v; count(); }
         for (var k = 0; k < boxes.length; k++) boxes[k].addEventListener('change', count, false);
@@ -940,7 +956,8 @@
         p.querySelector('[data-sc-pk="go"]').addEventListener('click', function(){
           var sel = []; for (var k = 0; k < boxes.length; k++) if (boxes[k].checked) sel.push(list[+boxes[k].getAttribute('data-i')].name);
           try { localStorage.setItem('v292DfixSTARTPICK1_last', !sel.length ? 'none' : (sel.length === list.length ? 'all' : 'main')); } catch(e){}
-          closeOverlay(); onGo({ names: sel, total: list.length });
+          try { if (art) localStorage.setItem('v292DfixSTARTPICK1_art', art); } catch(e){}
+          closeOverlay(); onGo({ names: sel, total: list.length, art: art });
         }, false);
         count();
       });
@@ -1025,6 +1042,7 @@
     }
     var runtime = null;
     try { runtime = home.newStoryRuntime(); } catch(e){ runtime = null; }
+    try { if (opts.picked && opts.picked.art && artOn()){ runtime = runtime && typeof runtime === 'object' ? runtime : {}; runtime.artPreset = opts.picked.art; } } catch(eArt){}   /* ★STARTPICK1 ART */
     /* ★fix871: origin は startability() が fix820 から受け取ったものをそのまま渡す。 */
     var res = INST().instantiate({ scenario: sa.input, runtime: runtime, initialTitle: sa.initialTitle,
                                    origin: (sa.provenance || null) });

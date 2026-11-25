@@ -135,7 +135,11 @@
       var p = trim(rt.provider), o2 = trim(rt.orKey);
       if (p) cfg.provider = p;
       if (o2) cfg.orKey = o2;
-      if (cfg.provider || cfg.orKey) body.cfg = cfg;
+      /* ★STARTPICK1 ART（2026-11-25・Owner「始めるときにアイコンのジャンルも選べるように」）: runtime.artPreset が FG-3 の 3 値のどれかのときだけ、
+         新しい物語の cfg.artPreset に入れる（＝物語を開いてから 🖌 で選ぶのと同じ key・同じ値。Worker は ensure_first のときに自分で読む）。
+         それ以外の値・無指定は今までどおり key なし（＝ダーク）。 */
+      var ap = trim(rt.artPreset); if (ap === 'beautiful' || ap === 'cool' || ap === 'dark') cfg.artPreset = ap;
+      if (cfg.provider || cfg.orKey || cfg.artPreset) body.cfg = cfg;
     }
     /* ★v1.1 START_RULES / START_CONDITION bridge: input の top-level から Story.scene へ snapshot。
        ・input.scene.startRules / input.scene.startCondition は **読まない**（SCENE_FIELDS whitelist 外＝落ちる。
