@@ -110,8 +110,10 @@
   function fgIsoOn(){ try{ return localStorage.getItem('v292Dfix333FgIsoOff')!=='1'; }catch(e){ return false; } }
   function fgSid(){ try{ var m=/[?&]story=([A-Za-z0-9_-]+)/.exec(String(location.search||'')); if(m) return m[1]; }catch(e){} try{ var F=window.__v292Dfix697; var st=F&&typeof F.status==='function'?F.status():null; if(st&&st.storyId) return String(st.storyId); }catch(e2){} return '_'; }
   function fgHidden(id){ try{ var V=window.__v292DfixVAULTGATE2; if(V&&typeof V.hidden==='function') return V.hidden(id)!==false; }catch(e){ return true; } return false; }
-  function isoRead(key, id, mem){ if(fgHidden(id)) return mem[id]||null; try{ var o=JSON.parse(localStorage.getItem(key)||'null'); return (o&&o.by&&o.by[id])?o.by[id].d:null; }catch(e){ return null; } }
-  function isoWrite(key, id, mem, d){ if(fgHidden(id)){ mem[id]=d; return; } try{ var o=JSON.parse(localStorage.getItem(key)||'null'); if(!o||typeof o!=='object'||!o.by) o={v:2,by:{}}; o.by[id]={d:d,at:Date.now()};
+  /* r2（実 AI 試験_FACT1 の実測: 回し順の記録がターンによって足されない・最後だけ hidden true）: VAULTGATE2.hidden は「まだ答えが無い」間も true を返すので、
+     端末とメモリを行き来して記録が途切れていた。→ このページのメモリを正にして毎回そこへ書き、端末へは「隠していない」と分かっているときだけ写す。読むのはメモリが先。 */
+  function isoRead(key, id, mem){ if(mem[id]) return mem[id]; if(fgHidden(id)) return null; try{ var o=JSON.parse(localStorage.getItem(key)||'null'); return (o&&o.by&&o.by[id])?o.by[id].d:null; }catch(e){ return null; } }
+  function isoWrite(key, id, mem, d){ mem[id]=d; if(fgHidden(id)) return; try{ var o=JSON.parse(localStorage.getItem(key)||'null'); if(!o||typeof o!=='object'||!o.by) o={v:2,by:{}}; o.by[id]={d:d,at:Date.now()};
       var ids=Object.keys(o.by); if(ids.length>8){ ids.sort(function(x,y){ return (o.by[y].at||0)-(o.by[x].at||0); }); ids.slice(8).forEach(function(z){ delete o.by[z]; }); }
       localStorage.setItem(key, JSON.stringify(o)); }catch(e){} }
   function loadFg(){ if(fgIsoOn()){ return isoRead('v292Dfix333Fg2', fgSid(), FGISO.mem)||{}; } try{ return JSON.parse(localStorage.getItem('v292Dfix333Fg')||'{}'); }catch(e){ return {}; } }
