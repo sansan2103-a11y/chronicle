@@ -877,6 +877,51 @@
         p.querySelector('[data-sc-e="go"]').addEventListener('click', function(){ closeOverlay(); onYes(); }, false);
       });
   }
+  /* ★STARTPICK1（2026-11-25・Owner「物語を始めるタイミングで、誰のアイコンを作るか毎回決めたい」・既定 OFF: localStorage v292DfixSTARTPICK1On='1'・kill v292DfixSTARTPICK1Off）:
+     「▶ このシナリオで始める」の直前（Story を 1 バイトも書く前）に、名前のある主人公・NPC を並べて、絵を作る人を選ぶ欄を 1 枚出す。
+     「全員」「なし」で一度に切り替え・1 人ずつのチェック。最初は前回の選び方（全員／なし。初めては全員）。「やめる」は overlay を閉じるだけ（書込 0）。
+     選んだ名前は、作った物語の id ごとに、このタブの sessionStorage 'v292DfixSTARTPICK1:<id>' に置く（STARTICON が読む。端末にも Cloud にも残さない）。
+     費用・消費の文言は出さない（トークンの仕組みができたら data-sc-pk="token" の行に出す）。 */
+  function pickOn(){ try { return localStorage.getItem('v292DfixSTARTPICK1Off') !== '1' && localStorage.getItem('v292DfixSTARTPICK1On') === '1'; } catch(e){ return false; } }
+  function pickNames(){
+    var out = [], d = S.draft || {}, c = d.cast || {};
+    var hn = trim(c.hero && c.hero.name); if (hn) out.push({ name: hn, hero: true });
+    var ns = isArr(c.npcs) ? c.npcs : [];
+    for (var i = 0; i < ns.length; i++){ var nm = trim(ns[i] && ns[i].name); if (nm) out.push({ name: nm, hero: false }); }
+    return out;
+  }
+  function pickSheet(list, onGo){
+    var last = 'all'; try { last = localStorage.getItem('v292DfixSTARTPICK1_last') === 'none' ? 'none' : 'all'; } catch(e){}
+    var rows = '';
+    for (var i = 0; i < list.length; i++){
+      rows += '<label style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid rgba(128,128,128,.25);cursor:pointer">'
+            + '<input type="checkbox" data-sc-pk="c" data-i="' + i + '"' + (last === 'all' ? ' checked' : '') + ' style="width:20px;height:20px;flex:none">'
+            + '<span>' + esc(list[i].name) + (list[i].hero ? '<span style="opacity:.6;font-size:12px">（主人公）</span>' : '') + '</span></label>';
+    }
+    overlay('<h3>登場人物の絵</h3><div>絵を作る人を選んでください。あとからキャラ一覧でも作れます。</div>'
+          + '<div class="sc-acts" style="justify-content:flex-start;margin:10px 0 4px"><button class="sc-btn" data-sc-pk="all">全員</button><button class="sc-btn" data-sc-pk="none">なし</button>'
+          + '<span data-sc-pk="n" style="align-self:center;opacity:.75;font-size:13px"></span></div>'
+          + '<div style="max-height:40vh;overflow:auto;margin:4px 0 8px">' + rows + '</div>'
+          + '<div style="opacity:.75;font-size:12.5px">外見の情報が足りない人は自動で補います。</div>'
+          + '<div data-sc-pk="token" style="display:none;opacity:.75;font-size:12.5px"></div>'
+          + '<div class="sc-acts"><button class="sc-btn" data-sc-pk="back">やめる</button>'
+          + '<button class="sc-btn sc-primary" data-sc-pk="go">この内容で始める</button></div>',
+      function(p){
+        var boxes = p.querySelectorAll('input[data-sc-pk="c"]'), nEl = p.querySelector('[data-sc-pk="n"]');
+        function count(){ var n = 0; for (var k = 0; k < boxes.length; k++) if (boxes[k].checked) n++; if (nEl) nEl.textContent = n + ' / ' + boxes.length + ' 人'; return n; }
+        function setAll(v){ for (var k = 0; k < boxes.length; k++) boxes[k].checked = v; count(); }
+        for (var k = 0; k < boxes.length; k++) boxes[k].addEventListener('change', count, false);
+        p.querySelector('[data-sc-pk="all"]').addEventListener('click', function(){ setAll(true); }, false);
+        p.querySelector('[data-sc-pk="none"]').addEventListener('click', function(){ setAll(false); }, false);
+        p.querySelector('[data-sc-pk="back"]').addEventListener('click', closeOverlay, false);
+        p.querySelector('[data-sc-pk="go"]').addEventListener('click', function(){
+          var sel = []; for (var k = 0; k < boxes.length; k++) if (boxes[k].checked) sel.push(list[+boxes[k].getAttribute('data-i')].name);
+          try { localStorage.setItem('v292DfixSTARTPICK1_last', sel.length ? 'all' : 'none'); } catch(e){}
+          closeOverlay(); onGo({ names: sel, total: list.length });
+        }, false);
+        count();
+      });
+  }
   function askRemove(){
     confirmBox('このシナリオを削除しますか？（このシナリオから始めた物語は残ります）', function(){ remove(); });
   }
@@ -924,6 +969,14 @@
       });
       return { ok: true, pending: true, code: 'SYNC_CHECK' };
     }
+    if (pickOn() && !opts.picked){   /* ★STARTPICK1: 始める直前に、絵を作る人を選ぶ（Story はまだ書かれていない） */
+      var _pl = pickNames();
+      if (_pl.length){
+        var _fp = opts.force;
+        pickSheet(_pl, function(sel){ start({ force: _fp, emptyOk: true, syncChecked: true, picked: sel }); });
+        return { ok: false, code: 'ICON_PICK', pending: true };
+      }
+    }
     var home = HOME();
     S.busy = 'start'; refreshEdit();
     if (!opts.force){
@@ -948,6 +1001,7 @@
       setError(res && res.code, res && res.detail);
       return res || fail('INSTANTIATE_FAILED');
     }
+    try { if (opts.picked && res.id) sessionStorage.setItem('v292DfixSTARTPICK1:' + res.id, JSON.stringify({ t: Date.now(), n: opts.picked.names || [], total: opts.picked.total || 0 })); } catch(ePk){}   /* ★STARTPICK1 */
     S.starts++; S.navigated = true;                        /* busy は解除しない（ページを離れる。戻ってきたら reload） */
     try { console.log(TAG, 'STORY_STARTED_FROM_SCENARIO', res.id); } catch(e){}
     try { home.openInstantiatedStory(res.id); } catch(e){ try { console.error(TAG, 'navigation failed (Story は作成済み)', res.id, e && e.message); } catch(_){} }

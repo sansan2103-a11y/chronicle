@@ -282,6 +282,8 @@ var VSAFE1 = (function () {
   }
   function isNewStory(id) { var t = bornMs(id); return t !== null && Date.now() - t <= CAP.newMs; }
   function lore() { try { var S = state(); return S && S.scene && typeof S.scene.lore === 'string' ? S.scene.lore : ''; } catch (e) { return ''; } }
+  function pickOf(id) { try { if (root.localStorage.getItem('v292DfixSTARTPICK1Off') === '1') return null; var raw = root.sessionStorage.getItem('v292DfixSTARTPICK1:' + id); if (!raw) return null;
+      var o = JSON.parse(raw); if (!o || !Array.isArray(o.n)) return null; return { n: o.n.map(function (z) { return String(z || '').normalize('NFC').trim(); }).filter(Boolean), total: +o.total || 0 }; } catch (e) { return null; } }
   function chars() {   /* = B37 / LC1 chars(): hero first, then the NPCs in cast order; DELETED / DEPARTED / no id / no name are skipped */
     var S = state(); if (!S || !S.cast) return [];
     var out = [], c = S.cast;
@@ -379,8 +381,14 @@ var VSAFE1 = (function () {
       /* once per story across devices: only the device that created the story (URL new=1) starts with pictures already present; any other device /
          tab starts only when NO character of the story has a picture yet (otherwise another device — or the Owner — already did the start) */
       if (!X.promo && !isNew && cs.some(function (c) { return by[c.id]; })) { soSet(id, function (so) { so.p = 'done'; so.why = 'OTHER_DEVICE'; }); return finish('A_OTHER_DEVICE'); }
+      /* ★STARTPICK1（2026-11-25）: 始めるときに選んだ人だけ作る。選びがある物語では枚数の上限（主人公 1＋NPC 3）は使わない（アカウントの LIM1 の行があればそれは守る）。
+         選びが「なし」→ 何も作らない。選びが無い物語（鍵 OFF・別の端末・空の物語）→ 今までどおり。お客さまの守り（月の上限・1 日の枚数・imgsafe）は Worker のまま。 */
+      var pk = X.promo ? null : pickOf(id);
+      if (pk) { if (sc.src === 'const') sc = { hero: true, npcs: Infinity, src: 'pick' }; else sc.src = 'pick+row';
+        if (!pk.n.length) { soSet(id, function (so) { so.p = 'done'; so.why = 'PICK_NONE'; }); return finish('A_PICK_NONE'); } }
       cs.forEach(function (c) {
         if (by[c.id]) return;
+        if (pk && pk.n.indexOf(c.name) < 0) { skip[hk(c.id)] = 'PICK_NO'; return; }
         if (c.hero ? (!sc.hero || tg.some(function (t) { return t.hero; })) : npc >= sc.npcs) return;   /* ★LIM1: sc = { hero: true, npcs: 3 } without a row (as before) */
         var x0 = Date.now(), s = suggest(c.id), why = null, dc = null;
         if (!s) why = 'NO_ENTRY';

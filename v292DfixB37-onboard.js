@@ -202,6 +202,7 @@
   }
   function open(source) {
     if (killed()) return { ok: false, code: 'OFF' };
+    if (source === 'auto') { try { var _pid = sid(); if (_pid && localStorage.getItem('v292DfixSTARTPICK1Off') !== '1' && sessionStorage.getItem('v292DfixSTARTPICK1:' + _pid)) { st.last = 'AUTO_SKIP_STARTPICK'; setFlag(_pid, 'shown'); return { ok: false, code: 'STARTPICK' }; } } catch (ePk) {} }   /* ★STARTPICK1: 始めるときに絵を作る人を選んだ物語では、キャラ一覧を自動で開かない（入力欄をふさぐ） */
     if (source === 'auto') { var bl = autoBlocked(); if (bl) { st.last = 'AUTO_BLOCKED_' + bl; return { ok: false, code: 'BLOCKED', why: bl }; } }   /* ★B37g */
     /* ★LC1 (GPT #127-IJ 4) open: LC1 が ON のときは、B37 の案内パネルを出さず、👥 の作業欄に任せる（自動の 1 回の印はここで付ける） */
     try { var lc1o = window.__v292DfixLC1; if (lc1o && typeof lc1o.on === 'function' && lc1o.on()) { var r1o = lc1o.openFromB37(source); if (r1o && r1o.ok && source === 'auto') setFlag(sid(), 'shown'); return r1o; } } catch (eLC1) {}
