@@ -491,12 +491,12 @@ var VSAFE1 = (function () {
        Worker は、絵が既にあれば EXISTS、別の作成が進行中なら IN_FLIGHT を返し、どちらも作らない・課金しない。 */
     if (!X.sentChecked) { X.sentChecked = true;
       if (lsGet('v292DfixSTARTICONSentRetryOn') === '1' && retryOn()) {
-        var nLeft = 0; soSet(id, function (s) { Object.keys(s.b || {}).forEach(function (h) { if (s.b[h] === 'SENT' && !(s.r && s.r[h])) { s.b[h] = 'IN_FLIGHT'; s.ra = s.ra || {}; s.ra[h] = Math.max(Date.now() + 5000, (((s.st || {})[h]) || 0) + 125000); nLeft++; } }); });
+        var nLeft = 0; soSet(id, function (s) { Object.keys(s.b || {}).forEach(function (h) { if (s.b[h] === 'SENT' && !(s.r && s.r[h])) { s.b[h] = 'IN_FLIGHT'; s.ra = s.ra || {}; s.ra[h] = Math.max(Date.now() + 5000, (((s.st || {})[h]) || 0) + 125000); s.sl = s.sl || {}; s.sl[h] = 1; nLeft++; } }); });
         if (nLeft) { stats.sentLeft = (stats.sentLeft || 0) + nLeft; note({ kind: 'SENT_LEFT', n: nLeft }); so = soOf(id); } } }
     /* ★93-j: a character whose first send got IN_FLIGHT and was not retried yet (the page closed while waiting) is still to do — its one retry */
     var todo = chars().filter(function (c) { var h = hk(c.id); var b = so.b[h], r = so.r || {}; return so.t.indexOf(h) >= 0 && (so.a[h] === 'set' || so.a[h] === 'conf') && (!b || (b === 'IN_FLIGHT' && !r[h] && retryOn())); });
     var i = 0, transient = 0, serial = 0;   /* ★ICONFIX2 c: serial = per-character failures in a row */
-    todo.forEach(function (c) { var t = so.ra && so.ra[hk(c.id)]; if (typeof t === 'number' && t > (X.leaseUntil || 0)) X.leaseUntil = Math.min(t, Date.now() + IF_WAIT_MS + IF_SPAN_MS); });   /* ★93-j: a reload in the middle of the wait keeps waiting */
+    todo.forEach(function (c) { var t = so.ra && so.ra[hk(c.id)]; if (typeof t === 'number' && t > (X.leaseUntil || 0)) X.leaseUntil = (so.sl && so.sl[hk(c.id)]) ? Math.min(t, Date.now() + 130000) : Math.min(t, Date.now() + IF_WAIT_MS + IF_SPAN_MS); });   /* ★SENTFIX1 r2: 残った SENT は 40 秒の上限を使わない（実機で 88 秒後に送り直した。送ってから 125 秒まで待つ） */   /* ★93-j: a reload in the middle of the wait keeps waiting */
     var endB = function (why, hold) {
       soSet(id, function (s) { if (why) { s.p = 'stop'; s.why = why; } else s.p = 'done'; });
       tmSet(id, function (tm) { tm.b1 = ds(Date.now()); });   /* ★ICONFIX2 t */
