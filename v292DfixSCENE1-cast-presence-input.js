@@ -436,10 +436,14 @@
               /* ★W1(3)（2026-11-26・既定 OFF・鍵 v292DfixNPRESw1On・kill v292DfixNPRESw1Off）: 実 AI 試験_W1 T10・観察用_1126d T35 —
                  出ていった人が電話で話しただけで「戻った」になり、次の回に前面と状態の行へ入った。その回の本文（かっこの外）に通話の語があるときは、
                  台詞だけでは戻さない（本文で戻る・主人公と一緒・その場で動く、は今までどおり下で読む）。 */
-              if (w1On() && /電話|通話|受話器|着信/.test(maskQ(str(t.narrative)))) { ST.w1Phone = (ST.w1Phone || 0) + 1; }
+              if (w1On() && /電話|通話|受話器|着信/.test(maskQ(str(t.narrative)))) { ST.w1Phone = (ST.w1Phone || 0) + 1; st.phone = tn; }
               else { st = null; noteBack(n, tn, 'speaker'); } }
             else if (ty === 'DO' && objHere(t.playerText, fb)) { st = null; noteBack(n, tn, 'obj'); }   /* ★r5 */
-            else if (ty === 'SAY' && vocHere(t.playerText, fb)) { st = null; noteBack(n, tn, 'voc'); }   /* ★r5 */
+            else if (ty === 'SAY' && vocHere(t.playerText, fb)) {
+              /* ★W1(5)（既定 OFF・鍵 v292DfixNPRESw1On）: 実 AI 試験_W1b T8 — 出ていった冴と電話で話した次の回に「霧島さん、ありがとう」と言っただけで、冴が戻った扱いになった。
+                 直前 2 ターン以内にその人と通話していたなら、呼びかけだけでは戻さない（本文で戻る・入力で戻る は今までどおり）。 */
+              if (w1On() && st.phone && tn - st.phone <= 2) { ST.w1Voc = (ST.w1Voc || 0) + 1; }
+              else { st = null; noteBack(n, tn, 'voc'); } }   /* ★r5 */
           }
           if (ty === 'DO' || ty === 'STORY') {   /* ★r4: 利用者の入力に書かれた退出（SAY は読まない）。入力で戻ってくる・この場で動くなら解く（既存の条件） */
             var ins = sents(n1chOn() ? qStrip(str(t.playerText)) : maskQ(str(t.playerText)));   /* ★NAME1CH: 入力の中の台詞（「…。…」と告げ、去っていく）で文が切れて主語を失わないよう、台詞ごと 1 字に畳む */

@@ -350,7 +350,9 @@
       var rs = realStore(), out = {}, ex = 0, D2 = d2();
       var W1 = w1() && typeof text === 'string' && text;
       var addr1 = function (k) { if (!W1 || g.group(k, rs[k]) !== 'b') return false; var fs = g.forms(k), ps = String(k).split(/[\s　・]+/).filter(Boolean); if (ps.length === 2 && ps[1].length === 1) fs = fs.concat([ps[1]]);
-        for (var i = 0; i < fs.length; i++) { if (!fs[i]) continue; var re = new RegExp((fs[i].length === 1 ? '(^|[^一-鿿々ァ-ヶー])' : '()') + esc(fs[i]) + '(?:さん|ちゃん|くん|君|様|さま|先輩|先生)?(?:、|,|，|に(?![一-鿿ぁ-ん]*(?:ついて|関して))|へ)'); if (re.test(text)) return g.recent(k); } return false; };
+        for (var i = 0; i < fs.length; i++) { if (!fs[i]) continue; var pre = (fs[i].length === 1 ? '(^|[^一-鿿々ァ-ヶー])' : '()'), re = new RegExp(pre + esc(fs[i]) + '(?:さん|ちゃん|くん|君|様|さま|先輩|先生)?(?:、|,|，|に(?![一-鿿ぁ-ん]*(?:ついて|関して))|へ)'); if (re.test(text)) return g.recent(k);
+          /* ★W1(6): 入力に「その人が…戻ってくる・入ってくる・やってくる・現れる」と書かれた回は、その回から候補に残す（実 AI 2 本: 戻りが 1 ターン遅れた）。通話の語・否定・仮定のある入力は除く */
+          if (!/電話|通話|スマホ|携帯|着信|受話器|メッセージ|メール|ない|なかった|たら|なら|れば|かもしれ|だろう|はず/.test(text) && new RegExp(pre + esc(fs[i]) + '(?:さん|ちゃん|くん|君|様|さま|先輩|先生)?(?:は|が|も)[^。！？!?\\n]{0,24}(?:戻ってく|戻ってき|戻って来|帰ってく|帰ってき|帰って来|入ってく|入ってき|入って来|やってく|やってき|やって来|現れ|姿を見せ|合流)').test(text)) { ST.w1Ret = (ST.w1Ret || 0) + 1; return true; } } return false; };
       Object.keys(states).forEach(function (k) { if (addr1(k)) { ST.w1Addr = (ST.w1Addr || 0) + 1; out[k] = states[k]; } else if (g.out(k, rs[k])) ex++; else if (D2 && g.edited(k, rs[k])) { ex++; ST.d2Excluded++; } else out[k] = states[k]; });   /* ★d2 */
       if (!ex) return null;
       ST.fgFiltered++; ST.fgExcluded += ex; return out;
