@@ -22,7 +22,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixSPKQ1) return;
-  var VER = 'spkq1-20261124-r3';
+  var VER = 'spkq1-20261125-r4';
   var ST = { turns: 0, unknown: 0, sfx: 0, flip: 0, guard: 0, kept: {}, why: {}, errors: 0 };
   function lsg(k) { try { return root.localStorage.getItem(k); } catch (e) { return null; } }
   function on() { return lsg('v292DfixSPKQ1Off') !== '1'; }   /* 20261124-spkq1on: 全員 既定 ON（保存済みの実 AI 出力 684 枚で 9 枚を直し誤り 0・実機 10 ターンで 1 枚を直し誤り 0・後段と再読み込みで戻らない）。止めるのは kill v292DfixSPKQ1Off='1' */
@@ -43,7 +43,18 @@
      ★r1 の方針（保存済みの実 AI 出力 684 枚で測った結果）: 「根拠が無ければ ???」にすると 258 枚（38%）が ??? になり、
        読んで確かめた範囲ではその 9 割が正しい札だった。＝元の推定は大半が合っている。
        → 「X の根拠が無い」では替えない。「X ではないと言える矛盾」があるカードだけを ??? にする。 */
-  function analyze(narr, cards, meta, cast, hero) {
+  /* ★r4 IN1（2026-11-25・評価用の実 AI 1 本 試験_R14 T10 の実測）: プレイヤーが入力で言わせた台詞（『…』「…」の中、SAY なら入力の全体）と同じ文のカードは、
+     主人公の台詞。AI の札が別の人（呼びかけた相手）になっていても主人公へ替える（例: 入力「蓮に『ロープの結び方を…誰だった？』と聞く」→ カード「蓮、ロープの結び方を…」が蓮の札）。
+     入力が「紬が『…』と言う」のように他の人に言わせる形（引用の直前が が／は／も）は対象外。6 字未満の引用は対象外。止める鍵: v292DfixSPKQ1InOff='1'。 */
+  function in1On() { try { return root.localStorage.getItem('v292DfixSPKQ1InOff') !== '1'; } catch (e) { return true; } }
+  function heroQuotes(inp) {
+    var out = []; if (!inp || !inp.text) return out; var t = String(inp.text);
+    var re = /[『「]([^』」]{1,200})[』」]/g, m, any = false;
+    while ((m = re.exec(t))) { any = true; var pre = t.slice(Math.max(0, m.index - 3), m.index).replace(/\s+$/, ''); if (/(が|は|も)$/.test(pre)) continue; out.push(m[1]); }
+    if (!any && String(inp.type || '').toUpperCase() === 'SAY') out.push(t);
+    return out;
+  }
+  function analyze(narr, cards, meta, cast, hero, inp) {
     var h = H(), res = [];
     narr = String(narr || ''); cards = Array.isArray(cards) ? cards : []; cast = (cast || []).filter(Boolean);
     if (!h) return res;
@@ -51,11 +62,17 @@
     var spk = root.__v292DfixSPKCHK1;
     var narrOnly = narr.replace(/「[^」]*」/g, '。');
     var labels = spk.labelsIn(narrOnly, castForms);
+    var HQ = in1On() ? heroQuotes(inp).map(function (q) { return h.loose(q); }).filter(function (q) { return q && q.length >= 6; }) : [];
     for (var ci = 0; ci < cards.length; ci++) {
       var c = cards[ci]; if (!c) continue;
       var X = String(c.who || '');
       var m = Array.isArray(meta) && meta.length === cards.length ? meta[ci] : null;
       var out = (function (ci, X) { return function (act, why) { res.push({ ci: ci, act: act, why: why, from: X }); }; })(ci, X);
+      if (HQ.length && hero && c._rv !== 1 && h.nrm(X) !== h.nrm(hero)) {   /* ★r4 IN1 */
+        var k1 = h.loose(c.say), echo = false;
+        if (k1 && k1.length >= 6) for (var hq = 0; hq < HQ.length; hq++) { var lq = HQ[hq]; if (k1 === lq || k1.indexOf(lq) >= 0 || (lq.indexOf(k1) >= 0 && k1.length >= lq.length * 0.6)) { echo = true; break; } }
+        if (echo) { res.push({ ci: ci, act: 'flip', why: 'input-echo', from: X, to: hero }); continue; }
+      }
       if (!(m && GATE[m.sourceKind])) { out('keep', 'not-bare'); continue; }
       if (c._rv === 1) { out('keep', 'rv'); continue; }
       var key = h.loose(c.say), hits = [];
@@ -184,7 +201,7 @@
       ST.turns++;
       var cards = turn._convSays, meta = turn._convSayMeta;
       if (!Array.isArray(meta) || meta.length !== cards.length) { bump(ST.kept, 'no-meta'); return r0; }
-      var d = analyze(turn.narrative, cards, meta, cast, hero);
+      var d = analyze(turn.narrative, cards, meta, cast, hero, { text: turn.playerText, type: turn.inputType });
       var drop = [];
       d.forEach(function (r) {
         if (r.act === 'keep') { bump(ST.kept, r.why); return; }
