@@ -484,7 +484,11 @@ var VSAFE1 = (function () {
     var so0 = soOf(id); if (!so0 || so0.p !== 'img') return;
     X.busy = true; X.bDone = true; var a0 = acct();
     var so = X.bCounted ? soOf(id) : soSet(id, function (s) { s.bt = (s.bt || 0) + 1; }); X.bCounted = true;   /* tries are counted per page load */
-    if (so.bt > CAP.bTries) { soSet(id, function (s) { s.p = 'stop'; s.why = 'B_TRIES'; }); return finish('B_TRIES'); }
+    /* ★SENTFIX1 r3（実機 S2: 待ちの途中でもう 1 回読み込み直すと、3 回目の読み込みで B_TRIES に当たり、送り直しも残りの人も作られずに止まった）
+       鍵が ON のとき、絵を作る段のページ読み込みの上限を「2 回」から「2 ＋ 対象の人数（最大 12）」にする。1 人あたりの要求は今までどおり最大 2 回（最初の 1 回＋やり直し 1 回）なので、
+       読み込みの回数を増やしても要求の総数は増えない。スマホで作成中に何度か離れても、残りの人の絵が続けて作られる。 */
+    var bCap = (lsGet('v292DfixSTARTICONSentRetryOn') === '1' && retryOn()) ? Math.min(12, CAP.bTries + ((so.t && so.t.length) || 0)) : CAP.bTries;
+    if (so.bt > bCap) { soSet(id, function (s) { s.p = 'stop'; s.why = 'B_TRIES'; }); return finish('B_TRIES'); }
     /* ★SENTFIX1（2026-11-25・実機 試験_PICK2 M1: 10 人ぶんを作っている途中でページを読み込み直すと、そのとき応答待ちだった 1 人が 'SENT' のまま残り、絵が付かなかった）
        既定 OFF: localStorage v292DfixSTARTICONSentRetryOn='1'。前のページ読み込みから残った 'SENT'（まだ 1 回もやり直していない人）を、93-j の IN_FLIGHT と同じ扱いにする:
        送ってから 125 秒（Worker の札 LEASE_MS 120 秒より後）まで待つ → まずサーバーに絵があるか読む（あれば FILLED・何も送らない）→ 無ければ 1 回だけ送り直す（r[h]=1・2 回目は無い）。
