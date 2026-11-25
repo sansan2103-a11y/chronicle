@@ -24,7 +24,7 @@
 (function (root) {
   'use strict';
   if (!root || root.__v292DfixEXP1) return;
-  var VER = 'exp1-20261126-r16';
+  var VER = 'exp1-20261126-r16b';
   var KINDS = { taught: '教わった（習得は不明）', first: '初めてできた', learned: '身についた', failed: 'できなかった' };
   var PER = 3, NOTE_PER = 2, NOTE_MAX = 160, S_MIN = 2, S_MAX = 24;
   var ST = { on: 0, offWhy: {}, asked: 0, got: 0, kept: 0, rej: {}, dup: 0, upd: 0, swapped: 0, full: 0, restored: 0, notes: 0, noteChars: 0, emptyNonChar: 0, routed: 0, tFixed: {}, selfFirst: 0, pron: 0, inputTaught: 0, taughtTo: 0, a2: 0, a2Down: 0, a2Rej: {}, older: 0, olderRej: {} };   /* ★r7: older（範囲より前のターンの件を、そのターンの本文で確かめて通した） */   /* ★r6: a2（案 A2 の緩い検査で通した）・a2Down（learned を first に下げた）・a2Rej（案 A2 でも捨てた理由） */   /* ★r5: pron（代名詞・省略の主語をその人と見て通した）・inputTaught（入力の行の「A は B に…教える」で B の taught）・taughtTo（教えた側に付いた taught を教わった側へ回した） */   /* ★r4: emptyNonChar（人物でない項目の空の exp・捨てたのではない）・routed（人物でない項目の exp を主語の人物へ回した）・tFixed（ターン番号を直した形）・selfFirst（本人の「できた」で first） */
@@ -372,7 +372,7 @@
     REGN.forEach(function (r) { forms(r).forEach(function (z) { z = norm(z); if (z && fs.indexOf(z) < 0) fs.push(z); }); });
     fs.sort(function (a, b) { return b.length - a.length; });
     for (var i = 0; i < fs.length; i++) { var re = new RegExp('^' + esc(fs[i]) + '(さん|ちゃん|くん|君)?(から|に|と|の)'); if (re.test(n)) { n = n.replace(re, ''); break; } }
-    n = n.replace(/(を|の)?(教わった|教わる|習った|教えてもらった|見せてもらった|手ほどきを受けた|教えた|教える|教えてあげた|教えてやった|手ほどきした|見せた)$/, '');
+    n = n.replace(/(を|の)?(教わった|教わる|習った|教えてもらった|見せてもらった|見せられた|教えられた|手ほどきを受けた|教えた|教える|教えてあげた|教えてやった|手ほどきした|見せた)$/, '');
     return n;
   }
   /* r15b（GPT #127-XP の回帰条件）: 句の頭の登録名（教え手・相手）が両方にあって別の人なら、中身が同じでも別の件（紬から教わった結び方／透から教わった結び方） */
@@ -380,7 +380,7 @@
     REGN.forEach(function (r) { forms(r).forEach(function (z) { z = norm(z); if (z && new RegExp('^' + esc(z) + '(さん|ちゃん|くん|君)?(から|に|と|の)').test(n)) { if (!best) best = r; } }); });
     return best; }
   function topic(s) { var m = /^[一-鿿々ァ-ヶー]{1,6}/.exec(r15On() ? core15(s) : norm(s)); return m ? m[0] : ''; }
-  function sameS(a, b) { var x = norm(a), y = norm(b); if (r15On()) { var la15 = lead15(a), lb15 = lead15(b); if (la15 && lb15 && la15 !== lb15) return false; var x15 = core15(a), y15 = core15(b); if (x15 && y15) { x = x15; y = y15; } } if (!x || !y) return false; if (x === y || x.indexOf(y) >= 0 || y.indexOf(x) >= 0) return true; var tx = topic(a), ty = topic(b); if (!!tx && tx === ty) return true;
+  function sameS(a, b) { var x = norm(a), y = norm(b); if (r15On()) { var la15 = lead15(a), lb15 = lead15(b); if (la15 && lb15 && la15 !== lb15) return false; var x15 = core15(a), y15 = core15(b); if (x15 && y15) { x = x15; y = y15; } } if (!x || !y) return false; if (x === y || x.indexOf(y) >= 0 || y.indexOf(x) >= 0) return true; var tx = topic(a), ty = topic(b); if (!!tx && tx === ty) return true; if (tx && ty && Math.min(tx.length, ty.length) >= 3 && (tx.indexOf(ty) === 0 || ty.indexOf(tx) === 0) && lsg('v292DfixEXP1RouteLeadOff') !== '1') return true;   /* r16b: 「フィルム（の入れ方）」と「フィルムカメラ（の入れ方）」は同じ件（実 AI 試験_R16_ON で重複 2 件） */
     /* ★r6: 言い換え（「背の剥がれた文庫に糊を引き直し仕上げた」と「文庫の背の糊を引き直し成功した」）も同じ件: 漢字の集合の重なりが、少ない方の 6 割以上（3 字以上） */
     var ka = {}, kb = {}, na = 0, nb = 0, both = 0; (x.match(/[一-鿿々]/g) || []).forEach(function (k) { if (!ka[k]) { ka[k] = 1; na++; } }); (y.match(/[一-鿿々]/g) || []).forEach(function (k) { if (!kb[k]) { kb[k] = 1; nb++; if (ka[k]) both++; } });
     return both >= 3 && both >= Math.ceil(Math.min(na, nb) * 0.6); }
@@ -440,7 +440,11 @@
       (Array.isArray(raw) ? raw : []).forEach(function (x) { ST.got++; var c = checkLoc(x, ctx, w.name);
         var t15 = !!(r15On() && x && x.k === 'taught' && typeof c !== 'string' && TEACH_END.test(cleanS(x.s)));   /* ★r15 (a) */
         if ((typeof c === 'string' || t15) && x && x.k === 'taught') {   /* ★r5: 教えた側に付いた taught は、教わった側（ほかの人物 1 人）の経験として検査し直す */
-          var hit = []; chars.forEach(function (nm) { if (nm === w.name) return; var y = {}; for (var ky in x) if (Object.prototype.hasOwnProperty.call(x, ky)) y[ky] = x[ky]; y.s = taughtPhrase(x.s, nm); if (y.s === cleanS(x.s) && !forms(nm).some(function (z) { return cleanS(x.s).indexOf(z) >= 0; })) return; var cc = checkLoc(y, ctx, nm); if (typeof cc !== 'string') hit.push([nm, cc]); });
+          var hit = [], lead16 = null;
+          /* ★r16b（2026-11-26・実 AI 試験_R16_OFF T3 の実測: 律の「紬に…を見せた」が、紬では通らず冴で通って冴へ回り、sys に「霧島 冴＝律から紬に…を教わった」）:
+             句の頭が「登録人物＋に」なら、回す先はその人だけ。kill: localStorage v292DfixEXP1RouteLeadOff='1' */
+          if (lsg('v292DfixEXP1RouteLeadOff') !== '1') { var cs16 = cleanS(x.s); chars.forEach(function (nm) { if (lead16 || nm === w.name) return; if (forms(nm).some(function (z) { return z && new RegExp('^' + esc(z) + '(さん|ちゃん|くん|君)?に').test(cs16); })) lead16 = nm; }); }
+          chars.forEach(function (nm) { if (nm === w.name) return; if (lead16 && nm !== lead16) return; var y = {}; for (var ky in x) if (Object.prototype.hasOwnProperty.call(x, ky)) y[ky] = x[ky]; y.s = taughtPhrase(x.s, nm); if (y.s === cleanS(x.s) && !forms(nm).some(function (z) { return cleanS(x.s).indexOf(z) >= 0; })) return; var cc = checkLoc(y, ctx, nm); if (typeof cc !== 'string') hit.push([nm, cc]); });
           if (hit.length === 1 && (r14On() || r15On())) {   /* ★r14: 教えた人の名前を句に入れる（「フィルムの入れ方」→「律からフィルムの入れ方を教わった」）。40 字を超えるなら入れない */
             var h14 = hit[0][1], s14 = String(h14.s || ''), f14 = forms(w.name), sh14 = f14.length ? f14.slice().sort(function (a, b) { return a.length - b.length; })[0] : '';
             if (sh14 && s14 && !/教わ|習っ|から/.test(s14) && !f14.some(function (z) { return s14.indexOf(z) >= 0; })) {
