@@ -99,7 +99,10 @@
         return r2.text().then(function(t2){
           var j2 = JSON.parse(t2), c2 = j2 && j2.choices && j2.choices[0] && j2.choices[0].message && j2.choices[0].message.content;
           var tags = (typeof c2 === 'string' ? (c2.match(/<state\b[^>]*\/>/g) || []) : []).map(function(tg){
-            var w = /\bwho\s*=\s*"([^"]{1,24})"/.exec(tg); if (!w || (sys.indexOf(w[1]) < 0 && !sayWho[w[1]])) return ''; var hv2 = have[w[1]] || {};
+            var w = /\bwho\s*=\s*"([^"]{1,24})"/.exec(tg); if (!w) return '';
+            /* r6: 姓だけ・名だけの who は、記録にあるフルネームがちょうど 1 人なら、その名前に直す（実機 fill3 r5: 「宮下」の行が「宮下 誠」と別の項目になり、宮下 誠 が古いまま残った） */
+            try { var stn = Object.keys(G.__v292Dfix77Store || {}).filter(function(k){ return k !== w[1] && k.split(/[ 　]+/).indexOf(w[1]) >= 0; }); if (stn.length === 1) w[1] = stn[0]; } catch(_){}
+            if (sys.indexOf(w[1]) < 0 && !sayWho[w[1]] && !(G.__v292Dfix77Store && G.__v292Dfix77Store[w[1]])) return ''; var hv2 = have[w[1]] || {};
             /* r2: 姓だけ・名だけの短い形は足さない（実機: 「宮下」の行が「宮下 誠」と別の項目に入り、一度も送られなかった） */
             try { var esc = w[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); if (new RegExp(esc + '[ 　][一-龠々ぁ-んァ-ヶー]').test(sys) || new RegExp('[一-龠々ぁ-んァ-ヶー][ 　]' + esc + '(?![一-龠々ぁ-んァ-ヶー])').test(sys)) return ''; } catch(_){}
             var out = '<state who="' + w[1] + '"', n = 0;
@@ -131,5 +134,5 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r9', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r10', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
 })();
