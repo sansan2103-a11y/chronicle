@@ -171,10 +171,10 @@
     var out = [], ss = sentences(text), lastNoun = '';
     for (var a = 0; a < ss.length; a++){
       var s = ss[a], cls = s.split(/、|，/).map(clean).filter(Boolean), prevObj = '', pendingGive = [];
-      /* ★MV2（2026-11-26・既定 OFF・鍵 v292DfixPLACE1mv2On・kill v292DfixPLACE1mv2Off）: 実 AI 観察用_1126f T9〜T10 — 「律は夕刊を持って部屋に戻り」が持ち物の節として読まれ、
+      /* ★MV2（2026-11-26・既定 ON・kill v292DfixPLACE1mv2Off）: 実 AI 観察用_1126f T9〜T10 — 「律は夕刊を持って部屋に戻り」が持ち物の節として読まれ、
          移動が落ちて、古い現在地（郵便受けの前）が次の回まで送られた。(1)「X を持って／手に／抱えて＋場所へ・に＋動く」は、持つ節と動く節に分ける。
          (2)「場所に戻った＋主人公＋は」（連体の形）は主人公の移動。 */
-      var mv2 = false; try { mv2 = ls('v292DfixPLACE1mv2Off') !== '1' && ls('v292DfixPLACE1mv2On') === '1'; } catch (eMv) { mv2 = false; }
+      var mv2 = false; try { mv2 = ls('v292DfixPLACE1mv2Off') !== '1'; } catch (eMv) { mv2 = false; }
       if (mv2) { var cls2 = []; cls.forEach(function (c0) { var mm = c0.match(/^(.{1,24}?を(?:持って|手に|片手に|両手に|抱えて|取って|受け取って|提げて|握って|持ったまま|抱えたまま))(.{1,24}?(?:へ|に|まで).{1,10})$/); if (mm) { cls2.push(clean(mm[1])); cls2.push(clean(mm[2])); } else cls2.push(c0); }); cls = cls2; }
       var selfName = function(x){ return str(x).replace(SELF_OF, subj ? subj + 'の' : ''); };
       var sj1 = null;
@@ -505,6 +505,9 @@
     function noteInput(text, evs){ if (!MOVE_IN.test(splitQuotesOut(text))) return; moveIn++; if (!evs.some(function(e){ return !(e.kind === 'item' && e.weak); })) moveNoLine++; }
     /* 主人公が動く入力なのに行き先が読めなかったら、前の現在地の行は消す（不明なら言わない） */
     function heroMoved(typ, text, evs){ if (typ !== 'DO') return; if (evs.some(function(e){ return e.kind === 'hero'; })) return;
+      /* ★MV2 (3)（既定 ON・kill v292DfixPLACE1mv2Off）: 実 AI 試験_MV2 T7「台所から戻った律は、…」— 行き先の無い「〜から戻った＋主人公＋は」で、古い現在地（台所）が残った。行き先が読めないので、前の現在地の行を消す（言わない） */
+      try { if (ls('v292DfixPLACE1mv2Off') !== '1' && heroAt) { var hn3 = str(hero).split(/[\s　・]+/).filter(Boolean).concat([str(hero)]), tx3 = splitQuotesOut(text);
+        for (var i3 = 0; i3 < hn3.length; i3++) if (hn3[i3] && new RegExp('から(?:戻った|帰った|引き返した|出た|出てきた|上がってきた|下りてきた|降りてきた)' + hn3[i3] + '(?:は|が)').test(tx3)) { heroAt = null; drops.heroUnreadable = (drops.heroUnreadable || 0) + 1; return; } } } catch (e3) {}
       if (/(?:走|駆け|逃げ|進む|進ん|歩い|歩く|上が|上る|上って|下り|降り|出る|出て(?!き|来)|入る|入って(?!き|来)|戻る|戻って(?!き|来)|向か|移動|離れ|渡る|渡って|追い)/.test(splitQuotesOut(text))) { if (heroAt){ heroAt = null; drops.heroUnreadable = (drops.heroUnreadable || 0) + 1; }
         for (var k6 = 0; k6 < people.length; k6++) people[k6].hm = -1;   /* ★r6: 行き先の読めない移動でも、主人公が動いたことは同じ */
         for (var k = people.length - 1; k >= 0; k--) if (people[k].mode === 'ahead' || people[k].mode === 'here') people.splice(k, 1); } }
