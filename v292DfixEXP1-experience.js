@@ -476,15 +476,15 @@
       (Array.isArray(raw) ? raw : []).forEach(function (x) { ST.got++; var c = checkLoc(x, ctx, w.name);
         var t15 = !!(r15On() && x && x.k === 'taught' && typeof c !== 'string' && TEACH_END.test(cleanS(x.s)));   /* ★r15 (a) */
         /* ★r18 (b): 本人の欄に「本人から…を教わった」（AI が教えた側の欄に入れた）→ 本人の経験としては残さない。教わった側（ほかの 1 人）で通れば回し、通らなければ捨てる */
-        var self18 = false; try { if (lsg('v292DfixEXP1R18Off') !== '1' && lsg('v292DfixEXP1R18On') === '1' && x && x.k === 'taught' && typeof x.s === 'string') { var cs18b = cleanS(x.s); self18 = /教わ|習っ|習い|教えてもら|指導を受け/.test(cs18b) && forms(w.name).some(function (z) { return z && new RegExp('(^|[、\\s])' + esc(z) + '(さん|ちゃん|くん|君|先生|先輩)?(から|に)').test(cs18b); }); } } catch (e18) { self18 = false; }
+        var self18 = false; try { if (lsg('v292DfixEXP1R18Off') !== '1' && x && x.k === 'taught' && typeof x.s === 'string') { var cs18b = cleanS(x.s); self18 = /教わ|習っ|習い|教えてもら|指導を受け/.test(cs18b) && forms(w.name).some(function (z) { return z && new RegExp('(^|[、\\s])' + esc(z) + '(さん|ちゃん|くん|君|先生|先輩)?(から|に)').test(cs18b); }); } } catch (e18) { self18 = false; }
         if ((typeof c === 'string' || t15 || self18) && x && x.k === 'taught') {   /* ★r5: 教えた側に付いた taught は、教わった側（ほかの人物 1 人）の経験として検査し直す */
           var hit = [], lead16 = null;
           /* ★r16b（2026-11-26・実 AI 試験_R16_OFF T3 の実測: 律の「紬に…を見せた」が、紬では通らず冴で通って冴へ回り、sys に「霧島 冴＝律から紬に…を教わった」）:
              句の頭が「登録人物＋に」なら、回す先はその人だけ。kill: localStorage v292DfixEXP1RouteLeadOff='1' */
           if (lsg('v292DfixEXP1RouteLeadOff') !== '1') { var cs16 = cleanS(x.s); chars.forEach(function (nm) { if (lead16 || nm === w.name) return; if (forms(nm).some(function (z) { return z && new RegExp('^' + esc(z) + '(さん|ちゃん|くん|君)?に').test(cs16); })) lead16 = nm; }); }
-          /* ★r18（2026-11-26・既定 OFF・鍵 v292DfixEXP1R18On・kill v292DfixEXP1R18Off）: 実 AI 観察用_1126d T16 — 紬に付いた「店主からレンズの拭き方を教わった」が、
+          /* ★r18（2026-11-26・既定 ON・kill v292DfixEXP1R18Off）: 実 AI 観察用_1126d T16 — 紬に付いた「店主からレンズの拭き方を教わった」が、
              紬では通らず、教えた本人の店主へ回って「店主＝店主から…を教わった」が残った。句が「X から／に … 教わった・習った」の形なら、X は教えた人なので回す先にしない。 */
-          var r18 = lsg('v292DfixEXP1R18Off') !== '1' && lsg('v292DfixEXP1R18On') === '1', cs18 = r18 ? cleanS(x.s) : '';
+          var r18 = lsg('v292DfixEXP1R18Off') !== '1', cs18 = r18 ? cleanS(x.s) : '';
           var teach18 = function (nm) { return r18 && /教わ|習っ|習い|教えてもら|指導を受け/.test(cs18) && forms(nm).some(function (z) { return z && new RegExp('(^|[、\\s])' + esc(z) + '(さん|ちゃん|くん|君|先生|先輩)?(から|に)').test(cs18); }); };
           chars.forEach(function (nm) { if (nm === w.name) return; if (lead16 && nm !== lead16) return; if (teach18(nm)) { cnt(ST, 'r18Skip'); return; } var y = {}; for (var ky in x) if (Object.prototype.hasOwnProperty.call(x, ky)) y[ky] = x[ky]; y.s = taughtPhrase(x.s, nm); if (y.s === cleanS(x.s) && !forms(nm).some(function (z) { return cleanS(x.s).indexOf(z) >= 0; })) return; var cc = checkLoc(y, ctx, nm); if (typeof cc !== 'string') hit.push([nm, cc]); });
           if (hit.length === 1 && (r14On() || r15On())) {   /* ★r14: 教えた人の名前を句に入れる（「フィルムの入れ方」→「律からフィルムの入れ方を教わった」）。40 字を超えるなら入れない */

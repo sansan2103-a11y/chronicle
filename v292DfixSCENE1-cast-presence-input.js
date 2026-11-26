@@ -338,6 +338,7 @@
   }
   function vocHere(pt, forms) {
     var t = str(pt).trim(); if (!t || SAY_AWAY.test(t)) return false;
+    if (w1On(5) && /聞こえる|聞こえて|おやすみ|またね|また明日|さようなら|いってらっしゃい|行ってらっしゃい|気をつけて/.test(t)) { ST.w1Voc = (ST.w1Voc || 0) + 1; return false; }   /* ★W1(5b)（実 AI 観察用_1126e T29: 部屋へ帰った紬に「紬さん、聞こえる？ おやすみ」）: 聞こえるかを問う・別れの挨拶の呼びかけは戻りにしない */
     for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (f && t.indexOf(f) === 0 && new RegExp('^' + HON + '[、，,！!？?\\s　]').test(t.slice(f.length) + ' ')) return true; }
     return false;
   }

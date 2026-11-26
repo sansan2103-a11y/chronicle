@@ -143,14 +143,17 @@
   }
   function makeCtx(heroName, npcNames){
     var names = (npcNames || []).map(str).filter(Boolean);
-    /* ★P1CH（2026-11-26・既定 OFF・鍵 v292DfixPLACE1ch1On・kill v292DfixPLACE1ch1Off）: 実 AI 試験_W1d — 入力「冴は…部屋を出て、門の外へ出ていく」で、
+    /* ★P1CH（2026-11-26・既定 ON・kill v292DfixPLACE1ch1Off）: 実 AI 試験_W1d — 入力「冴は…部屋を出て、門の外へ出ていく」で、
        1 字の名「冴」が人と読めず主語が主人公のままになり、「瀬名 律はいま門の外にいる」が AI に送られた（T11 は「瀬名 律はいま冴が部屋にいる」）。
        登録人物の中で 1 人だけの 1 字の名（「霧島 冴」の「冴」）も人として読む。 */
-    var one1 = {}; try { if (ls('v292DfixPLACE1ch1Off') !== '1' && ls('v292DfixPLACE1ch1On') === '1') { var c1 = {}; names.forEach(function(n){ n.split(/[\s　・]+/).filter(Boolean).forEach(function(q){ c1[q] = (c1[q] || 0) + 1; }); }); names.forEach(function(n){ var ps = n.split(/[\s　・]+/).filter(Boolean); if (ps.length === 2 && ps[1].length === 1 && c1[ps[1]] === 1 && /[一-鿿々ぁ-んァ-ヶ]/.test(ps[1])) one1[ps[1]] = n; }); } } catch(e1){ one1 = {}; }
-    return { hero: str(heroName), names: names, one1: one1, p1ch: (function(){ try { return ls('v292DfixPLACE1ch1Off') !== '1' && ls('v292DfixPLACE1ch1On') === '1'; } catch(e){ return false; } })(),
+    var one1 = {}; try { if (ls('v292DfixPLACE1ch1Off') !== '1') { var c1 = {}; names.forEach(function(n){ n.split(/[\s　・]+/).filter(Boolean).forEach(function(q){ c1[q] = (c1[q] || 0) + 1; }); }); names.forEach(function(n){ var ps = n.split(/[\s　・]+/).filter(Boolean); if (ps.length === 2 && ps[1].length === 1 && c1[ps[1]] === 1 && /[一-鿿々ぁ-んァ-ヶ]/.test(ps[1])) one1[ps[1]] = n; }); } } catch(e1){ one1 = {}; }
+    var p1chOn = (function(){ try { return ls('v292DfixPLACE1ch1Off') !== '1'; } catch(e){ return false; } })();
+    return { hero: str(heroName), names: names, one1: one1, p1ch: p1chOn,
+      isHeroName: function(w){ w = clean(w).replace(HONOR, ''); return !!heroName && (w === str(heroName) || str(heroName).split(/[\s　・]+/).filter(Boolean).indexOf(w) >= 0); },
       isPerson: function(w){ w = clean(w); if (!w) return false; var b = w.replace(HONOR, '');
         if (HONOR.test(w)) return true; if (PERSON_WORD.test(w)) return true; if (heroName && b === str(heroName)) return true;
         if (Object.prototype.hasOwnProperty.call(one1, b)) return true;
+        if (p1chOn && heroName && str(heroName).split(/[\s　・]+/).filter(Boolean).indexOf(b) >= 0) return true;   /* ★P1CH: 主人公の姓・名だけ（「律は」）も人＝節の主語に取れる */
         for (var i = 0; i < names.length; i++){ var n = names[i]; if (b === n || n.indexOf(b) >= 0 && b.length >= 2 || b.indexOf(n) >= 0) return true; }
         return false; },
       isSelf: function(w){ w = clean(w); return /^(?:自分|私|わたし|俺|僕|あたし)$/.test(w) || (!!heroName && w === heroName); } };
@@ -169,9 +172,11 @@
     for (var a = 0; a < ss.length; a++){
       var s = ss[a], cls = s.split(/、|，/).map(clean).filter(Boolean), prevObj = '', pendingGive = [];
       var selfName = function(x){ return str(x).replace(SELF_OF, subj ? subj + 'の' : ''); };
+      var sj1 = null;
       var subj = actor;   /* STORY は文頭の「A が／A は」を主語にする（DO は主人公。ACTOR1 と同じく「登録名＋が」があればその人） */
       var sm = s.match(/^([^、。をにでへと]{1,12}?)(?:が|は)(?=[^、。]*)/);
       if (sm && ctx.isPerson(sm[1].replace(/^.*の/, ''))) subj = clean(sm[1].replace(/^.*の/, ''));
+      else if (ctx.p1ch && (sj1 = s.match(/^([^、。をにでへ]{1,16}?)(?:が|は)/)) && sj1[1].indexOf('と') > 0 && sj1[1].split(/と/).every(function(q){ return ctx.isPerson(q); })) subj = sj1[1].split(/と/).some(function(q){ return ctx.isSelf(q) || ctx.isHeroName(q); }) ? actor : clean(sj1[1]);   /* ★P1CH: 「冴と紬は…」＝主人公を含まない連名の主語 */
       else if (isStory) subj = '';
       for (var c = 0; c < cls.length; c++){
         var cl = cls[c], m;
@@ -257,7 +262,7 @@
           /* r3: 行き先として弱い語（先・奥・外・向こう・〜の方・人のところ）は場所にしない */
           var vague = hp.length < 2 || /^(?:先|奥|前|後ろ|外|中|上|下|向こう|反対|そちら|あちら|こちら|そこ|ここ|あそこ|どこか|元|もと)$/.test(hp) || /(?:方向|の方|ほう|ところ|もと|そば|隣|反対側|後ろ|あと)$/.test(hp) || ctx.isPerson(hp.replace(/の.*$/, ''));
           if (/を|から/.test(hp) || hp.length > 16) vague = true;
-          if (!vague && ctx.p1ch && subj && subj !== actor && !ctx.isSelf(subj) && !(actor && (str(actor).indexOf(subj) >= 0))) { vague = true; }   /* ★P1CH: その節の主語が主人公でない（登録人物・1 字の名）なら、主人公の移動にしない */
+          if (!vague && ctx.p1ch && subj && subj !== actor && !ctx.isSelf(subj) && !ctx.isHeroName(subj) && !/二人で|三人で|四人で|五人で|一緒に|みんなで|皆で|全員で|揃って|そろって|連れ立って|連れだって/.test(s) && !(function(){ var hp2 = str(actor).split(/[\s　・]+/).filter(Boolean).concat(['自分','私','俺','僕']); for (var i2 = 0; i2 < hp2.length; i2++) if (new RegExp(hp2[i2] + '(?:さん|くん|君|様)?(?:と|を連れ|を伴|を案内|を乗せ)').test(s)) return true; return false; })()) { vague = true; }   /* ★P1CH: その節の主語が主人公でない（登録人物・1 字の名）なら、主人公の移動にしない */
           if (!vague){ out.push({ kind: 'hero', place: hp, with: m[1] ? m[1].split(/と/).map(clean).filter(function(p){ return ctx.isPerson(p); }) : [], ev: cl }); continue; } }
         // r3 STORY: 「A は…二階に残っている」＝その場にいない／「A が…下りてきて・戻ってくる」＝合流
         if (isStory && subj && !ctx.isSelf(subj)){

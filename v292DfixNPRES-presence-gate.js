@@ -78,6 +78,7 @@
   function w1r(n) { return w1() && lsg1('v292DfixNPRESw1r' + n + 'Off') !== '1'; }   /* 規則ごとの kill（退行の切り分け用・#127-YB）: v292DfixNPRESw1r1Off … r6Off */
   var W1NAME = null;   /* gate() のたびに作り直す: 1 字の名 → 登録名（登録人物の中で 1 人だけのもの） */
   var WAIT1 = /待って|待つ|待ち|残っ|残る|残し|置いて|向かっ/g;
+  var WAIT1b = /待って|待つ|待ち|残っ|残る|残し|置いて|向かっ|(?:紙|布|ガラス|硝子|窓|肩|レンズ|眼鏡|メガネ|カウンター|机|棚|柵|手袋|袖|服|髪|指|湯気|煙|格子|簾|カーテン)越し/g;   /* ★W1(1b)（実 AI 観察用_1126e T12「紙越しにレンズへ触れる」・T15「ガラス越しの自転車へ目をやった」）: 物を隔てて見る・触るの「越し」は、離れた所の印ではない。kill v292DfixNPRESw1r7Off */
   function admfOn() { try { var A = G.__v292DfixADMF1; return !!(A && typeof A.gate === 'function' && A.gate('npres1', false) === true); } catch (e) { return false; } }   /* ★admf2: 管理者画面の ON だけ（ADMF1 が無い・例外 = OFF） */
   function on() { return !killed() && admfOn(); }
   function lsg1(k) { try { return G.localStorage.getItem(k); } catch (e) { return null; } }
@@ -208,7 +209,7 @@
       last = c; lastS = s; });
     if (last === 'weak' && lastS && w1r(1)) { try {
       var z1 = false; try { var Zx = G.__v292DfixSCENE1; z1 = !!(Zx && typeof Zx.exitHit === 'function' && Zx.exitHit(lastS, fs)); } catch (eZx) {}
-      if (!z1 && !absHit(lastS, fs) && !WEAK.test(lastS.replace(WAIT1, '')) && !CALL.test(lastS) && sayHit(t, fs, name) && !remoteOwn(nar, sayHit(t, fs, name, true), others || [], VRC3)) { ST.w1Kept = (ST.w1Kept || 0) + 1; return 'present'; }
+      if (!z1 && !absHit(lastS, fs) && !WEAK.test(lastS.replace(w1r(7) ? WAIT1b : WAIT1, '')) && !CALL.test(lastS) && sayHit(t, fs, name) && !remoteOwn(nar, sayHit(t, fs, name, true), others || [], VRC3)) { ST.w1Kept = (ST.w1Kept || 0) + 1; return 'present'; }
     } catch (eW1) {} }
     if (last) return last;
     if (sayHit(t, fs, name) || voice) {
