@@ -56,14 +56,15 @@
    *   ・根拠は、確定した本文（その回の AI の出力）と、送信に入っていた直前の状態・名前の表だけ。新しい展開を作らせない。本文から分からない項目は書かせない。
    *   ・同じ送信の中で完結するので、物語・ターン・本文の取り違えは起きない。取り消し・生成し直しで捨てた回は、その回の出力ごと捨てられる。
    *   ・取り直しは 1 回だけ。失敗・空・名前が表に無い行は足さない（＝その回は状態を更新しない。古い行を新しい状態として確定しない）。
-   *   ・足すのは からだ／こころ／本能／目的 だけ。傷・関係・未解決は取り直しでは書かせない（根拠なく増やさない・消さない）。 */
+   *   ・足すのは からだ／こころ だけ（r2。本能・目的は作文になるので書かせない）。傷・関係・未解決は取り直しでは書かせない（根拠なく増やさない・消さない）。 */
   var fs1 = { seen: 0, ok: 0, miss: 0, filled: 0, fail: 0, err: 0, last: null };
   function fillOn(){ return ls('v292DfixSTFILL1On') === '1'; }
   function sect(sys, head){ var i = sys.indexOf('【' + head); if (i < 0) return ''; var m = /\n+(?=【[^】\n]{1,90}】)/.exec(sys.slice(i + 1)); return sys.slice(i, m ? i + 1 + m.index : sys.length).slice(0, 1400); }
   var FILL_SYS = 'あなたは記録係。下の「本文」は物語の 1 ターン分で、すでに確定している。本文に書かれていることだけを根拠に、本文に出てきた人物の今の状態を書き出す。\n'
-    + '・出力は次の形の行だけ。前置き・説明・本文の続きは書かない。\n<state who="名前" からだ="…" こころ="…" 本能="…"/>\n'
+    + '・出力は次の形の行だけ。前置き・説明・本文の続きは書かない。\n<state who="名前" からだ="…" こころ="…"/>\n'
     + '・who は下の名前の表記どおり。表に無い人は書かない。最大 4 人。本文に出てこない人は書かない。\n'
-    + '・からだ＝姿勢・位置・息・けがの様子、こころ＝本文から読み取れる気持ち、本能＝とっさにしたがっていること。各 30 字まで。\n'
+    + '・からだ＝本文に書かれた姿勢・位置・息・けがの様子。こころ＝本文に書かれた表情・声・しぐさから直接分かる気持ち。各 30 字まで。本能は書かない。\n'
+    + '・本文の言葉をなるべくそのまま使う。本文に無い動作・意図・事情を足さない。\n'
     + '・本文から分からない項目は、その属性ごと省く。推測で埋めない。新しい出来事・台詞・けが・回復を作らない。\n';
   function fillOne(self, u, o, reqBody, resp){
     return resp.clone().text().then(function(txt){
@@ -77,7 +78,8 @@
       var names = sect(sys, 'whoに使う名前') || sect(sys, 'キャラ属性'), prev = sect(sys, '各キャラの現在の状態');
       var body2 = {}; Object.keys(rb).forEach(function(k){ if (k !== 'messages') body2[k] = rb[k]; });
       body2.max_tokens = 400; body2.temperature = 0.2;
-      body2.messages = [ { role: 'system', content: FILL_SYS + '\n' + names + (prev ? '\n\n（参考：このターンの前の状態。本文で変わった所だけ書き直す）\n' + prev : '') },
+      /* r2（実機 fill1: 30 ターンで補完 7 回のうち 4 回が本文に無い内容。うち 2 回は参考に渡した前の状態の写し、2 回は本能の作文）→ 前の状態は渡さない。名前の表だけ渡す。 */
+      body2.messages = [ { role: 'system', content: FILL_SYS + '\n' + names + (prev ? '\n\n（この場面にいる人の名前）\n' + (prev.match(/^・[^｜\n]{1,24}(?=｜)/gm) || []).join('\n') : '') },
                          { role: 'user', content: '本文:\n' + c.replace(/<\/?(?:say|react)\b[^>]*>/g, '').slice(0, 2400) } ];
       return of.apply(self, [u, Object.assign({}, o, { body: JSON.stringify(body2) })]).then(function(r2){
         if (!r2 || !r2.ok) { fs1.fail++; fs1.last = { why: 'http' }; return resp; }
@@ -85,8 +87,10 @@
           var j2 = JSON.parse(t2), c2 = j2 && j2.choices && j2.choices[0] && j2.choices[0].message && j2.choices[0].message.content;
           var tags = (typeof c2 === 'string' ? (c2.match(/<state\b[^>]*\/>/g) || []) : []).map(function(tg){
             var w = /\bwho\s*=\s*"([^"]{1,24})"/.exec(tg); if (!w || sys.indexOf(w[1]) < 0) return '';
+            /* r2: 姓だけ・名だけの短い形は足さない（実機: 「宮下」の行が「宮下 誠」と別の項目に入り、一度も送られなかった） */
+            try { var esc = w[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); if (new RegExp(esc + '[ 　][一-龠々ぁ-んァ-ヶー]').test(sys) || new RegExp('[一-龠々ぁ-んァ-ヶー][ 　]' + esc + '(?![一-龠々ぁ-んァ-ヶー])').test(sys)) return ''; } catch(_){}
             var out = '<state who="' + w[1] + '"', n = 0;
-            ['からだ', 'こころ', '本能', '目的'].forEach(function(a){ var m = new RegExp(a + '\\s*=\\s*"([^"]{1,60})"').exec(tg); if (m && !/^[…\.。\s]*$/.test(m[1])) { out += ' ' + a + '="' + m[1] + '"'; n++; } });
+            ['からだ', 'こころ'].forEach(function(a){ var m = new RegExp(a + '\\s*=\\s*"([^"]{1,60})"').exec(tg); if (m && !/^[…\.。\s]*$/.test(m[1])) { out += ' ' + a + '="' + m[1] + '"'; n++; } });
             return n ? out + '/>' : '';
           }).filter(Boolean).slice(0, 4);
           if (!tags.length) { fs1.fail++; fs1.last = { why: 'empty' }; return resp; }
@@ -113,5 +117,5 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r5', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r6', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
 })();
