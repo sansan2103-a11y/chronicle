@@ -368,24 +368,6 @@
      条件（どれか欠ければ読み替えない）: 直前の文がその人の呼び名＋は／がで始まる・直前の文に他の登録人物と主人公の名前が無い・
      性別が登録されていれば「彼女」は女性・「彼」は男性に合う。戻り・動きの判定（backIn・actsHere）は今までどおり名前だけ。 */
   var PRO_RE = /^[\s\u3000\u0001]*(彼女|彼)(は|が)/;   /* 文頭（引用〔伏せ字〕の直後も） */
-  /* ★ZSUB（2026-11-26・既定 OFF・鍵 v292DfixSCENE1ZsubOn・kill v292DfixSCENE1ZsubOff・GPT #127-YC 優先 3）: 実 AI 観察用_1126d T11 —
-     「冴は靴を履きながら振り返り、律の顔を一瞬だけ見た。それから玄関の框をまたいで、廊下へ静かに出ていく。」＝主語を書かない続きの文・現在形の退出を読めず、
-     次の回に居ない冴が前面に入った。(1) 直前の文が「その人＋は」で始まり、ほかの登録人物・主人公が主語（は/が）でなく、今の文が つなぎの語（それから・そのまま・そして・やがて 等）
-     で始まって主語が無いとき、その人を主語として読む。(2) 文末の現在形の退出（出ていく・去っていく・立ち去る・帰っていく）を過去形と同じに読む。 */
-  function zsubOn() { return ls('v292DfixSCENE1ZsubOff') !== '1' && ls('v292DfixSCENE1ZsubOn') === '1'; }
-  function zPast(x) { return str(x).replace(/出て(?:行|い)く$/, '出ていった').replace(/去って(?:行|い)く$/, '去っていった').replace(/立ち去る$/, '立ち去った').replace(/帰って(?:行|い)く$/, '帰っていった').replace(/(?:戻|下り|降り)て(?:行|い)く$/, function (m0) { return m0.replace(/(?:行|い)く$/, 'いった'); }); }
-  function zeroSub(ss, j, pv, n, fs, S, hf) {
-    try { if (!zsubOn() || pv < 0) return null; var cur = str(ss[j]).replace(/^[\s\u3000]+/, ''), prev = ss[pv] || '';
-      if (!/^(?:それから|そのまま|そして|やがて|続いて|それきり|そうして|一礼して|踵を返して|背を向けて)/.test(cur)) return null;
-      if (/^[^、。]{0,24}(?:は|が)[^、。]*?[、。]/.test(cur) && (hasAny(cur.split(/、/)[0], fs) || hasAny(cur.split(/、/)[0], hf))) return null;
-      var hit = false; for (var i = 0; i < fs.length; i++) { if (fs[i] && new RegExp('^[\\s\\u3000]*' + esc(fs[i]) + HON + 'は').test(prev)) { hit = true; break; } }
-      if (!hit) return null;
-      var others = []; npcNames(S).forEach(function (o) { if (o !== n) others = others.concat(formsOf(o), rawForms(o)); });
-      var subjOther = function (t, forms) { for (var k = 0; k < forms.length; k++) if (forms[k] && new RegExp(esc(forms[k]) + HON + '(?:は|が)').test(t)) return true; return false; };
-      if (subjOther(prev, others) || subjOther(prev, hf) || subjOther(cur, others) || subjOther(cur, hf)) return null;
-      ST.bZsub = (ST.bZsub || 0) + 1;
-      return n + 'は' + zPast(cur);
-    } catch (e) { return null; } }
   function proSub(ss, j, pv, n, fs, S, hf) {
     try { var m = PRO_RE.exec(ss[j] || ''); if (!m || pv < 0) return null; var prev = ss[pv] || '';
       var hit = false; for (var i = 0; i < fs.length; i++) { if (fs[i] && new RegExp('^[\\s\\u3000]*(?:[^、。]{0,12}、)?' + esc(fs[i]) + HON + '(?:は|が)').test(prev)) { hit = true; break; } }
@@ -473,7 +455,7 @@
           var ss = sents(plain(t.narrative));
           var pv = -1;   /* ★r8: 直前の（引用だけでない）文の番号 */
           for (var j = 0; j < ss.length; j++) {
-            var sj = proSub(ss, j, pv, n, fs, S, hf); if (!sj) sj = zeroSub(ss, j, pv, n, fs, S, hf); if (!sj && zsubOn() && zPast(ss[j]) !== ss[j]) sj = zPast(ss[j]); if (!/^[\u0001\s]*$/.test(ss[j])) pv = j;
+            var sj = proSub(ss, j, pv, n, fs, S, hf); if (!/^[\u0001\s]*$/.test(ss[j])) pv = j;
             var x = exitIn(sj || ss[j], fs, ss[j + 1] || '', hf); if (x) { if (!(st && st.src === 'input' && st.turn === tn)) st = { turn: tn, route: x.route, j: j }; noteExit(n, tn, 'narr'); continue; }   /* ★r7: 同じ回の入力の退出の言い直しは、入力の退出のまま（同じ回の取り消しは本文の退出だけ） */
             if (!st) continue;
             if (backIn(ss[j], fb)) { st = null; noteBack(n, tn, 'back'); }

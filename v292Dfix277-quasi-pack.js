@@ -1053,6 +1053,10 @@
     /* 名前だけで始まる答え: 先頭の間投・どもり（1 字＋読点）を外し、最初の区切りまでの語（と、続く 1 区切り） */
     var lead = b.replace(/^[\s　…‥・、。ー—―]+/, '').replace(/^(?:うん|ええ|はい|あの|えっと)[、。…\s　]+/, '').replace(/^[^、。…\s　]、/, '');
     var parts = lead.split(/[。、！!…‥\s　]+/).filter(Boolean).slice(0, 2);
+    /* ★NAMING1 r3（2026-11-26・kill v292DfixNAMING1r3Off）: 実 AI 観察用_1126g T20 — 店主の台詞「……日野。お前さんは」（呼びかけ）が名乗りと読まれ、
+       店主＝日野（配達の青年の名前）と結ばれて、過去の店主のカード 27 枚が「日野」に書き換わった。名前の後ろに相手を指す語が続く台詞は、名前だけで始まる名乗りにしない。 */
+    var nm1r3 = false; try { nm1r3 = localStorage.getItem('v292DfixNAMING1r3Off') !== '1'; } catch(eR3){ nm1r3 = false; }
+    if (nm1r3 && /(?:お前|おまえ|あんた|あなた|貴方|きみ|君は|君が|君も|君の|貴様|てめえ|お宅|お主|そっち|そちら)/.test(lead.slice(0, 24))) parts = [];
     parts.forEach(function(p){ var q = p.replace(/(?:だよ|です)$/, ''); if (/[？?]$/.test(p) || /(ちゃん|さん|くん|君|様)$/.test(p) || /(じゃな|ではな)/.test(p)) return; if (q.length >= 2 && q.length <= 8 && !/[をにがはでへと]$/.test(q)) add(q, 'name-leading'); });
     return out.filter(function(o){
       var i = b.indexOf(o.w), tail = i >= 0 ? b.slice(i + o.w.length, i + o.w.length + 6) : '';
@@ -1108,6 +1112,9 @@
             if (cast.indexOf(who) >= 0){ nm1Drop('card-who-registered'); return; }
             if (!nm1IsLabel(who)){ nm1Drop('card-who-not-label'); return; }
             var to = nm1AliasedTo(qs, who); if (to){ nm1Drop(to === W ? 'already' : 'label-already-linked'); return; }
+            /* ★NAMING1 r3: W がもう別の話者として前から居る（このターン・直前のターンより前に W の札がある）なら、呼び名の人を W に結ばない
+               （名乗りは「初めて名前が出る」ときの証拠。前から居る名前を別の人の台詞が口にしただけ、を防ぐ） */
+            try { if (localStorage.getItem('v292DfixNAMING1r3Off') !== '1') { var eW = qs[W]; if (eW && Array.isArray(eW.seen) && eW.seen.some(function(x){ return typeof x === 'number' && x < turnIdx - 1; })){ nm1Drop('name-already-a-speaker'); return; } } } catch(eR3b){}
             if (done[W]){ nm1Drop('one-edge-per-canonical'); return; }
             if (nm1Link(qs, who, W, turnIdx, 'A-' + o.why)){ wrote++; done[W] = 1; }
           });
