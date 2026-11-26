@@ -216,9 +216,7 @@
             if (best) {
               var short = who.split(/[\s　]+/).filter(Boolean).pop() || who;
               var line = 'T' + (best.x.t + 1) + '：' + best.teacher + 'が' + short + 'に' + best.topic + 'を教えた。' + short + 'は' + best.teacher + 'から指導を受けた。技能の習得は未確認。';
-              /* ★EXPQ 記録範囲（2026-11-26・既定 OFF・鍵 v292DfixCONTRACT1ExpScopeOn・kill v292DfixCONTRACT1ExpScopeOff・GPT #127-YD 案 A 修正）: 実 AI 2 本で、教えた人は合うのに手順の中身を逆に答えた（記録に手順は無い）。禁止でなく、記録がどこまで確かかを添える */
-              try { if (ls('v292DfixCONTRACT1ExpScopeOff') !== '1' && ls('v292DfixCONTRACT1ExpScopeOn') === '1') { line += '記録範囲：教え手と学習内容。具体的な手順はこの記録に含まれていない。'; stats.expqScope = (stats.expqScope || 0) + 1; } } catch (eSc) {}
-              items.unshift(line); ev.push({ item: 'expq', who: who, turn: best.x.t + 1, quote: q(best.x.s) }); stats.expq = (stats.expq || 0) + 1;
+items.unshift(line); ev.push({ item: 'expq', who: who, turn: best.x.t + 1, quote: q(best.x.s) }); stats.expq = (stats.expq || 0) + 1;
             } else stats.expqNoTopic = (stats.expqNoTopic || 0) + 1;
           } else stats.expqNoAddr = (stats.expqNoAddr || 0) + 1;
         }

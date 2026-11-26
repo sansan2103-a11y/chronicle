@@ -130,7 +130,10 @@
   function classify(sent, fs) {
     try { var Z1 = G.__v292DfixSCENE1; if (Z1 && typeof Z1.exitHit === 'function' && Z1.exitHit(sent, fs)) return 'weak'; } catch (eZ1) {}   /* ★SCENE1 b: 退出の語・て／で をまたぐ形（確かめられない (b)。退出のままかは下の stillOut が (c) にする） */
     for (var i = 0; i < fs.length; i++) if (sent.indexOf(fs[i]) >= 0 && new RegExp(esc(fs[i]) + HON + ABSENT_V).test(sent)) return UNREAL.test(sent) ? 'weak' : 'strong';
-    return WEAK.test(sent) ? 'weak' : 'present';
+    /* ★W1(8)（2026-11-26・既定 ON・kill v292DfixNPRESw1r8Off）: 実 AI 試験_ZSUB T10「冴は紬の言葉に頷きも反論もしなかった」— 仮定の語「もし」が「反論もしなかった」の中の字に当たり、
+       場に居る 2 人が「確かめられない」になった。文や節の頭でない「〜もし（な・て・た・ま…）」は仮定の語として数えない。 */
+    var s8 = sent; try { if (w1r(8)) s8 = String(sent).replace(/([^、。\s　「『（(])もし(?=[なてたまよろせ])/g, '$1\u3007\u3007'); } catch (e8) { s8 = sent; }
+    return WEAK.test(s8) ? 'weak' : 'present';
   }
   /* ★d1: 閉じた「…」『…』の中身を \u0001 に替える（文の区切り・空白は残すので sentences() の分け方が本文と同じ。閉じていないかっこは替えない） */
   function maskQ(s) {
