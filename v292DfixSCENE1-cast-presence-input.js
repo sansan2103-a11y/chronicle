@@ -250,12 +250,12 @@
   var IN_ARRIVE = /(?:来る|来て|来た|くる|きて|きた|入って|入る|現れ|戻って|戻る|下りて|降りて|やって|合流|顔を出|姿を見せ|連れて)/;
   /* ★W1(3)（既定 OFF・鍵 v292DfixNPRESw1On）: 入力の「戻り」は、その人が主語（名＋は/が/も）の文に 来る・戻る の語があり、その入力に通話の語が無いときだけ
      （実 AI 試験_W1 T10:「律のスマホが鳴る。相手は冴で、車の準備ができたと…」の「できた」の「きた」で、出ていった冴が戻った扱いになった）。OFF のときは今までどおり true。 */
-  function w1On() { return ls('v292DfixNPRESw1Off') !== '1' && ls('v292DfixNPRESw1On') === '1'; }
+  function w1On(n) { return ls('v292DfixNPRESw1Off') !== '1' && ls('v292DfixNPRESw1On') === '1' && (!n || ls('v292DfixNPRESw1r' + n + 'Off') !== '1'); }   /* 既定 OFF。規則ごとの kill: r3（入力の戻り・電話の台詞・「いる時より」）・r5（通話の後の呼びかけ） */
   function w1In(pt, fb) {
-    if (!w1On()) return true;
+    if (!w1On(3)) return true;
     var t = maskQ(str(pt)); if (/電話|通話|スマホ|携帯|着信|受話器|メッセージ|メール/.test(t)) { ST.w1In = (ST.w1In || 0) + 1; return false; }
     var ss = sents(t);
-    for (var i = 0; i < ss.length; i++) { if (!IN_ARRIVE.test(ss[i])) continue; for (var k = 0; k < fb.length; k++) { if (fb[k] && new RegExp(esc(fb[k]) + HON + '(?:は|が|も|と|を)').test(ss[i])) return true; } }
+    for (var i = 0; i < ss.length; i++) { if (!IN_ARRIVE.test(ss[i]) || /ほしい|欲しい|ようと|ように|よう頼|たい|かどうか|のを待|まで待|を待つ|頼む|頼ん|願/.test(ss[i])) continue;   /* 「戻ってきてほしい」「戻ろうとする」は戻りではない（#127-YB） */ for (var k = 0; k < fb.length; k++) { if (fb[k] && new RegExp(esc(fb[k]) + HON + '(?:は|が|も|と|を)').test(ss[i])) return true; } }
     ST.w1In = (ST.w1In || 0) + 1; return false;
   }
   function qStrip(s) {   /* ★NAME1CH: 最上位の「…」『…』を、中の句点ごと 1 字（＿）に畳む。閉じていない括弧はそのまま */
@@ -353,6 +353,7 @@
   function backIn(sent, forms) { if (!sent || /(?:ない|なかった|ではなく|でなく|じゃなく)/.test(sent) || !BACK.test(sent) || NOT_BACK.test(sent)) return false; return hasAny(sent, forms); }
   /* その人が主語で、この場で動作している（移動・退出・声だけ・話題・回想でない） */
   function actsHere(sent, forms) {
+    if (w1On(3) && /(?:いる|いた|居る|居た|来る|来た|戻る|戻った)(?:時|とき|頃|ころ|間|あいだ|うち|前|まえ|後|あと)(?:より|は|に|と|の|も|だけ|、)/.test(str(sent))) { ST.w1Acts = (ST.w1Acts || 0) + 1; return false; }   /* ★W1(3b): 実 AI 試験_W1c T7「声は、冴がいる時よりずっと低い」で、出ていった冴が戻った扱いになった（比べる・時を言う節は、その場で動いた証拠ではない） */
     if (!sent || IRREAL.test(sent) || PAST.test(sent) || REMOTE.test(sent) || /(?:ない|なかった|ず[、。]|ずに|ではなく|でなく|じゃなく)/.test(sent)) return false;   /* ★r7: 「茂ではなく、配達の…」で戻さない */
     for (var i = 0; i < forms.length; i++) { var f = forms[i]; if (!f) continue; var m = new RegExp(esc(f) + HON + '(?:は|が|も)').exec(sent); if (!m) continue;
       var rest = sent.slice(m.index + m[0].length); if (MOVE_OUT.test(rest) && !BACK.test(rest)) continue;
@@ -436,20 +437,20 @@
               /* ★W1(3)（2026-11-26・既定 OFF・鍵 v292DfixNPRESw1On・kill v292DfixNPRESw1Off）: 実 AI 試験_W1 T10・観察用_1126d T35 —
                  出ていった人が電話で話しただけで「戻った」になり、次の回に前面と状態の行へ入った。その回の本文（かっこの外）に通話の語があるときは、
                  台詞だけでは戻さない（本文で戻る・主人公と一緒・その場で動く、は今までどおり下で読む）。 */
-              if (w1On() && /電話|通話|受話器|着信/.test(maskQ(str(t.narrative)))) { ST.w1Phone = (ST.w1Phone || 0) + 1; st.phone = tn; }
+              if (w1On(3) && /電話|通話|受話器|着信/.test(maskQ(str(t.narrative)))) { ST.w1Phone = (ST.w1Phone || 0) + 1; st.phone = tn; }
               else { st = null; noteBack(n, tn, 'speaker'); } }
             else if (ty === 'DO' && objHere(t.playerText, fb)) { st = null; noteBack(n, tn, 'obj'); }   /* ★r5 */
             else if (ty === 'SAY' && vocHere(t.playerText, fb)) {
               /* ★W1(5)（既定 OFF・鍵 v292DfixNPRESw1On）: 実 AI 試験_W1b T8 — 出ていった冴と電話で話した次の回に「霧島さん、ありがとう」と言っただけで、冴が戻った扱いになった。
                  直前 2 ターン以内にその人と通話していたなら、呼びかけだけでは戻さない（本文で戻る・入力で戻る は今までどおり）。 */
-              if (w1On() && st.phone && tn - st.phone <= 2) { ST.w1Voc = (ST.w1Voc || 0) + 1; }
+              if (w1On(5) && st.phone && tn - st.phone <= 2) { ST.w1Voc = (ST.w1Voc || 0) + 1; }
               else { st = null; noteBack(n, tn, 'voc'); } }   /* ★r5 */
           }
           if (ty === 'DO' || ty === 'STORY') {   /* ★r4: 利用者の入力に書かれた退出（SAY は読まない）。入力で戻ってくる・この場で動くなら解く（既存の条件） */
             var ins = sents(n1chOn() ? qStrip(str(t.playerText)) : maskQ(str(t.playerText)));   /* ★NAME1CH: 入力の中の台詞（「…。…」と告げ、去っていく）で文が切れて主語を失わないよう、台詞ごと 1 字に畳む */
             for (var q = 0; q < ins.length; q++) { var xi = exitIn(ins[q], fs, ins[q + 1] || '', hf, true);
               if (xi) { st = { turn: tn, route: xi.route, src: 'input' }; noteExit(n, tn, 'input'); continue; }
-              if (st && tn > st.turn && actsHere(ins[q], fb)) { st = null; noteBack(n, tn, 'input'); } } }
+              if (st && tn > st.turn && actsHere(ins[q], fb) && !(w1On(3) && /ほしい|欲しい|ようと|ように|よう頼|たい|かどうか|のを待|まで待|を待つ|頼む|頼ん|願/.test(ins[q]))) { st = null; noteBack(n, tn, 'input'); } } }
           var ss = sents(plain(t.narrative));
           var pv = -1;   /* ★r8: 直前の（引用だけでない）文の番号 */
           for (var j = 0; j < ss.length; j++) {

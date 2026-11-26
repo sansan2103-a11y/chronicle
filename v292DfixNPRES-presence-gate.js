@@ -70,11 +70,12 @@
   function d2() { return ls('v292DfixNPRESd2Off') !== '1'; }   /* ★d2 kill（その場で効く） */
   function d3() { return ls('v292DfixNPRESd3Off') !== '1'; }   /* ★d3 kill（その場で効く） */
   function d4() { return ls('v292DfixNPRESd4Off') !== '1'; }   /* ★d4 kill（その場で効く） */
-  /* ★W1（2026-11-26・既定 OFF: localStorage v292DfixNPRESw1On='1'・kill v292DfixNPRESw1Off='1'）: 実 AI 観察用_1126d T3 / 試験_N1CH T4・T10 —
+  /* ★W1（2026-11-26・既定 OFF: localStorage v292DfixNPRESw1On='1'・kill v292DfixNPRESw1Off='1'・規則ごとの kill v292DfixNPRESw1r1Off〜r6Off）: 実 AI 観察用_1126d T3 / 試験_N1CH T4・T10 —
      場に居て台詞もある人が、そのターンで本人に触れた最後の文に「待つ・残る・向かう」の語があるだけで「確かめられない」になり、次の一手で前面の行ごと消えた。
      (1) 弱い語が 待つ/残る/置いて/向かっ の類だけで、同じターンに本人の（離れた所からでない）台詞があり、本文に通話の語が無いとき →「いる」。
      (2) fgRestrict: (b) でも、入力で話しかけた相手（名前＋敬称＋「、」「に」「へ」）で、直近 3 ターンに本文か台詞の証拠があり、通話の声でないなら外さない。(c) は今までどおり外す。 */
   function w1() { return lsg1('v292DfixNPRESw1Off') !== '1' && lsg1('v292DfixNPRESw1On') === '1'; }
+  function w1r(n) { return w1() && lsg1('v292DfixNPRESw1r' + n + 'Off') !== '1'; }   /* 規則ごとの kill（退行の切り分け用・#127-YB）: v292DfixNPRESw1r1Off … r6Off */
   var W1NAME = null;   /* gate() のたびに作り直す: 1 字の名 → 登録名（登録人物の中で 1 人だけのもの） */
   var WAIT1 = /待って|待つ|待ち|残っ|残る|残し|置いて|向かっ/g;
   function admfOn() { try { var A = G.__v292DfixADMF1; return !!(A && typeof A.gate === 'function' && A.gate('npres1', false) === true); } catch (e) { return false; } }   /* ★admf2: 管理者画面の ON だけ（ADMF1 が無い・例外 = OFF） */
@@ -205,7 +206,7 @@
         else { c = lexWeak3(qm[i], fs); if (c === 'present') ST.d3Kept++; }
       }
       last = c; lastS = s; });
-    if (last === 'weak' && lastS && w1()) { try {
+    if (last === 'weak' && lastS && w1r(1)) { try {
       var z1 = false; try { var Zx = G.__v292DfixSCENE1; z1 = !!(Zx && typeof Zx.exitHit === 'function' && Zx.exitHit(lastS, fs)); } catch (eZx) {}
       if (!z1 && !absHit(lastS, fs) && !WEAK.test(lastS.replace(WAIT1, '')) && !CALL.test(nar) && sayHit(t, fs, name) && !remoteOwn(nar, sayHit(t, fs, name, true), others || [], VRC3)) { ST.w1Kept = (ST.w1Kept || 0) + 1; return 'present'; }
     } catch (eW1) {} }
@@ -256,7 +257,7 @@
           all1.forEach(function (nm) { String(nm).split(/[\s　・]+/).filter(Boolean).forEach(function (p) { cnt1[p] = (cnt1[p] || 0) + 1; }); });
           all1.forEach(function (nm) { if (isHero(nm, sp(S.cast && S.cast.hero && S.cast.hero.name))) return; var ps = String(nm).split(/[\s　・]+/).filter(Boolean); if (ps.length !== 2) return;
             ps.forEach(function (p) { if (p.length === 1 && /[一-鿿々ぁ-んァ-ヶ]/.test(p) && cnt1[p] === 1) map1.push([new RegExp('(^|[^一-鿿々ァ-ヶー])' + p + '(?=(?:さん|ちゃん|くん|君|様|さま|先輩|先生|は|が|も|の|に|を|へ|と|や|、|。|，|．|！|？|!|\\?|…|」|』|\\s|$))', 'g'), nm]); }); });
-          W1NAME = null; if (w1()) { W1NAME = {}; all1.forEach(function (nm) { if (isHero(nm, sp(S.cast && S.cast.hero && S.cast.hero.name))) return; var ps = String(nm).split(/[\s　・]+/).filter(Boolean); if (ps.length === 2 && ps[1].length === 1 && cnt1[ps[1]] === 1) W1NAME[ps[1]] = nm; }); }
+          W1NAME = null; if (w1r(4)) { W1NAME = {}; all1.forEach(function (nm) { if (isHero(nm, sp(S.cast && S.cast.hero && S.cast.hero.name))) return; var ps = String(nm).split(/[\s　・]+/).filter(Boolean); if (ps.length === 2 && ps[1].length === 1 && cnt1[ps[1]] === 1) W1NAME[ps[1]] = nm; }); }
           if (map1.length) { ST.n1ch = (ST.n1ch || 0) + 1; turns = turns.map(function (t) { if (!t || typeof t.narrative !== 'string') return t; var nr = t.narrative, ch = false; map1.forEach(function (m) { var n2 = nr.replace(m[0], function (_, a) { return a + m[1]; }); if (n2 !== nr) { nr = n2; ch = true; } }); if (!ch) return t; var o = {}; for (var k1 in t) if (Object.prototype.hasOwnProperty.call(t, k1)) o[k1] = t[k1]; o.narrative = nr; return o; }); }
         }
       } catch (e1ch) { turns = S.turns; }
@@ -348,11 +349,11 @@
     try {
       ST.fgCalls++;
       var rs = realStore(), out = {}, ex = 0, D2 = d2();
-      var W1 = w1() && typeof text === 'string' && text;
+      var W1 = w1() && typeof text === 'string' && text, W1b = w1r(2), W1f = w1r(6);
       var addr1 = function (k) { if (!W1 || g.group(k, rs[k]) !== 'b') return false; var fs = g.forms(k), ps = String(k).split(/[\s　・]+/).filter(Boolean); if (ps.length === 2 && ps[1].length === 1) fs = fs.concat([ps[1]]);
-        for (var i = 0; i < fs.length; i++) { if (!fs[i]) continue; var pre = (fs[i].length === 1 ? '(^|[^一-鿿々ァ-ヶー])' : '()'), re = new RegExp(pre + esc(fs[i]) + '(?:さん|ちゃん|くん|君|様|さま|先輩|先生)?(?:、|,|，|に(?![一-鿿ぁ-ん]*(?:ついて|関して))|へ)'); if (re.test(text)) return g.recent(k);
+        for (var i = 0; i < fs.length; i++) { if (!fs[i]) continue; var pre = (fs[i].length === 1 ? '(^|[^一-鿿々ァ-ヶー])' : '()'), re = new RegExp(pre + esc(fs[i]) + '(?:さん|ちゃん|くん|君|様|さま|先輩|先生)?(?:、|,|，|に(?![一-鿿ぁ-ん]*(?:ついて|関して))|へ)'); if (W1b && re.test(text)) return g.recent(k);
           /* ★W1(6): 入力に「その人が…戻ってくる・入ってくる・やってくる・現れる」と書かれた回は、その回から候補に残す（実 AI 2 本: 戻りが 1 ターン遅れた）。通話の語・否定・仮定のある入力は除く */
-          if (!/電話|通話|スマホ|携帯|着信|受話器|メッセージ|メール|ない|なかった|たら|なら|れば|かもしれ|だろう|はず/.test(text) && new RegExp(pre + esc(fs[i]) + '(?:さん|ちゃん|くん|君|様|さま|先輩|先生)?(?:は|が|も)[^。！？!?\\n]{0,24}(?:戻ってく|戻ってき|戻って来|帰ってく|帰ってき|帰って来|入ってく|入ってき|入って来|やってく|やってき|やって来|現れ|姿を見せ|合流)').test(text)) { ST.w1Ret = (ST.w1Ret || 0) + 1; return true; } } return false; };
+          if (W1f && !/電話|通話|スマホ|携帯|着信|受話器|メッセージ|メール|ない|なかった|たら|なら|れば|かもしれ|だろう|はず|ほしい|欲しい|ようと|ように|よう頼|たい|かどうか|のを待|まで待|を待つ|頼む|頼ん|願/.test(text) && new RegExp(pre + esc(fs[i]) + '(?:さん|ちゃん|くん|君|様|さま|先輩|先生)?(?:は|が|も)[^。！？!?\\n]{0,24}(?:戻ってく|戻ってき|戻って来|帰ってく|帰ってき|帰って来|入ってく|入ってき|入って来|やってく|やってき|やって来|現れ|姿を見せ|合流)').test(text)) { ST.w1Ret = (ST.w1Ret || 0) + 1; return true; } } return false; };
       Object.keys(states).forEach(function (k) { if (addr1(k)) { ST.w1Addr = (ST.w1Addr || 0) + 1; out[k] = states[k]; } else if (g.out(k, rs[k])) ex++; else if (D2 && g.edited(k, rs[k])) { ex++; ST.d2Excluded++; } else out[k] = states[k]; });   /* ★d2 */
       if (!ex) return null;
       ST.fgFiltered++; ST.fgExcluded += ex; return out;
