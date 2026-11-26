@@ -70,11 +70,11 @@
   function d2() { return ls('v292DfixNPRESd2Off') !== '1'; }   /* ★d2 kill（その場で効く） */
   function d3() { return ls('v292DfixNPRESd3Off') !== '1'; }   /* ★d3 kill（その場で効く） */
   function d4() { return ls('v292DfixNPRESd4Off') !== '1'; }   /* ★d4 kill（その場で効く） */
-  /* ★W1（2026-11-26・既定 OFF: localStorage v292DfixNPRESw1On='1'・kill v292DfixNPRESw1Off='1'・規則ごとの kill v292DfixNPRESw1r1Off〜r6Off）: 実 AI 観察用_1126d T3 / 試験_N1CH T4・T10 —
+  /* ★W1（2026-11-26・既定 ON・kill: localStorage v292DfixNPRESw1Off='1'・規則ごとの kill v292DfixNPRESw1r1Off〜r6Off）: 実 AI 観察用_1126d T3 / 試験_N1CH T4・T10 —
      場に居て台詞もある人が、そのターンで本人に触れた最後の文に「待つ・残る・向かう」の語があるだけで「確かめられない」になり、次の一手で前面の行ごと消えた。
      (1) 弱い語が 待つ/残る/置いて/向かっ の類だけで、同じターンに本人の（離れた所からでない）台詞があり、本文に通話の語が無いとき →「いる」。
      (2) fgRestrict: (b) でも、入力で話しかけた相手（名前＋敬称＋「、」「に」「へ」）で、直近 3 ターンに本文か台詞の証拠があり、通話の声でないなら外さない。(c) は今までどおり外す。 */
-  function w1() { return lsg1('v292DfixNPRESw1Off') !== '1' && lsg1('v292DfixNPRESw1On') === '1'; }
+  function w1() { return lsg1('v292DfixNPRESw1Off') !== '1'; }   /* 2026-11-26 既定 ON（#127-YB・実 AI 試験_W1d: 退出中ずっと c・戻った回から前面・名指し 4/4）。kill v292DfixNPRESw1Off='1' */
   function w1r(n) { return w1() && lsg1('v292DfixNPRESw1r' + n + 'Off') !== '1'; }   /* 規則ごとの kill（退行の切り分け用・#127-YB）: v292DfixNPRESw1r1Off … r6Off */
   var W1NAME = null;   /* gate() のたびに作り直す: 1 字の名 → 登録名（登録人物の中で 1 人だけのもの） */
   var WAIT1 = /待って|待つ|待ち|残っ|残る|残し|置いて|向かっ/g;
@@ -208,7 +208,7 @@
       last = c; lastS = s; });
     if (last === 'weak' && lastS && w1r(1)) { try {
       var z1 = false; try { var Zx = G.__v292DfixSCENE1; z1 = !!(Zx && typeof Zx.exitHit === 'function' && Zx.exitHit(lastS, fs)); } catch (eZx) {}
-      if (!z1 && !absHit(lastS, fs) && !WEAK.test(lastS.replace(WAIT1, '')) && !CALL.test(nar) && sayHit(t, fs, name) && !remoteOwn(nar, sayHit(t, fs, name, true), others || [], VRC3)) { ST.w1Kept = (ST.w1Kept || 0) + 1; return 'present'; }
+      if (!z1 && !absHit(lastS, fs) && !WEAK.test(lastS.replace(WAIT1, '')) && !CALL.test(lastS) && sayHit(t, fs, name) && !remoteOwn(nar, sayHit(t, fs, name, true), others || [], VRC3)) { ST.w1Kept = (ST.w1Kept || 0) + 1; return 'present'; }
     } catch (eW1) {} }
     if (last) return last;
     if (sayHit(t, fs, name) || voice) {

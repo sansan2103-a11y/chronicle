@@ -250,7 +250,7 @@
   var IN_ARRIVE = /(?:来る|来て|来た|くる|きて|きた|入って|入る|現れ|戻って|戻る|下りて|降りて|やって|合流|顔を出|姿を見せ|連れて)/;
   /* ★W1(3)（既定 OFF・鍵 v292DfixNPRESw1On）: 入力の「戻り」は、その人が主語（名＋は/が/も）の文に 来る・戻る の語があり、その入力に通話の語が無いときだけ
      （実 AI 試験_W1 T10:「律のスマホが鳴る。相手は冴で、車の準備ができたと…」の「できた」の「きた」で、出ていった冴が戻った扱いになった）。OFF のときは今までどおり true。 */
-  function w1On(n) { return ls('v292DfixNPRESw1Off') !== '1' && ls('v292DfixNPRESw1On') === '1' && (!n || ls('v292DfixNPRESw1r' + n + 'Off') !== '1'); }   /* 既定 OFF。規則ごとの kill: r3（入力の戻り・電話の台詞・「いる時より」）・r5（通話の後の呼びかけ） */
+  function w1On(n) { return ls('v292DfixNPRESw1Off') !== '1' && (!n || ls('v292DfixNPRESw1r' + n + 'Off') !== '1'); }   /* 2026-11-26 既定 ON。規則ごとの kill: r3（入力の戻り・電話の台詞・「いる時より」）・r5（通話の後の呼びかけ） */
   function w1In(pt, fb) {
     if (!w1On(3)) return true;
     var t = maskQ(str(pt)); if (/電話|通話|スマホ|携帯|着信|受話器|メッセージ|メール/.test(t)) { ST.w1In = (ST.w1In || 0) + 1; return false; }
