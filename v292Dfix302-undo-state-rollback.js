@@ -37,6 +37,36 @@
   var rolledBackSinceCommit=false;
   function pushLog(a,x){ a.push(x); if(a.length>80) a.shift(); }
   function prune(L){ Object.keys(snaps).forEach(function(k){ if(L-(+k)>25 || (+k)>L){ delete snaps[k]; delete meta[k]; delete refs[k]; } }); }
+  /* ★SNAP1（2026-11-26・既定 OFF・鍵 v292DfixSNAP1On・kill v292DfixSNAP1Off）: 「開き直した後の取り消し・やり直しで、キャラの状態が戻らない」（fix926 の KNOWN_RESIDUAL = UNDO_AFTER_RELOAD_NO_SNAPSHOT）。
+     実測（2026-11-26 試験_CMD）: ページを読み直した後のやり直し・取り消しで、捨てた回の状態（からだ・こころ・本能）が次の送信にそのまま入った。
+     Owner の実プレイ（iPhone・ホームに戻って開き直す）でも、取り違えた展開の状態が残り続けて、生成し直しても同じ方向へ引っ張られる原因になり得る。
+     やること: 確定した snapshot（直近 3 つの長さ分）を、そのタブの sessionStorage に物語ごとに控える。読み直した後、戻り先の長さの snapshot がメモリに無いときだけ、
+     控えから戻す。戻すのは「その長さの最後のターン」の目印（入力＋本文の頭のハッシュ）が今の物語と一致するときだけ（別の物語・別の分岐の控えは使わない）。
+     書くのは sessionStorage の 1 鍵（'v292DfixSNAP1_'＋物語の鍵）だけ。localStorage・サーバー・S には書かない。中身は fix77 がもう端末に持っている状態の写し。 */
+  function snap1On(){ try{ return localStorage.getItem('v292DfixSNAP1Off')!=='1' && localStorage.getItem('v292DfixSNAP1On')==='1'; }catch(e){ return false; } }
+  function snap1Key(){ try{ var sk=window.__chronicleDocumentStoryKey; return sk ? 'v292DfixSNAP1_'+String(sk) : ''; }catch(e){ return ''; } }
+  var snap1={ saved:0, loaded:0, miss:0, tidMismatch:0, tooBig:0, err:0 };
+  function snap1Save(){
+    try{
+      if(!snap1On() || off() || off926()) return; var k=snap1Key(); if(!k) return;
+      var L=curLen(); if(L<0) return; var o={ v:1, at:Date.now(), snaps:{} };
+      [L, L-1, L-2].forEach(function(x){ if(x>=0 && snaps[x] && meta[x]) o.snaps[x]={ s:snaps[x], tid:meta[x].tid||null, h:meta[x].hash||null }; });
+      var js=JSON.stringify(o); if(js.length>300000){ snap1.tooBig++; return; }
+      sessionStorage.setItem(k, js); snap1.saved++;
+    }catch(e){ snap1.err++; }
+  }
+  function snap1Load(L){
+    try{
+      if(!snap1On() || off() || off926() || snaps[L]) return false; var k=snap1Key(); if(!k) return false;
+      var raw=sessionStorage.getItem(k); if(!raw){ snap1.miss++; return false; }
+      var o=JSON.parse(raw), e=o && o.snaps && o.snaps[L]; if(!e || !e.s){ snap1.miss++; return false; }
+      var s0=getS(); if(!s0 || !Array.isArray(s0.turns) || s0.turns.length<L){ snap1.miss++; return false; }
+      var cur=L>0 ? turnId(s0.turns[L-1]) : null;
+      if((e.tid||null)!==cur){ snap1.tidMismatch++; return false; }
+      snaps[L]=e.s; meta[L]={ kind:'persist', hash:e.h||null, tid:e.tid||null, t:Date.now() }; delete refs[L]; snap1.loaded++;
+      return true;
+    }catch(e2){ snap1.err++; return false; }
+  }
   function commitSnap(){
     var s=getS(), st=getStore();
     if(!s || !Array.isArray(s.turns) || !st) return;
@@ -49,6 +79,7 @@
     snaps[L]=c; meta[L]={ kind:'commit', hash:h, tid:tid, t:Date.now() }; refs[L]=L>0?s.turns[L-1]:null;
     prune(L);
     rolledBackSinceCommit=false; f926.commits++;
+    snap1Save();
     pushLog(f926.log,{ ev:'commit', len:L, idx:L, hash:h, tid:tid });
   }
   function baseSnap(why){
@@ -59,6 +90,7 @@
     var s0=getS();
     snaps[L]=c; meta[L]={ kind:'base', hash:h32(JSON.stringify(c)), tid:(s0&&L>0)?turnId(s0.turns[L-1]):null, t:Date.now() }; refs[L]=(s0&&L>0)?s0.turns[L-1]:null; f926.bases++;
     pushLog(f926.log,{ ev:'base', why:why, len:L, idx:L, hash:meta[L].hash });
+    try{ if(L>0) snap1Load(L-1); snap1Save(); }catch(eS1){}
   }
   /* ★fix926 rev C: 起動済みで読み込まれた document（chr:engine-booted を聞き逃した）でも base を撮る。
      rev B 実測（CA1: 2 台目 device の fresh document）で engine-booted の listener 登録前に boot が完了し、base 0 件だった。 */
@@ -86,7 +118,8 @@
     return A.syncGuard('fix302.restoreTo');
   }
   function restoreTo(L){
-    var st=getStore(), snap=snaps[L];
+    var st=getStore(); if(st && !snaps[L]) snap1Load(L);   /* ★SNAP1: 読み直した後は控えから */
+    var snap=snaps[L];
     if(!st || !snap) return false;
     /* ★fix926 rev B: 復元は snapshot の **複製** を store へ入れる。
        rev A 実測(U77_BRANCH FAIL): 旧実装は snap の entry object をそのまま store へ入れるため、
@@ -198,7 +231,7 @@
   }
   (function w(){ w._n=(w._n||0)+1; if(wrap()) return; if(w._n>120) return; setTimeout(w,500); })();
 
-  window.__v292Dfix302api={ snaps:snaps, restoreTo:restoreTo, curLen:curLen,
+  window.__v292Dfix302api={ snaps:snaps, restoreTo:restoreTo, curLen:curLen, snap1:function(){ var o={ on:snap1On(), key:!!snap1Key() }; for(var k in snap1) o[k]=snap1[k]; return o; },
     /* ★fix926 assertion 面（read-only 診断） */
     f926:{ meta:meta, stats:f926, off:off926,
       verify:function(){ var L=curLen(), st=getStore(), m=meta[L]; var h=st ? h32(JSON.stringify(st)) : null; return { len:L, storeHash:h, snapHash:m ? m.hash : null, kind:m ? m.kind : null, eq:!!m && m.hash===h }; } } };
