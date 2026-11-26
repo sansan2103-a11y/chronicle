@@ -160,6 +160,7 @@
    *   applicable=false … turn に _convSays 配列が無い（古いターン）。何もしない。
    *   metaAction: 'none' | 'splice' | 'drop'
    */
+  function same1On() { try { return (typeof localStorage !== 'undefined') && localStorage.getItem('v292DfixEDIT01SameOn') === '1'; } catch (e) { return false; } }
   function reconcile(turn, newNarr, opts) {
     opts = opts || {};
     var cs = turn && Array.isArray(turn._convSays) ? turn._convSays : null;
@@ -187,6 +188,10 @@
       if (u < occ.length) { st[i].kind = 'keep'; st[i].pos = occ[u]; used[k] = u + 1; }
       else if (isHero) { st[i].kind = 'keep'; }                                     /* SAY の主人公の写し（CL1-c の例外） */
     }
+    /* ★SAME1（2026-11-26・既定 OFF: localStorage v292DfixEDIT01SameOn='1'）: 本文を 1 字も変えていない保存（＝話者の訂正だけ）では、カードを外さない。
+       実機（試験_NEW4・Owner 実機）: <react> の声から作ったカード（本文に台詞が無い）が 1 枚あるターンは、保存すると「本文に無い台詞」として外れるため、
+       そのターンのどのカードも「この発話は現在訂正できません」になり、話者を直す手段が無かった。本文が同じなら、外す理由（編集で台詞が消えた）がそもそも無い。 */
+    if (same1On() && opts.oldNarr != null && opts.oldNarr === newNarr) { for (i = 0; i < n; i++) if (st[i].kind === 'drop') { st[i].kind = 'keep'; res.same1 = (res.same1 || 0) + 1; } }
     /* 一致した出現が覆う引用は「使用済み」 */
     for (i = 0; i < n; i++) {
       if (st[i].kind !== 'keep' || st[i].pos < 0) continue;
