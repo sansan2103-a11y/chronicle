@@ -431,7 +431,9 @@
       /* ★r19（2026-11-26・既定 ON・kill v292DfixEXP1R19Off・GPT #127-YC 優先 1）: 実 AI 観察用_1126c（@T6 → @T17）・1126e（@T3 → @T22）—
          同じ段階の同じ件（教わった → 教わった）が後の要約でもう一度出ると、ターン番号が「その話をした回」に書き換わっていた。
          同じ段階なら、最初のターンと最初の句のまま（経験した時点）。段階が上がったとき（教わった → 一人でできた 等）と failed は今までどおり新しい回。 */
-      if (lsg('v292DfixEXP1R19Off') !== '1' && c.k !== 'failed' && p.k === c.k && (+p.t || 0) <= (+c.t || 0)) { if (p.t !== c.t || p.s !== c.s) cnt(ST, 'r19Kept'); else ST.dup++; return; }
+      var tch19 = function (z) { var m19 = /^(.{1,12}?)(?:さん|ちゃん|くん|君|先生|先輩)?(?:から|に)(?=.*(?:教わ|習っ|習い|教えてもら|指導))/.exec(cleanS(z)); return m19 ? m19[1] : ''; };   /* #127-YD: 教えた人が違う（別の人から同じことを教わった・訂正）ときは、最初の記録に固定しない */
+      var diff19 = (function () { var a19 = tch19(p.s), b19 = tch19(c.s); return !!(a19 && b19 && a19 !== b19 && a19.indexOf(b19) < 0 && b19.indexOf(a19) < 0); })();
+      if (lsg('v292DfixEXP1R19Off') !== '1' && !diff19 && c.k !== 'failed' && p.k === c.k && (+p.t || 0) <= (+c.t || 0)) { if (p.t !== c.t || p.s !== c.s) cnt(ST, 'r19Kept'); else ST.dup++; return; }
       if (c.k === 'failed' || RANK[c.k] >= RANK[p.k]) { if (p.k !== c.k || p.t !== c.t || p.s !== c.s) { p.k = c.k; p.t = c.t; p.s = c.s; ST.upd++; } else ST.dup++; } else ST.dup++; return; }
     if (pool.length < cap) { list.push(c); ST.kept++; return; }
     var low = null; pool.forEach(function (x) { if (!low || (RANK[x.k] || 0) < (RANK[low.k] || 0) || ((RANK[x.k] || 0) === (RANK[low.k] || 0) && x.t < low.t)) low = x; });
