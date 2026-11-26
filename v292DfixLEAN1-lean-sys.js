@@ -71,29 +71,35 @@
       var j = JSON.parse(txt), msg = j && j.choices && j.choices[0] && j.choices[0].message, c = msg && msg.content;
       if (typeof c !== 'string' || c.length < 120) return resp;
       fs1.seen++;
-      if (/<state\b[^>]*\bwho\s*=/.test(c)) { fs1.ok++; return resp; }
-      fs1.miss++;
+      /* r3 ★毎ターン（v292DfixSTFILL1Mode='all'）: 実機 fill2 では、今の形でも「気づけない記録の欠け」が 31/69（人物×ターン）あり、<state> が付いていても人物の行が抜ける・崩れる回が多かった。
+         'all' では <state> の有無にかかわらず毎ターン本文から読み取り、AI 自身が書かなかった人物の行だけを足す（AI が書いた行は上書きしない）。 */
+      var all = ls('v292DfixSTFILL1Mode') === 'all', hasSt = /<state\b[^>]*\bwho\s*=/.test(c);
+      if (hasSt && !all) { fs1.ok++; return resp; }
+      if (hasSt) fs1.ok++; else fs1.miss++;
+      var have = {}; (c.match(/<state\b[^>]*>/g) || []).forEach(function(tg){ var w0 = /\bwho\s*=\s*"([^"]{1,24})"/.exec(tg); if (w0 && /(?:からだ|こころ)\s*=\s*"[^"…]{2,}/.test(tg)) have[w0[1]] = 1; });
+      var sayWho = {}; (c.match(/<(?:say|react)\b[^>]*>/g) || []).forEach(function(tg){ var w1 = /\bwho\s*=\s*"([^"]{2,24})"/.exec(tg); if (w1 && !/^[?？]+$|不明/.test(w1[1])) sayWho[w1[1]] = 1; });
       var rb = JSON.parse(reqBody), sys = '';
       for (var i = 0; i < rb.messages.length; i++) if (rb.messages[i] && rb.messages[i].role === 'system' && typeof rb.messages[i].content === 'string') { sys = rb.messages[i].content; break; }
       var names = sect(sys, 'whoに使う名前') || sect(sys, 'キャラ属性'), prev = sect(sys, '各キャラの現在の状態');
       var body2 = {}; Object.keys(rb).forEach(function(k){ if (k !== 'messages') body2[k] = rb[k]; });
       body2.max_tokens = 400; body2.temperature = 0.2;
       /* r2（実機 fill1: 30 ターンで補完 7 回のうち 4 回が本文に無い内容。うち 2 回は参考に渡した前の状態の写し、2 回は本能の作文）→ 前の状態は渡さない。名前の表だけ渡す。 */
-      body2.messages = [ { role: 'system', content: FILL_SYS + '\n' + names + (prev ? '\n\n（この場面にいる人の名前）\n' + (prev.match(/^・[^｜\n]{1,24}(?=｜)/gm) || []).join('\n') : '') },
+      var extra = Object.keys(sayWho).filter(function(n){ return sys.indexOf(n) < 0; });   /* 登録されていないが、この回に話した人（名前のある新しい人） */
+      body2.messages = [ { role: 'system', content: FILL_SYS + '\n' + names + (extra.length ? '\n（この回に話した人）' + extra.join('、') : '') + (prev ? '\n\n（この場面にいる人の名前）\n' + (prev.match(/^・[^｜\n]{1,24}(?=｜)/gm) || []).join('\n') : '') },
                          { role: 'user', content: '本文:\n' + c.replace(/<\/?(?:say|react)\b[^>]*>/g, '').slice(0, 2400) } ];
       return of.apply(self, [u, Object.assign({}, o, { body: JSON.stringify(body2) })]).then(function(r2){
         if (!r2 || !r2.ok) { fs1.fail++; fs1.last = { why: 'http' }; return resp; }
         return r2.text().then(function(t2){
           var j2 = JSON.parse(t2), c2 = j2 && j2.choices && j2.choices[0] && j2.choices[0].message && j2.choices[0].message.content;
           var tags = (typeof c2 === 'string' ? (c2.match(/<state\b[^>]*\/>/g) || []) : []).map(function(tg){
-            var w = /\bwho\s*=\s*"([^"]{1,24})"/.exec(tg); if (!w || sys.indexOf(w[1]) < 0) return '';
+            var w = /\bwho\s*=\s*"([^"]{1,24})"/.exec(tg); if (!w || (sys.indexOf(w[1]) < 0 && !sayWho[w[1]]) || have[w[1]]) return '';
             /* r2: 姓だけ・名だけの短い形は足さない（実機: 「宮下」の行が「宮下 誠」と別の項目に入り、一度も送られなかった） */
             try { var esc = w[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); if (new RegExp(esc + '[ 　][一-龠々ぁ-んァ-ヶー]').test(sys) || new RegExp('[一-龠々ぁ-んァ-ヶー][ 　]' + esc + '(?![一-龠々ぁ-んァ-ヶー])').test(sys)) return ''; } catch(_){}
             var out = '<state who="' + w[1] + '"', n = 0;
-            ['からだ', 'こころ'].forEach(function(a){ var m = new RegExp(a + '\\s*=\\s*"([^"]{1,60})"').exec(tg); if (m && !/^[…\.。\s]*$/.test(m[1])) { out += ' ' + a + '="' + m[1] + '"'; n++; } });
+            ['からだ', 'こころ'].forEach(function(a){ var m = new RegExp(a + '\\s*=\\s*"([^"]{1,60})"').exec(tg); if (m && !/^[…\.。\s]*$/.test(m[1]) && !/^(?:不明|なし|無し|特になし|その場にいる|—|-)$/.test(m[1].trim())) { out += ' ' + a + '="' + m[1] + '"'; n++; } });
             return n ? out + '/>' : '';
           }).filter(Boolean).slice(0, 4);
-          if (!tags.length) { fs1.fail++; fs1.last = { why: 'empty' }; return resp; }
+          if (!tags.length) { if (!hasSt) fs1.fail++; fs1.last = { why: 'empty' }; return resp; }
           msg.content = c.replace(/\s+$/, '') + '\n' + tags.join('\n');
           fs1.filled++; fs1.last = { why: 'filled', n: tags.length };
           var h = {}; try { var ct = resp.headers && resp.headers.get && resp.headers.get('content-type'); if (ct) h['content-type'] = ct; } catch(_){}
@@ -117,5 +123,5 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r6', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r7', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
 })();
