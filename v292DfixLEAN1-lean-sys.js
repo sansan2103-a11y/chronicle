@@ -38,7 +38,12 @@
     var add = addOn() ? ADD : '';
     st.last = { cut: cut, kept: kept, before: src.length, after: out.length + add.length, add: !!add };
     if (!cut.length && !add) return body;
-    b.messages[si].content = out + add; st.cut++;
+    /* r3: 足す 5 行は末尾ではなく、最初の見出しの前（役割の直後）に置く。実機 lean2: 末尾に置いた C だけ <state> の出力が 3 回欠けた
+       （出力の形の決まりより後ろに書き方の約束が来て、最後に読む内容が変わったためと見ている）。v292DfixLEAN1AddPos='end' で元の位置に戻せる。 */
+    if (add && ls('v292DfixLEAN1AddPos') !== 'end') { var m1 = /\n+(?=【[^】\n]{1,90}】)/.exec(out); if (m1) out = out.slice(0, m1.index) + add + out.slice(m1.index); else out += add; }
+    else out += add;
+    st.last.addPos = add ? (ls('v292DfixLEAN1AddPos') === 'end' ? 'end' : 'top') : null;
+    b.messages[si].content = out; st.cut++;
     return JSON.stringify(b);
   }
   var of = G.fetch;
@@ -51,5 +56,5 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261126-r2', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody };
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r3', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody };
 })();
