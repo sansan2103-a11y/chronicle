@@ -321,6 +321,10 @@
         if((_r.length>=2 && nm.indexOf(_r)>=0) || (nm.length>=2 && _r.indexOf(nm)>=0)) return true; }
       return false;
     }
+    /* ★NAMEWS2（2026-11-26・既定 ON・kill v292DfixNAMEWS2Off='1'）: 登録されていない人でも、空白・中黒・見えない文字だけが違う名前（「四谷 梨花」と「四谷梨花」）は
+       一覧では 1 行にする（Owner 実機: 名前を付けた新しい人が 2 行になった）。表示だけ。記録・状態・会話ログは変えない。先に出た行（状態を持つ側）を残す。 */
+    var __nws2 = {};
+    function __nws2Dup(nm){ try { if (localStorage.getItem('v292DfixNAMEWS2Off') === '1') return false; var N = window.__v292DfixNAMEWS1; if (!N || typeof N.key !== 'function') return false; var k = N.key(nm); if (!k || k.length < 2) return false; if (__nws2[k] && __nws2[k] !== nm) return true; if (!__nws2[k]) __nws2[k] = nm; return false; } catch(e){ return false; } }
     Object.keys(wiByName).forEach(function(nm){
       function __isVariantOfPeer(nm){ try{ var pool=Object.keys(wiByName); for(var i=0;i<pool.length;i++){ var b=pool[i]; if(b===nm) continue; if(nm.length>b.length && nm.slice(-b.length)===b) return true; } }catch(e){} return false; } // v292Dfix358: 「間延びした影」→「影」等、修飾語+既出名詞は同一として非表示
     if (registered[nm] || __nws1Reg(nm) || __isAliasOfRegistered(nm) || __isVariantOfPeer(nm)) return;
@@ -376,6 +380,7 @@
           lt = lt529;                 // 別名で見つかった最終登場ターンを採用
         }
       } catch(e){}
+      if (__nws2Dup(nm)) return;
       out.story.push({
         name: nm,
         desc: w.desc || '',
@@ -425,6 +430,7 @@
             // ★fix487d: 汎用未識別(???)は、その核(例「若い男」)が具体呼称として既出なら畳む(生成側を残す)
             if (__f487gen(__h)){ var __core = __coreOf(__label); if (__core && __specific[__core] && Object.keys(__specific).length === 1) continue; }  // ★fix487f: 具体候補が1つの時だけ畳む(複数=別人の恐れ→畳まない)
             if (__f487have[__label]) continue;
+            if (__nws2Dup(__label)) continue;
             __f487have[__label] = 1;
             out.story.push({ name: __label, desc: '', state: '\uFF08\u7269\u8A9E\u306B\u767B\u5834\u30FB\u672A\u767B\u9332\uFF09', lastTurn: __gidx, lastTurnLabel: turnDelta(__gidx, turns.length), isStory: true, provisional: true, rawHandle: __h });
           }
