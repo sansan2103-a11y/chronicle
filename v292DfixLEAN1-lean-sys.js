@@ -22,7 +22,10 @@
     + '・人物の気持ちや事情を、本人の台詞で説明させない。体の反応と行動で見せ、それが何の反応かは地の文に書く。\n'
     + '・息が上がっている・痛みが強い・動揺が大きいとき、台詞は整った文にならない（息、短い音、一語、途切れ、無言）。口調や丁寧さより、その時に話せる量が先に決まる。\n'
     + '・その場にいる人物は、それぞれ自分の目的で小さく動く。全員が同じ反応をしない。言うだけで終わらせず、何かをしようとする。\n'
-    + '・前の場面で起きたこと（物・傷・見られたこと・約束）は消えない。次の場面の出発点にする。場面は、次が気になるところで終える。';
+    + '・前の場面で起きたこと（物・傷・見られたこと・約束）は消えない。次の場面の出発点にする。場面は、次が気になるところで終える。\n'
+    /* r4: 実機 lean3 で、5 行を足した形だけ <state> の無い回が増えた（C 4・2 回／今の形 1 回）。欠けた回は出力が短く、本文だけでタグが 1 つも無かった＝小説として書き切ってやめている。
+       そこで、書き方の約束は本文だけのもので、後ろのタグは省かないことを 1 行で言う（v292DfixLEAN1AddTag='0' でこの行だけ外せる）。 */
+    + (ls('v292DfixLEAN1AddTag') === '0' ? '' : '・ここまでの約束は本文の書き方だけに当てる。本文が短くても、本文の後ろに置くタグ（下の【出力の形式】と【状態の出力】）は、どのターンでも省かない。');
   function addOn(){ return ls('v292DfixLEAN1Add') === '1'; }
   function fromBody(body){
     if (typeof body !== 'string' || body.indexOf('"messages"') < 0) return body;
@@ -56,5 +59,5 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r3', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody };
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r4', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody };
 })();
