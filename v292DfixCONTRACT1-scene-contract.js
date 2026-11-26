@@ -301,16 +301,41 @@ items.unshift(line); ev.push({ item: 'expq', who: who, turn: best.x.t + 1, quote
     stats.added++;
     return JSON.stringify(b);
   }
+  // ---- ★LEAN1（2026-11-26・試験専用・既定 OFF: localStorage v292DfixLEAN1On='1'・GPT #127-YJ「足す前に引く」）----
+  //   system の見出し（【…】）のうち「表現の制限」に当たるものを、送信の直前に外す。事実の保護（状態・呼称・話者・居場所）と出力形式の決まりは残す。
+  //   外す見出しは v292DfixLEAN1Drop（「|」区切り・見出しの先頭の一致）で差し替えられる。未設定なら下の既定。保存データ・既定の送信には触れない。
+  var LEAN_DEF = ['良い1ターンの形', '展開を前に進める', '書き方の見本', '反応と身体', 'ダッシュ', '読ませ方', '表記', '文体の基本ルール', 'NPCの登場', '展開の推進ルール', '描写の作り方'];
+  var leanStats = { seen: 0, cut: 0, last: null };
+  function leanOn(){ return ls('v292DfixLEAN1On') === '1'; }
+  function leanList(){ var v = ls('v292DfixLEAN1Drop'); if (v && v !== '__ERR__') { var a = String(v).split('|').map(function(x){ return x.trim(); }).filter(Boolean); if (a.length) return a; } return LEAN_DEF; }
+  function leanFromBody(body){
+    if (typeof body !== 'string' || body.indexOf('protagonist') < 0) return body;
+    var b = JSON.parse(body); if (!b || !Array.isArray(b.messages)) return body;
+    var si = -1; for (var i = 0; i < b.messages.length; i++){ var m = b.messages[i]; if (m && m.role === 'system' && typeof m.content === 'string' && m.content.indexOf('\n\n【') >= 0){ si = i; break; } }
+    if (si < 0) return body;
+    leanStats.seen++;
+    /* 見出しは行頭の【…】。前の区切り（改行 1 個以上）ごと持って分け、外す見出しはその区切りと一緒に落とす（残す部分は 1 字も変えない） */
+    var drop = leanList(), src = b.messages[si].content, parts = src.split(/(\n+)(?=【[^】\n]{1,90}】)/), out = parts[0], cut = [], before = src.length;
+    for (var k = 1; k + 1 < parts.length; k += 2){
+      var sep = parts[k], p = parts[k + 1], h = /^【([^】\n]{1,90})】/.exec(p), name = h ? h[1] : '';
+      if (name && drop.some(function(d){ return name.indexOf(d) === 0; })) cut.push(name.slice(0, 20)); else out += sep + p;
+    }
+    if (!cut.length) return body;
+    b.messages[si].content = out;
+    leanStats.cut++; leanStats.last = { cut: cut, before: before, after: b.messages[si].content.length };
+    return JSON.stringify(b);
+  }
   var of = G.fetch;
   if (typeof of === 'function'){
     var wrapped = function(u, o){
       try { if (on() && o && o.method === 'POST' && typeof o.body === 'string' && /workers\.dev|openrouter/.test(String(u))){ var nb = contractFromBody(o.body); if (nb !== o.body) o = Object.assign({}, o, { body: nb }); } }
       catch(e){ stats.err++; try { console.warn(TAG, 'skipped:', e && e.message); } catch(_){} }
+      try { if (leanOn() && o && o.method === 'POST' && typeof o.body === 'string' && /workers\.dev|openrouter/.test(String(u))){ var lb = leanFromBody(o.body); if (lb !== o.body) o = Object.assign({}, o, { body: lb }); } } catch(eL){ try { console.warn(TAG, 'lean skipped:', eL && eL.message); } catch(_){} }
       return of.apply(this, [u, o]);
     };
     try { Object.keys(of).forEach(function(k){ wrapped[k] = of[k]; }); } catch(e){}
     wrapped.__fCONTRACT1 = true; G.fetch = wrapped;
   }
-  G.__v292DfixCONTRACT1 = { VER: VER, build: build, contractFromBody: contractFromBody, last: function(){ return last; }, stats: function(){ return stats; }, press: { on: pressOn, get: pressGet, set: pressSet } };
+  G.__v292DfixCONTRACT1 = { VER: VER, build: build, contractFromBody: contractFromBody, last: function(){ return last; }, stats: function(){ return stats; }, press: { on: pressOn, get: pressGet, set: pressSet }, lean: { on: leanOn, list: leanList, stats: function(){ return leanStats; }, fromBody: leanFromBody } };
   try { console.log(TAG, 'armed', VER); } catch(e){}
 })();
