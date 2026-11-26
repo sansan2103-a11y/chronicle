@@ -171,6 +171,11 @@
     var out = [], ss = sentences(text), lastNoun = '';
     for (var a = 0; a < ss.length; a++){
       var s = ss[a], cls = s.split(/、|，/).map(clean).filter(Boolean), prevObj = '', pendingGive = [];
+      /* ★MV2（2026-11-26・既定 OFF・鍵 v292DfixPLACE1mv2On・kill v292DfixPLACE1mv2Off）: 実 AI 観察用_1126f T9〜T10 — 「律は夕刊を持って部屋に戻り」が持ち物の節として読まれ、
+         移動が落ちて、古い現在地（郵便受けの前）が次の回まで送られた。(1)「X を持って／手に／抱えて＋場所へ・に＋動く」は、持つ節と動く節に分ける。
+         (2)「場所に戻った＋主人公＋は」（連体の形）は主人公の移動。 */
+      var mv2 = false; try { mv2 = ls('v292DfixPLACE1mv2Off') !== '1' && ls('v292DfixPLACE1mv2On') === '1'; } catch (eMv) { mv2 = false; }
+      if (mv2) { var cls2 = []; cls.forEach(function (c0) { var mm = c0.match(/^(.{1,24}?を(?:持って|手に|片手に|両手に|抱えて|取って|受け取って|提げて|握って|持ったまま|抱えたまま))(.{1,24}?(?:へ|に|まで).{1,10})$/); if (mm) { cls2.push(clean(mm[1])); cls2.push(clean(mm[2])); } else cls2.push(c0); }); cls = cls2; }
       var selfName = function(x){ return str(x).replace(SELF_OF, subj ? subj + 'の' : ''); };
       var sj1 = null;
       var subj = actor;   /* STORY は文頭の「A が／A は」を主語にする（DO は主人公。ACTOR1 と同じく「登録名＋が」があればその人） */
@@ -250,6 +255,8 @@
         // 落とす
         m = cl.match(new RegExp('^(.{1,20}?)を' + DROP));
         if (m && !/に|で|へ/.test(m[1])){ var od = stripLead(m[1]); if (od && od.length <= 14) out.push({ kind: 'item', key: od, where: '落', who: subj, ev: cl }); continue; }
+        if (mv2 && !isStory) { var mr2 = cl.match(/^(.{1,16}?)(?:に|へ)(?:戻った|入った|着いた|上がった|下りた|降りた|帰った|引き返した)(.{1,8}?)は$/) || cl.match(/^(.{1,16}?)(?:に|へ)(?:戻った|入った|着いた|上がった|下りた|降りた|帰った|引き返した)(.{1,8}?)は(?=.)/);
+          if (mr2 && (ctx.isSelf(mr2[2]) || ctx.isHeroName(mr2[2])) && !ctx.isPerson(mr2[1]) && clean(mr2[1]).length >= 2 && !/を|から/.test(mr2[1])) { out.push({ kind: 'hero', place: clean(mr2[1]), with: [], ev: cl }); continue; } }
         // 主人公の移動: 「（A と（二人で））P へ行き／戻る／向かう／引き返す」
         var VIA = '(?:[^、。]{0,12}?を(?:通って|上がって|上って|下りて|降りて|抜けて|渡って|駆け上がって|駆け下りて|横切って|くぐって|よじ登って|登って|伝って|越えて))?';
         var GO = '(?:行|向か|戻|引き返|入|上が|降り|下り|走|駆け|逃げ|急|移|出る|出て|進|飛び込|抜け|歩|這|よじ登|登)';   /* r3: 走る・駆け込む・逃げる・移る 等 */   /* r2: 「螺旋階段を上がって灯室の扉の前まで行く」 */
