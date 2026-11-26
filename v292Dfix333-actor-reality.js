@@ -147,6 +147,14 @@
     function shared(p){ var c=0, mine=partsOf(n); (all||[]).forEach(function(o){ if(o===n) return; var po=partsOf(o); if(po.length<2 && mine.indexOf(String(o).replace(/[\s　・]+/g,''))>=0) return; if(po.indexOf(p)>=0) c++; }); return c>0; }
     function grade(p, one){ var e=esc(p), pre=one?'(^|[^一-鿿々])':'()';
       if(new RegExp(pre+e+SUF+'(に(?!な|よ|つ|お|と|対|関)|へ(?!ん)|、|，|,|！|!|？|\\?)').test(text)) return 2;
+      /* ★REL2 r6（2026-11-26・既定 OFF・鍵 v292Dfix333Rel6On・kill v292Dfix333Rel6Off）: Owner の実プレイ — SAY「ほのか命令だ。ひなたの顔を舐めろ」（名前の後ろに読点が無い呼びかけ）で、
+         命じられた ほのか でなく ひなた が動いた。入力（かぎ括弧の頭を含む）の先頭が名前で、その直後が助詞（は・が・を・の・と・も・に・へ・で・や・か）でも敬称＋助詞でもないとき、
+         呼びかけ（話しかけた相手）として数える。 */
+      try{ if(localStorage.getItem('v292Dfix333Rel6Off')!=='1' && localStorage.getItem('v292Dfix333Rel6On')==='1'){
+        var m6=new RegExp('^[\\s　「『（(…‥・ー―—]*'+e+SUF+'(.?)').exec(text);
+        if(m6 && m6[2] && !/[はがをのともにへでやかっ]/.test(m6[2]) && !/[ぁ-ん]/.test(m6[2]) ) return 2;
+        if(m6 && m6[2] && /[ぁ-ん]/.test(m6[2]) && !/[はがをのともにへでやかっ]/.test(m6[2]) && /^(?:お願|頼|命令|聞い|来|見|待|座|立|行|やめ|止ま|答え|教え|起き|黙|逃げ|走|手伝|頼ん|ねえ|なあ|おい|さあ|ほら|よく|もう|ちょっと|こっち|そこ|今|早く|すぐ|まず|次|後|先|一緒|お前|君|あなた|あんた)/.test(text.slice(m6[0].length-1))) return 2;
+      } }catch(e6){}
       if(one){ if(new RegExp(pre+e+'(さん|ちゃん|くん|君|様|殿|は|が|を|と|も|の|。|」|』|$)').test(text)) return 1; return 0; }
       return new RegExp(e).test(text)?1:0; }
     var full=String(n).replace(/[\s　・]+/g,''); if(full.length>=2){ best=Math.max(best, grade(full,false)); var sp=String(n); if(sp!==full && text.indexOf(sp)>=0) best=Math.max(best, grade(sp,false)||1); }
