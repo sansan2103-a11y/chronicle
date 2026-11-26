@@ -330,7 +330,7 @@ items.unshift(line); ev.push({ item: 'expq', who: who, turn: best.x.t + 1, quote
     var wrapped = function(u, o){
       try { if (on() && o && o.method === 'POST' && typeof o.body === 'string' && /workers\.dev|openrouter/.test(String(u))){ var nb = contractFromBody(o.body); if (nb !== o.body) o = Object.assign({}, o, { body: nb }); } }
       catch(e){ stats.err++; try { console.warn(TAG, 'skipped:', e && e.message); } catch(_){} }
-      try { if (leanOn() && o && o.method === 'POST' && typeof o.body === 'string' && /workers\.dev|openrouter/.test(String(u))){ var lb = leanFromBody(o.body); if (lb !== o.body) o = Object.assign({}, o, { body: lb }); } } catch(eL){ try { console.warn(TAG, 'lean skipped:', eL && eL.message); } catch(_){} }
+      /* LEAN1 r2: ここで外すと、この後に足される見出しが残る（実機 lean1: 11 個中 7 個しか外れなかった）。外す処理は v292DfixLEAN1-lean-sys.js（最も内側）へ移した。 */
       return of.apply(this, [u, o]);
     };
     try { Object.keys(of).forEach(function(k){ wrapped[k] = of[k]; }); } catch(e){}
