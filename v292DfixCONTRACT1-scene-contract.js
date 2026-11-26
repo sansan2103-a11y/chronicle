@@ -27,6 +27,10 @@
   function ls(k){ try { return G.localStorage.getItem(k); } catch(e){ return '__ERR__'; } }
   function on(){ var o = ls('v292DfixCONTRACT1Off'); if (o === '__ERR__' || o === '1') return false; return ls('v292DfixCONTRACT1On') === '1' || acct1('contract1'); }
   function expOn(){ var o = ls('v292DfixCONTRACT1ExpOff'); return o !== '1' && o !== '__ERR__'; }   /* 20261126-expqon: 同じ場面の引き直し 12 回（OFF 6・ON 6 交互）で 教え手を正しく答えた回 OFF 4/6・ON 6/6、台詞への写り込み 0 → 既定 ON（CONTRACT1 が働くアカウントだけ） */
+  function pressOn(){ var o = ls('v292DfixPRESS1On'); return o === '1'; }
+  function pressKey(){ try { var k = G.__chronicleDocumentStoryKey; return k ? 'v292DfixPRESS1_' + String(k) : ''; } catch(e){ return ''; } }
+  function pressGet(){ try { var k = pressKey(); if (!k) return []; var a = JSON.parse(G.sessionStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
+  function pressSet(who, p, k){ try { var k = pressKey(); if (!k || !who) return false; k = k === 'l' ? 'l' : 'p'; var a = pressGet().filter(function(x){ return x && !(x.who === who && (x.k || 'p') === k); }); if (p) a.push({ who: String(who), p: String(p), k: k }); if (a.length) G.sessionStorage.setItem(k, JSON.stringify(a)); else G.sessionStorage.removeItem(k); return true; } catch(e){ return false; } }
   var EXPQ_ASK = /誰に|誰から|だれに|だれから|どなたに|どなたから|教わ|習っ|習い|教えてもら/;
   var EXPQ_RE = /^(.{1,14}?)(から|に)(.{2,24}?)(?:を|の)?(?:教わった|教わる|習った|教えてもらった|見せてもらった|見せられた|教えられた|手ほどきを受けた)$/;
   function acct1(n){ try { var A = G.__v292DfixACCT1; return !!(A && typeof A.want === 'function' && A.want(n) === true); } catch(e){ return false; } }   /* ★ACCT1 r3: Owner のアカウントなら端末の鍵が無くても PC と同じ */
@@ -223,9 +227,32 @@ items.unshift(line); ev.push({ item: 'expq', who: who, turn: best.x.t + 1, quote
       }
     } catch (eXQ) {}
 
+    // ---- ★PRESS1（2026-11-26・試験用・既定 OFF: localStorage v292DfixPRESS1On='1'）----
+    //   「本心」と「行動」のずれを保つための事実 1 行。人物が何に強いられて動いているか（圧力）を、確定した事実として控えの先頭に入れる。
+    //   記録は試験の間だけ sessionStorage（物語ごと）に置く。保存データ・sys には触れない。入れ方: __v292DfixCONTRACT1.press.set(名前, '圧力の中身')
+    //   形 h（既定・GPT #127-YG）= 事実＋「従う行動だけから本心の変化を推定しない」。比較用に v292DfixPRESS1Mode='f'（本心は変わっていない）・'g'（＋ずれは残る）。体の事実は種類 'l'。演技の指示（苦しそうに 等）は書かない。
+    try {
+      if (Array.isArray(ctx.press) && ctx.press.length) {
+        var pl = [];
+        ctx.press.forEach(function(p){
+          if (!p || !p.who || !p.p || names.indexOf(p.who) < 0 || pl.length >= 2) return;
+          var w = p.who === hero ? heroLbl() : p.who;
+          var ln;
+          if (p.k === 'l') ln = w + 'の今の体：' + String(p.p).slice(0, 70) + '。';   /* 体の限界＝できること・できないことの事実だけ */
+          else if (ctx.pressMode === 'f' || ctx.pressMode === 'g') { ln = w + 'への圧力：' + String(p.p).slice(0, 60) + '。従うのは強いられているからで、納得や同意ではない。本心は変わっていない。';
+            if (ctx.pressMode === 'g') ln += '従う間も、本心とのずれは残る。'; }
+          else ln = w + 'への圧力：' + String(p.p).slice(0, 60) + '。従う行動だけから、納得・同意・本心の変化を推定しない。';   /* 形 h（既定・GPT #127-YG）: 誤った推定だけを止める。本心は固定しない */
+          pl.push(ln); ev.push({ item: 'press', who: p.who, mode: ctx.pressMode || 'f' });
+        });
+        for (var pi = pl.length - 1; pi >= 0; pi--) items.unshift(pl[pi]);
+        if (pl.length) stats.press = (stats.press || 0) + 1;
+      }
+    } catch (ePR) {}
+
     // ---- 上限 ----
     var out = [], n = 0;
     items.forEach(function(x){ x = x.length > MAXLINE + 40 ? x.slice(0, MAXLINE + 39) + '…' : x; if (out.length < MAXITEMS && n + x.length <= MAXCHARS){ out.push(x); n += x.length; } });
+    if (stats.press && items.length > out.length) stats.pressDrop = (stats.pressDrop || 0) + (items.length - out.length);   /* 圧力の行が他の項目を押し出した数 */
     return { items: out, ev: ev };
   }
 
@@ -247,7 +274,7 @@ items.unshift(line); ev.push({ item: 'expq', who: who, turn: best.x.t + 1, quote
         return { who: c && c.who, say: c && c.say, bare: !sure }; }) }; });
     var ci = userObj.currentInput || {};
     return { r2: r2on(), hero: { name: S.cast.hero.name, desc: S.cast.hero.desc || '' }, npcs: (S.cast.npcs || []).map(function(n){ return { name: n && n.name, desc: n && n.desc || '' }; }),
-      turns: turns, cur: { type: ci.type || null, text: ci.text || '' } };
+      turns: turns, cur: { type: ci.type || null, text: ci.text || '' }, press: pressOn() ? pressGet() : null, pressMode: (function(){ var m = ls('v292DfixPRESS1Mode'); return m === 'f' || m === 'g' ? m : 'h'; })() };
   }
   var last = null, stats = { seen: 0, added: 0, empty: 0, skip: 0, err: 0 };
   function contractFromBody(body){
@@ -284,6 +311,6 @@ items.unshift(line); ev.push({ item: 'expq', who: who, turn: best.x.t + 1, quote
     try { Object.keys(of).forEach(function(k){ wrapped[k] = of[k]; }); } catch(e){}
     wrapped.__fCONTRACT1 = true; G.fetch = wrapped;
   }
-  G.__v292DfixCONTRACT1 = { VER: VER, build: build, contractFromBody: contractFromBody, last: function(){ return last; }, stats: function(){ return stats; } };
+  G.__v292DfixCONTRACT1 = { VER: VER, build: build, contractFromBody: contractFromBody, last: function(){ return last; }, stats: function(){ return stats; }, press: { on: pressOn, get: pressGet, set: pressSet } };
   try { console.log(TAG, 'armed', VER); } catch(e){}
 })();
