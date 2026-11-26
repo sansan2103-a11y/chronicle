@@ -62,7 +62,8 @@
   function sect(sys, head){ var i = sys.indexOf('【' + head); if (i < 0) return ''; var m = /\n+(?=【[^】\n]{1,90}】)/.exec(sys.slice(i + 1)); return sys.slice(i, m ? i + 1 + m.index : sys.length).slice(0, 1400); }
   var FILL_SYS = 'あなたは記録係。下の「本文」は物語の 1 ターン分で、すでに確定している。本文に書かれていることだけを根拠に、本文に出てきた人物の今の状態を書き出す。\n'
     + '・出力は次の形の行だけ。前置き・説明・本文の続きは書かない。\n<state who="名前" からだ="…" こころ="…"/>\n'
-    + '・who は下の名前の表記どおり。表に無い人は書かない。最大 4 人。本文に出てこない人は書かない。\n'
+    + '・who は下の名前の表記どおり。表に無い人は書かない。最大 5 人。本文に出てこない人は書かない。\n'
+    + '・本文で話した人・動いた人は全員書く。地の文で姓だけ・役割の呼び名（警備員 等）で書かれていても、台詞の前の名前と同じ人として扱う。\n'
     + '・からだ＝本文に書かれた姿勢・位置・息・けがの様子。こころ＝本文に書かれた表情・声・しぐさから直接分かる気持ち。各 30 字まで。本能は書かない。\n'
     + '・本文の言葉をなるべくそのまま使う。本文に無い動作・意図・事情を足さない。\n'
     + '・本文から分からない項目は、その属性ごと省く。推測で埋めない。新しい出来事・台詞・けが・回復を作らない。\n';
@@ -87,7 +88,12 @@
       /* r4: 「名前の表に無い」で判定する（実機 fill3: 宮下 誠は入力の文として system に出ていたため「登録済み」と誤って扱われ、読み取りの対象に入らなかった） */
       var extra = Object.keys(sayWho).filter(function(n){ return names.indexOf(n) < 0; });   /* 登録されていないが、この回に話した人（名前のある新しい人） */
       body2.messages = [ { role: 'system', content: FILL_SYS + '\n' + names + (extra.length ? '\n（この回に話した人）' + extra.join('、') : '') + (prev ? '\n\n（この場面にいる人の名前）\n' + (prev.match(/^・[^｜\n]{1,24}(?=｜)/gm) || []).join('\n') : '') },
-                         { role: 'user', content: '本文:\n' + c.replace(/<\/?(?:say|react)\b[^>]*>/g, '').slice(0, 2400) } ];
+                         { role: 'user', content: '本文:\n' + (function(){
+                           /* r5: 台詞の印を消すと、誰が話したかが本文から消える（実機 fill3 r4: 宮下 誠は say の印で 2 回話したのに、読み取りに 1 行も出なかった。地の文では姓や役割でしか呼ばれない）。
+                              印は「名前「台詞」」の形に直して渡す。<react> と <state> の行は渡さない。 */
+                           var t = c.replace(/<state\b[^>]*>/g, '').replace(/<react\b[^>]*>[\s\S]*?<\/react>/g, '').replace(/<react\b[^>]*\/?>/g, '');
+                           t = t.replace(/<say\b[^>]*\bwho\s*=\s*"([^"]{1,24})"[^>]*>\s*([\s\S]*?)\s*<\/say>/g, function(_, w, q){ q = String(q).trim(); return w + (/^[「『]/.test(q) ? q : '「' + q + '」'); });
+                           return t.replace(/<\/?say\b[^>]*>/g, '').slice(0, 2600); })() } ];
       return of.apply(self, [u, Object.assign({}, o, { body: JSON.stringify(body2) })]).then(function(r2){
         if (!r2 || !r2.ok) { fs1.fail++; fs1.last = { why: 'http' }; return resp; }
         return r2.text().then(function(t2){
@@ -100,7 +106,7 @@
             ['からだ', 'こころ'].forEach(function(a){ if (hv2[a]) return;   /* AI が自分で書いた属性は足さない（上書きしない） */
               var m = new RegExp(a + '\\s*=\\s*"([^"]{1,60})"').exec(tg); if (m && !/^[…\.。\s]*$/.test(m[1]) && !/^(?:不明|なし|無し|特になし|その場にいる|—|-)$/.test(m[1].trim())) { out += ' ' + a + '="' + m[1] + '"'; n++; } });
             return n ? out + '/>' : '';
-          }).filter(Boolean).slice(0, 4);
+          }).filter(Boolean).slice(0, 5);
           if (!tags.length) { if (!hasSt) fs1.fail++; fs1.last = { why: 'empty' }; return resp; }
           msg.content = c.replace(/\s+$/, '') + '\n' + tags.join('\n');
           fs1.filled++; fs1.last = { why: 'filled', n: tags.length };
@@ -125,5 +131,5 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r8', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r9', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
 })();
