@@ -428,6 +428,10 @@
     var r12 = lsg('v292DfixEXP1TaughtKeepOff') !== '1';   /* 20261124-r13on: 全員 既定 ON（実 AI 4 本で taught と first が最後まで両方残り、消えた件 0） */
     for (var i = 0; i < pool.length; i++) if (sameS(pool[i].s, c.s) && !(r12 && ((pool[i].k === 'taught') !== (c.k === 'taught')))) {
       var p = pool[i]; if (p.k === 'first' && c.k === 'first') { ST.dup++; return; }   /* ★r6: 初めてできたのは最初のターンのまま */
+      /* ★r19（2026-11-26・既定 OFF・鍵 v292DfixEXP1R19On・kill v292DfixEXP1R19Off・GPT #127-YC 優先 1）: 実 AI 観察用_1126c（@T6 → @T17）・1126e（@T3 → @T22）—
+         同じ段階の同じ件（教わった → 教わった）が後の要約でもう一度出ると、ターン番号が「その話をした回」に書き換わっていた。
+         同じ段階なら、最初のターンと最初の句のまま（経験した時点）。段階が上がったとき（教わった → 一人でできた 等）と failed は今までどおり新しい回。 */
+      if (lsg('v292DfixEXP1R19Off') !== '1' && lsg('v292DfixEXP1R19On') === '1' && c.k !== 'failed' && p.k === c.k && (+p.t || 0) <= (+c.t || 0)) { if (p.t !== c.t || p.s !== c.s) cnt(ST, 'r19Kept'); else ST.dup++; return; }
       if (c.k === 'failed' || RANK[c.k] >= RANK[p.k]) { if (p.k !== c.k || p.t !== c.t || p.s !== c.s) { p.k = c.k; p.t = c.t; p.s = c.s; ST.upd++; } else ST.dup++; } else ST.dup++; return; }
     if (pool.length < cap) { list.push(c); ST.kept++; return; }
     var low = null; pool.forEach(function (x) { if (!low || (RANK[x.k] || 0) < (RANK[low.k] || 0) || ((RANK[x.k] || 0) === (RANK[low.k] || 0) && x.t < low.t)) low = x; });
