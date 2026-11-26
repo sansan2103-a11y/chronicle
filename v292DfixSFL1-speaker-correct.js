@@ -412,11 +412,30 @@
     candidates(S, turn).forEach(function (n) { if (!seen[canon(n)]) { seen[canon(n)] = 1; out.push({ value: n, label: n, name: n, id: null }); } });
     return out;
   }
+  /* ★CAND2（2026-11-26・既定 OFF: localStorage v292DfixSFL1Cand2On='1'）: まだ一度もカードを持っていない「名前のない新しい人」を訂正の候補に出す。
+     このターンの地の文で、文の主語になっている説明の呼び名（「ケースの中の女の子は」等・人を表す語で終わる・登録名を含まない）を最大 3 件。
+     候補の一覧に足すだけ。選ばれなければ何も変わらない。保存の経路・記録の形は既存のまま（登録外の既出の話者を選ぶのと同じ）。 */
+  function cand2On() { try { return root.localStorage.getItem('v292DfixSFL1Cand2On') === '1'; } catch (e) { return false; } }
+  var CAND2_RE = /(?:^|[。、！？!?」』\s　])((?:[一-龠々ぁ-んァ-ヶー]{1,10}の)?(?:見知らぬ|知らない|若い|小さな|幼い|年老いた)?[一-龠々ァ-ヶー]{0,6}(?:女の子|男の子|少女|少年|女性|男性|老人|老婆|老女|子供|子ども|青年|娘|女|男))(?=[はがも](?!.{0,1}[、。]?$))/g;
+  var CAND2_NG = /^(?:彼女|彼|その|この|あの|二人|ふたり|三人|皆|みんな|自分|相手)|(?:彼女|彼ら|二人|三人)の/;
+  function cand2Labels(S, turn) {
+    var out = [], seen = {}, names = castNames(S), n = turn && turn.narrative, txt = Array.isArray(n) ? n.join('\n') : String(n || '');
+    txt = txt.replace(/「[^」]*」|『[^』]*』/g, '　');   /* 台詞の中は見ない */
+    var parts = []; names.forEach(function (x) { String(x).split(/[\s　]+/).forEach(function (p) { if (p) parts.push(p); }); });
+    var m; CAND2_RE.lastIndex = 0;
+    while ((m = CAND2_RE.exec(txt)) !== null && out.length < 3) {
+      var lb = m[1]; if (!lb || lb.length < 2 || lb.length > 14 || CAND2_NG.test(lb) || seen[lb]) continue;
+      if (parts.some(function (p) { return lb.indexOf(p) >= 0; })) continue;   /* 登録人物の名前を含む呼び名は出さない */
+      seen[lb] = 1; out.push(lb);
+    }
+    return out;
+  }
   function candidates(S, turn) {
     var out = [], seen = {}, add = function (n) { n = String(n == null ? '' : n).trim(); if (!n) return; var k = canon(n); if (!k || seen[k]) return; seen[k] = 1; out.push(n); };
     castNames(S).forEach(add);
     try { var ts = S.turns || [], from = Math.max(0, ts.length - SEEN_TURNS); for (var i = from; i < ts.length; i++) { var cs = ts[i] && ts[i]._convSays; if (!Array.isArray(cs)) continue; for (var j = 0; j < cs.length; j++) { var w = cs[j] && cs[j].who; if (w && !isUnknown(w)) add(w); } } } catch (e) {}
     try { (turn && turn._convSays || []).forEach(function (c) { if (c && c.who && !isUnknown(c.who)) add(c.who); }); } catch (e) {}
+    try { if (cand2On()) cand2Labels(S, turn).forEach(add); } catch (e) {}
     return out;
   }
 

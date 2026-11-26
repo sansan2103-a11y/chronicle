@@ -30,7 +30,7 @@
   function pressOn(){ var o = ls('v292DfixPRESS1On'); return o === '1'; }
   function pressKey(){ try { var k = G.__chronicleDocumentStoryKey; return k ? 'v292DfixPRESS1_' + String(k) : ''; } catch(e){ return ''; } }
   function pressGet(){ try { var k = pressKey(); if (!k) return []; var a = JSON.parse(G.sessionStorage.getItem(k) || '[]'); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
-  function pressSet(who, p, k){ try { var k = pressKey(); if (!k || !who) return false; k = k === 'l' ? 'l' : 'p'; var a = pressGet().filter(function(x){ return x && !(x.who === who && (x.k || 'p') === k); }); if (p) a.push({ who: String(who), p: String(p), k: k }); if (a.length) G.sessionStorage.setItem(k, JSON.stringify(a)); else G.sessionStorage.removeItem(k); return true; } catch(e){ return false; } }
+  function pressSet(who, p, kind){ try { var k = pressKey(); if (!k || !who) return false; kind = kind === 'l' ? 'l' : 'p'; var a = pressGet().filter(function(x){ return x && !(x.who === who && (x.k || 'p') === kind); }); if (p) a.push({ who: String(who), p: String(p), k: kind }); if (a.length) G.sessionStorage.setItem(k, JSON.stringify(a)); else G.sessionStorage.removeItem(k); return true; } catch(e){ return false; } }   /* press1b: 引数名が物語の鍵の変数と重なり、鍵 'p'/'l' に書いていた誤りを修正 */
   var EXPQ_ASK = /誰に|誰から|だれに|だれから|どなたに|どなたから|教わ|習っ|習い|教えてもら/;
   var EXPQ_RE = /^(.{1,14}?)(から|に)(.{2,24}?)(?:を|の)?(?:教わった|教わる|習った|教えてもらった|見せてもらった|見せられた|教えられた|手ほどきを受けた)$/;
   function acct1(n){ try { var A = G.__v292DfixACCT1; return !!(A && typeof A.want === 'function' && A.want(n) === true); } catch(e){ return false; } }   /* ★ACCT1 r3: Owner のアカウントなら端末の鍵が無くても PC と同じ */
