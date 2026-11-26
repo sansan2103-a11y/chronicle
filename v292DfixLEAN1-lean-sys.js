@@ -10,7 +10,8 @@
   var G = (typeof window !== 'undefined') ? window : (typeof self !== 'undefined' ? self : this);
   if (!G || G.__v292DfixLEAN1) return;
   var TAG = '[LEAN1]';
-  var DEF = ['良い1ターンの形', '展開を前に進める', '書き方の見本', '反応と身体', 'ダッシュ', '文体の基本ルール', 'NPCの登場', '展開の推進ルール', '描写の作り方'];
+  /* r5: 「NPCの登場」は外さない（実機 lean4: 外した本で、頼んでいない登録人物が 2 人出てきた。GPT #127-YK「必要部分だけ戻す」） */
+  var DEF = ['良い1ターンの形', '展開を前に進める', '書き方の見本', '反応と身体', 'ダッシュ', '文体の基本ルール', '展開の推進ルール', '描写の作り方'];
   var st = { seen: 0, cut: 0, err: 0, last: null };
   function ls(k){ try { return G.localStorage.getItem(k); } catch(e){ return null; } }
   function on(){ return ls('v292DfixLEAN1On') === '1'; }
@@ -49,15 +50,68 @@
     b.messages[si].content = out; st.cut++;
     return JSON.stringify(b);
   }
+  /* ---- ★STFILL1（2026-11-27・試験専用・既定 OFF: localStorage v292DfixSTFILL1On='1'・GPT #127-YK 案 1）----
+   * 物語の本送信の返事に <state> が 1 つも無いとき（実機 lean3/lean4: 書き方の約束を足した形で 10 ターン中 0〜4 回）、同じ回の中で 1 回だけ、
+   * 「いま書かれた本文」から状態の行だけを取り直し、返事の末尾に足してから呼び出し元へ返す。呼び出し元から見ると、AI が <state> を付けて返したのと同じ形になる。
+   *   ・根拠は、確定した本文（その回の AI の出力）と、送信に入っていた直前の状態・名前の表だけ。新しい展開を作らせない。本文から分からない項目は書かせない。
+   *   ・同じ送信の中で完結するので、物語・ターン・本文の取り違えは起きない。取り消し・生成し直しで捨てた回は、その回の出力ごと捨てられる。
+   *   ・取り直しは 1 回だけ。失敗・空・名前が表に無い行は足さない（＝その回は状態を更新しない。古い行を新しい状態として確定しない）。
+   *   ・足すのは からだ／こころ／本能／目的 だけ。傷・関係・未解決は取り直しでは書かせない（根拠なく増やさない・消さない）。 */
+  var fs1 = { seen: 0, ok: 0, miss: 0, filled: 0, fail: 0, err: 0, last: null };
+  function fillOn(){ return ls('v292DfixSTFILL1On') === '1'; }
+  function sect(sys, head){ var i = sys.indexOf('【' + head); if (i < 0) return ''; var m = /\n+(?=【[^】\n]{1,90}】)/.exec(sys.slice(i + 1)); return sys.slice(i, m ? i + 1 + m.index : sys.length).slice(0, 1400); }
+  var FILL_SYS = 'あなたは記録係。下の「本文」は物語の 1 ターン分で、すでに確定している。本文に書かれていることだけを根拠に、本文に出てきた人物の今の状態を書き出す。\n'
+    + '・出力は次の形の行だけ。前置き・説明・本文の続きは書かない。\n<state who="名前" からだ="…" こころ="…" 本能="…"/>\n'
+    + '・who は下の名前の表記どおり。表に無い人は書かない。最大 4 人。本文に出てこない人は書かない。\n'
+    + '・からだ＝姿勢・位置・息・けがの様子、こころ＝本文から読み取れる気持ち、本能＝とっさにしたがっていること。各 30 字まで。\n'
+    + '・本文から分からない項目は、その属性ごと省く。推測で埋めない。新しい出来事・台詞・けが・回復を作らない。\n';
+  function fillOne(self, u, o, reqBody, resp){
+    return resp.clone().text().then(function(txt){
+      var j = JSON.parse(txt), msg = j && j.choices && j.choices[0] && j.choices[0].message, c = msg && msg.content;
+      if (typeof c !== 'string' || c.length < 120) return resp;
+      fs1.seen++;
+      if (/<state\b[^>]*\bwho\s*=/.test(c)) { fs1.ok++; return resp; }
+      fs1.miss++;
+      var rb = JSON.parse(reqBody), sys = '';
+      for (var i = 0; i < rb.messages.length; i++) if (rb.messages[i] && rb.messages[i].role === 'system' && typeof rb.messages[i].content === 'string') { sys = rb.messages[i].content; break; }
+      var names = sect(sys, 'whoに使う名前') || sect(sys, 'キャラ属性'), prev = sect(sys, '各キャラの現在の状態');
+      var body2 = {}; Object.keys(rb).forEach(function(k){ if (k !== 'messages') body2[k] = rb[k]; });
+      body2.max_tokens = 400; body2.temperature = 0.2;
+      body2.messages = [ { role: 'system', content: FILL_SYS + '\n' + names + (prev ? '\n\n（参考：このターンの前の状態。本文で変わった所だけ書き直す）\n' + prev : '') },
+                         { role: 'user', content: '本文:\n' + c.replace(/<\/?(?:say|react)\b[^>]*>/g, '').slice(0, 2400) } ];
+      return of.apply(self, [u, Object.assign({}, o, { body: JSON.stringify(body2) })]).then(function(r2){
+        if (!r2 || !r2.ok) { fs1.fail++; fs1.last = { why: 'http' }; return resp; }
+        return r2.text().then(function(t2){
+          var j2 = JSON.parse(t2), c2 = j2 && j2.choices && j2.choices[0] && j2.choices[0].message && j2.choices[0].message.content;
+          var tags = (typeof c2 === 'string' ? (c2.match(/<state\b[^>]*\/>/g) || []) : []).map(function(tg){
+            var w = /\bwho\s*=\s*"([^"]{1,24})"/.exec(tg); if (!w || sys.indexOf(w[1]) < 0) return '';
+            var out = '<state who="' + w[1] + '"', n = 0;
+            ['からだ', 'こころ', '本能', '目的'].forEach(function(a){ var m = new RegExp(a + '\\s*=\\s*"([^"]{1,60})"').exec(tg); if (m && !/^[…\.。\s]*$/.test(m[1])) { out += ' ' + a + '="' + m[1] + '"'; n++; } });
+            return n ? out + '/>' : '';
+          }).filter(Boolean).slice(0, 4);
+          if (!tags.length) { fs1.fail++; fs1.last = { why: 'empty' }; return resp; }
+          msg.content = c.replace(/\s+$/, '') + '\n' + tags.join('\n');
+          fs1.filled++; fs1.last = { why: 'filled', n: tags.length };
+          var h = {}; try { var ct = resp.headers && resp.headers.get && resp.headers.get('content-type'); if (ct) h['content-type'] = ct; } catch(_){}
+          return new G.Response(JSON.stringify(j), { status: resp.status, statusText: resp.statusText, headers: h });
+        });
+      });
+    }).catch(function(e){ fs1.err++; fs1.last = { why: 'err', m: String(e && e.message || e).slice(0, 80) }; return resp; });
+  }
   var of = G.fetch;
   if (typeof of === 'function'){
     var w = function(u, o){
-      try { if (on() && o && o.method === 'POST' && typeof o.body === 'string' && /workers\.dev|openrouter/.test(String(u))){ var nb = fromBody(o.body); if (nb !== o.body) o = Object.assign({}, o, { body: nb }); } }
+      var story = false, orig = o && o.body;
+      try { story = !!(o && o.method === 'POST' && typeof o.body === 'string' && /workers\.dev|openrouter/.test(String(u)) && o.body.indexOf('＜あなたの役割＞') >= 0); } catch(_){}
+      try { if (on() && story){ var nb = fromBody(o.body); if (nb !== o.body) o = Object.assign({}, o, { body: nb }); } }
       catch(e){ st.err++; try { console.warn(TAG, 'skipped:', e && e.message); } catch(_){} }
-      return of.apply(this, [u, o]);
+      var p = of.apply(this, [u, o]);
+      if (!story || !fillOn() || typeof G.Response !== 'function') return p;
+      var self = this, sent = o.body;
+      return p.then(function(resp){ try { if (!resp || !resp.ok) return resp; return fillOne(self, u, o, sent, resp); } catch(e){ fs1.err++; return resp; } });
     };
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r4', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody };
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r5', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
 })();
