@@ -64,7 +64,7 @@
     + '・出力は次の形の行だけ。前置き・説明・本文の続きは書かない。\n<state who="名前" からだ="…" こころ="…"/>\n'
     + '・who は下の名前の表記どおり。表に無い人は書かない。最大 5 人。本文に出てこない人は書かない。\n'
     + '・本文で話した人・動いた人は全員書く。地の文で姓だけ・役割の呼び名（警備員 等）で書かれていても、台詞の前の名前と同じ人として扱う。\n'
-    + '・からだ＝本文に書かれた姿勢・位置・息・けがの様子。こころ＝本文に書かれた表情・声・しぐさから直接分かる気持ち。各 30 字まで。本能は書かない。\n'
+    + '・からだ＝本文に書かれた姿勢・位置・息・けがの様子。こころ＝本文ではっきり示された気持ちだけ（怯え・安堵・苛立ち 等）。台詞や動作をそのまま写さない。はっきりしなければ こころ は書かない。各 30 字まで。本能は書かない。\n'
     + '・本文の言葉をなるべくそのまま使う。本文に無い動作・意図・事情を足さない。\n'
     + '・本文から分からない項目は、その属性ごと省く。推測で埋めない。新しい出来事・台詞・けが・回復を作らない。\n';
   function fillOne(self, u, o, reqBody, resp){
@@ -107,7 +107,7 @@
             try { var esc = w[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); if (new RegExp(esc + '[ 　][一-龠々ぁ-んァ-ヶー]').test(sys) || new RegExp('[一-龠々ぁ-んァ-ヶー][ 　]' + esc + '(?![一-龠々ぁ-んァ-ヶー])').test(sys)) return ''; } catch(_){}
             var out = '<state who="' + w[1] + '"', n = 0;
             ['からだ', 'こころ'].forEach(function(a){ if (hv2[a]) return;   /* AI が自分で書いた属性は足さない（上書きしない） */
-              var m = new RegExp(a + '\\s*=\\s*"([^"]{1,60})"').exec(tg); if (m && !/^[…\.。\s]*$/.test(m[1]) && !/^(?:不明|なし|無し|特になし|その場にいる|—|-)$/.test(m[1].trim())) { out += ' ' + a + '="' + m[1] + '"'; n++; } });
+              var m = new RegExp(a + '\\s*=\\s*"([^"]{1,60})"').exec(tg); if (m && !/^[…\.。\s]*$/.test(m[1]) && !/^(?:不明|なし|無し|特になし|その場にいる|—|-)$/.test(m[1].trim()) && !(a === 'こころ' && /[「」『』]|と(?:言|答|告|呟|聞)/.test(m[1]))) {   /* r7: こころに台詞の写しは入れない（GPT #127-YL） */ out += ' ' + a + '="' + m[1] + '"'; n++; } });
             return n ? out + '/>' : '';
           }).filter(Boolean).slice(0, 5);
           if (!tags.length) { if (!hasSt) fs1.fail++; fs1.last = { why: 'empty' }; return resp; }
@@ -134,5 +134,5 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r10', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r11', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
 })();
