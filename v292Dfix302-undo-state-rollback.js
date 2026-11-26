@@ -37,20 +37,27 @@
   var rolledBackSinceCommit=false;
   function pushLog(a,x){ a.push(x); if(a.length>80) a.shift(); }
   function prune(L){ Object.keys(snaps).forEach(function(k){ if(L-(+k)>25 || (+k)>L){ delete snaps[k]; delete meta[k]; delete refs[k]; } }); }
-  /* ★SNAP1（2026-11-26・既定 OFF・鍵 v292DfixSNAP1On・kill v292DfixSNAP1Off）: 「開き直した後の取り消し・やり直しで、キャラの状態が戻らない」（fix926 の KNOWN_RESIDUAL = UNDO_AFTER_RELOAD_NO_SNAPSHOT）。
+  /* ★SNAP1（2026-11-26・既定 ON・kill v292DfixSNAP1Off）: 「開き直した後の取り消し・やり直しで、キャラの状態が戻らない」（fix926 の KNOWN_RESIDUAL = UNDO_AFTER_RELOAD_NO_SNAPSHOT）。
      実測（2026-11-26 試験_CMD）: ページを読み直した後のやり直し・取り消しで、捨てた回の状態（からだ・こころ・本能）が次の送信にそのまま入った。
      Owner の実プレイ（iPhone・ホームに戻って開き直す）でも、取り違えた展開の状態が残り続けて、生成し直しても同じ方向へ引っ張られる原因になり得る。
      やること: 確定した snapshot（直近 3 つの長さ分）を、そのタブの sessionStorage に物語ごとに控える。読み直した後、戻り先の長さの snapshot がメモリに無いときだけ、
      控えから戻す。戻すのは「その長さの最後のターン」の目印（入力＋本文の頭のハッシュ）が今の物語と一致するときだけ（別の物語・別の分岐の控えは使わない）。
      書くのは sessionStorage の 1 鍵（'v292DfixSNAP1_'＋物語の鍵）だけ。localStorage・サーバー・S には書かない。中身は fix77 がもう端末に持っている状態の写し。 */
-  function snap1On(){ try{ return localStorage.getItem('v292DfixSNAP1Off')!=='1' && localStorage.getItem('v292DfixSNAP1On')==='1'; }catch(e){ return false; } }
-  function snap1Key(){ try{ var sk=window.__chronicleDocumentStoryKey; return sk ? 'v292DfixSNAP1_'+String(sk) : ''; }catch(e){ return ''; } }
+  function snap1On(){ try{ return localStorage.getItem('v292DfixSNAP1Off')!=='1'; }catch(e){ return false; } }   /* 2026-11-26 既定 ON（#127-YF 条件付き GO・実機 試験_SNAP1: 読み直し後のやり直し・取り消し・連続のやり直しで 1 つ前の状態に戻る）。kill v292DfixSNAP1Off='1'。Vault で隠した物語は対象外のまま */
+  /* ★SNAP1 r2（GPT #127-YF の条件）: 鍵はアカウント（__chronicleSessionId のハッシュ）と物語の両方で分ける／照合は直近 3 ターンの目印の連なり＋長さ／
+     Vault で隠した物語（VAULTGATE2.hidden が false と答えない物語）は控えを書かない・読まない（メモリだけ＝今までどおり）／ほかのアカウントの控えは起動時に消す。 */
+  function snap1Acct(){ try{ var f=window.__chronicleSessionId, v=(typeof f==='function')?String(f()||''):''; return v ? h32(v) : ''; }catch(e){ return ''; } }
+  function snap1Sid(){ try{ var m=/[?&]story=([A-Za-z0-9_-]+)/.exec(String(location.search||'')); return m ? m[1] : ''; }catch(e){ return ''; } }
+  function snap1Hidden(){ try{ var id=snap1Sid(); if(!id) return true; var V=window.__v292DfixVAULTGATE2; if(V && typeof V.hidden==='function') return V.hidden(id)!==false; return false; }catch(e){ return true; } }
+  function snap1Key(){ try{ var sk=window.__chronicleDocumentStoryKey, ac=snap1Acct(); if(!sk || !ac || snap1Hidden()) return ''; return 'v292DfixSNAP1_'+ac+'_'+String(sk); }catch(e){ return ''; } }
+  function snap1Chain(L){ try{ var s0=getS(); if(!s0 || !Array.isArray(s0.turns) || s0.turns.length<L) return null; var a=[String(L)]; for(var i=L-1;i>=0 && i>=L-3;i--) a.push(String(turnId(s0.turns[i]))); return h32(a.join('|')); }catch(e){ return null; } }
+  function snap1Sweep(){ try{ if(!snap1On()) return; var ac=snap1Acct(); if(!ac) return; var pre='v292DfixSNAP1_', mine=pre+ac+'_', del=[]; for(var i=0;i<sessionStorage.length;i++){ var k=sessionStorage.key(i); if(k && k.indexOf(pre)===0 && k.indexOf(mine)!==0) del.push(k); } del.forEach(function(k){ try{ sessionStorage.removeItem(k); snap1.swept=(snap1.swept||0)+1; }catch(e2){} }); }catch(e){} }
   var snap1={ saved:0, loaded:0, miss:0, tidMismatch:0, tooBig:0, err:0 };
   function snap1Save(){
     try{
       if(!snap1On() || off() || off926()) return; var k=snap1Key(); if(!k) return;
       var L=curLen(); if(L<0) return; var o={ v:1, at:Date.now(), snaps:{} };
-      [L, L-1, L-2].forEach(function(x){ if(x>=0 && snaps[x] && meta[x]) o.snaps[x]={ s:snaps[x], tid:meta[x].tid||null, h:meta[x].hash||null }; });
+      [L, L-1, L-2].forEach(function(x){ if(x>=0 && snaps[x] && meta[x]) o.snaps[x]={ s:snaps[x], tid:meta[x].tid||null, h:meta[x].hash||null, cid:snap1Chain(x) }; });
       var js=JSON.stringify(o); if(js.length>300000){ snap1.tooBig++; return; }
       sessionStorage.setItem(k, js); snap1.saved++;
     }catch(e){ snap1.err++; }
@@ -62,7 +69,7 @@
       var o=JSON.parse(raw), e=o && o.snaps && o.snaps[L]; if(!e || !e.s){ snap1.miss++; return false; }
       var s0=getS(); if(!s0 || !Array.isArray(s0.turns) || s0.turns.length<L){ snap1.miss++; return false; }
       var cur=L>0 ? turnId(s0.turns[L-1]) : null;
-      if((e.tid||null)!==cur){ snap1.tidMismatch++; return false; }
+      if((e.tid||null)!==cur || !e.cid || e.cid!==snap1Chain(L)){ snap1.tidMismatch++; return false; }   /* r2: 最後のターンの目印＋直近 3 ターンの連なりの両方が一致するときだけ */
       snaps[L]=e.s; meta[L]={ kind:'persist', hash:e.h||null, tid:e.tid||null, t:Date.now() }; delete refs[L]; snap1.loaded++;
       return true;
     }catch(e2){ snap1.err++; return false; }
@@ -90,7 +97,7 @@
     var s0=getS();
     snaps[L]=c; meta[L]={ kind:'base', hash:h32(JSON.stringify(c)), tid:(s0&&L>0)?turnId(s0.turns[L-1]):null, t:Date.now() }; refs[L]=(s0&&L>0)?s0.turns[L-1]:null; f926.bases++;
     pushLog(f926.log,{ ev:'base', why:why, len:L, idx:L, hash:meta[L].hash });
-    try{ if(L>0) snap1Load(L-1); snap1Save(); }catch(eS1){}
+    try{ snap1Sweep(); if(L>0) snap1Load(L-1); snap1Save(); }catch(eS1){}
   }
   /* ★fix926 rev C: 起動済みで読み込まれた document（chr:engine-booted を聞き逃した）でも base を撮る。
      rev B 実測（CA1: 2 台目 device の fresh document）で engine-booted の listener 登録前に boot が完了し、base 0 件だった。 */
@@ -231,7 +238,7 @@
   }
   (function w(){ w._n=(w._n||0)+1; if(wrap()) return; if(w._n>120) return; setTimeout(w,500); })();
 
-  window.__v292Dfix302api={ snaps:snaps, restoreTo:restoreTo, curLen:curLen, snap1:function(){ var o={ on:snap1On(), key:!!snap1Key() }; for(var k in snap1) o[k]=snap1[k]; return o; },
+  window.__v292Dfix302api={ snaps:snaps, restoreTo:restoreTo, curLen:curLen, snap1:function(){ var o={ on:snap1On(), key:!!snap1Key(), acct:!!snap1Acct(), hidden:snap1Hidden() }; for(var k in snap1) o[k]=snap1[k]; return o; },
     /* ★fix926 assertion 面（read-only 診断） */
     f926:{ meta:meta, stats:f926, off:off926,
       verify:function(){ var L=curLen(), st=getStore(), m=meta[L]; var h=st ? h32(JSON.stringify(st)) : null; return { len:L, storeHash:h, snapHash:m ? m.hash : null, kind:m ? m.kind : null, eq:!!m && m.hash===h }; } } };
