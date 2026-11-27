@@ -1,4 +1,4 @@
-/* v292DfixLEAN1-lean-sys.js — ★LEAN1 r2（2026-11-26・試験専用・既定 OFF: localStorage v292DfixLEAN1On='1'）
+/* v292DfixLEAN1-lean-sys.js — （SLIM1 試験 2026-11-27 は下の slimOn）★LEAN1 r2（2026-11-26・試験専用・既定 OFF: localStorage v292DfixLEAN1On='1'）
  * GPT #127-YJ「足す前に引く」。system の見出し（行頭の【…】）のうち「表現の制限」に当たるものを、送信のいちばん最後で外す。
  * ほかの仕組みが見出しを足し終えた後に外すため、index.html で送信の仕組みより前に読む（＝fetch の最も内側）。
  * 残すもの: 事実の保護（状態・呼称・話者・居場所）と出力形式の決まり。user・model・ほかの値には触れない。保存データにも触れない。
@@ -27,6 +27,19 @@
     /* r4: 実機 lean3 で、5 行を足した形だけ <state> の無い回が増えた（C 4・2 回／今の形 1 回）。欠けた回は出力が短く、本文だけでタグが 1 つも無かった＝小説として書き切ってやめている。
        そこで、書き方の約束は本文だけのもので、後ろのタグは省かないことを 1 行で言う（v292DfixLEAN1AddTag='0' でこの行だけ外せる）。 */
     + (ls('v292DfixLEAN1AddTag') === '0' ? '' : '・ここまでの約束は本文の書き方だけに当てる。本文が短くても、本文の後ろに置くタグ（下の【出力の形式】と【状態の出力】）は、どのターンでも省かない。');
+  /* ★SLIM1（2026-11-27・試験専用・既定 OFF: localStorage v292DfixSLIM1On='1'。Owner「制約になってそうなところ」→ 毎ターンの記録の仕事を AI から減らす）
+     <state> の からだ・こころ・本能 を AI に書かせない（からだ・こころは STFILL1 が本文から毎ターン読み取る）。目的・傷・関係・未解決は今までどおり AI が書く。
+     【状態の出力（…）】の節（からだ／こころ／本能 の指示）も外す。<react>・<say> は変えない。STFILL1 が切れているときは何もしない。 */
+  function slimOn(){ return ls('v292DfixSLIM1On') === '1' && fillOn(); }
+  var SLIM_LINE = '・「からだ」は今この瞬間の様子（毎ターン変わる）、傷/関係/未解決は消えない記録。混同しない。';
+  var SLIM_NEW = '・<state> は、目的・傷・関係・未解決のどれかに書くことがある人物だけ置く。からだ・こころ・本能は書かない（本文から別に読み取る）。';
+  function slim(t){
+    var ops = [], m = /<state who="名前" からだ="[^"\n]*" こころ="[^"\n]*" 本能="[^"\n]*"/.exec(t);
+    if (m) { t = t.slice(0, m.index) + '<state who="名前"' + t.slice(m.index + m[0].length); ops.push('attr'); }
+    if (t.split(SLIM_LINE).length === 2) { t = t.replace(SLIM_LINE, function(){ return SLIM_NEW; }); ops.push('line'); }
+    else if (m) { var e = t.indexOf('\n', m.index); if (e > 0) { t = t.slice(0, e) + '\n' + SLIM_NEW + t.slice(e); ops.push('line+'); } }
+    return { text: t, ops: ops };
+  }
   function addOn(){ return ls('v292DfixLEAN1AddOff') !== '1'; }   /* 既定 ON（kill: v292DfixLEAN1AddOff='1'） */
   function fromBody(body){
     if (typeof body !== 'string' || body.indexOf('"messages"') < 0) return body;
@@ -37,11 +50,13 @@
     var drop = list(), src = b.messages[si].content, parts = src.split(/(\n+)(?=【[^】\n]{1,90}】)/), out = parts[0], cut = [], kept = [];
     for (var k = 1; k + 1 < parts.length; k += 2){
       var sep = parts[k], p = parts[k + 1], h = /^【([^】\n]{1,90})】/.exec(p), name = h ? h[1] : '';
-      if (name && drop.some(function(d){ return name.indexOf(d) === 0; })) cut.push(name.slice(0, 20)); else { out += sep + p; kept.push(name.slice(0, 12)); }
+      if (name && (drop.some(function(d){ return name.indexOf(d) === 0; }) || (slimOn() && name.indexOf('状態の出力') === 0 && name.indexOf('状態の出力・拡張') !== 0))) cut.push(name.slice(0, 20)); else { out += sep + p; kept.push(name.slice(0, 12)); }
     }
     var add = addOn() ? ADD : '';
+    var sl = slimOn() ? slim(out) : null; if (sl) { out = sl.text; if (add) add = add.replace('（下の【出力の形式】と【状態の出力】）', '（下の【出力の形式】）'); }
     st.last = { cut: cut, kept: kept, before: src.length, after: out.length + add.length, add: !!add };
-    if (!cut.length && !add) return body;
+    if (sl) st.last.slim = sl.ops;
+    if (!cut.length && !add && !(sl && sl.ops.length)) return body;
     /* r3: 足す 5 行は末尾ではなく、最初の見出しの前（役割の直後）に置く。実機 lean2: 末尾に置いた C だけ <state> の出力が 3 回欠けた
        （出力の形の決まりより後ろに書き方の約束が来て、最後に読む内容が変わったためと見ている）。v292DfixLEAN1AddPos='end' で元の位置に戻せる。 */
     if (add && ls('v292DfixLEAN1AddPos') !== 'end') { var m1 = /\n+(?=【[^】\n]{1,90}】)/.exec(out); if (m1) out = out.slice(0, m1.index) + add + out.slice(m1.index); else out += add; }
