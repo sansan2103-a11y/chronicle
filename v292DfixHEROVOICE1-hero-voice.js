@@ -7,7 +7,8 @@
  *   いまは主人公の台詞・内面を書かせない指示（fix417・AGENCY1/1b・CONT1・ACTOR1b）と出口の主人公ロック（parsePlan）が全物語に一律にかかる。
  *   一方で一人称の物語では「頼んでいない主人公の台詞」がいちばん多い誤り（FLOWBENCH pass 1）。→ 全体を変えず、物語ごとの選択にする。
  * ■3 つのモード（enum。4 つ目を足すときは MODES と各表に 1 行足す）
- *   C おまかせ（既定）        : 今の動き（HV を入れる前と送信も保存も同じ）。新しい物語も既存の物語もこれ（Owner 決定）。
+ *   C 入力したときだけ（旧名おまかせ・11-27 まで既定）: HV を入れる前と送信も保存も同じ。
+ *   ★HVA1（2026-11-27）: 既定は A。設定を選んでいない物語は新しいものも既存のものも A。kill v292DfixHVA1Off='1' で既定だけ C。
  *   A よく喋る・反応する      : 主人公の台詞・反応・内面は場面に必要なら書いてよい。次の大きな行動・決断と場面の決着は書かない。
  *   B 控えめに喋る（旧名：自分からは喋らない。Owner 11-14「多少喋る分にはいい・名前を直す」）: 痛み・驚きなどの体の反応と、10 字程度までの短い反射的な声だけ。会話・提案・決定の台詞は書かない（入力した台詞はそのまま出る）。
  *   （画面の名前は laneHV2 で付け直した。2026-11-12 の試作では A=おまかせ／B=反応だけ／C=入力したときだけ。値 A/B/C と中身は同じ）
@@ -29,16 +30,19 @@
   'use strict';
   var G = (typeof window !== 'undefined') ? window : globalThis;
   if (G.__v292DfixHEROVOICE1) return;
-  var VER = 'herovoice1-20261114-a', TAG = '[v292DfixHEROVOICE1]';
+  var VER = 'herovoice1-20261127-hva1', TAG = '[v292DfixHEROVOICE1]';
   var KILL = 'v292DfixHEROVOICE1Off', FORCE = 'v292DfixHEROVOICE1Force', KPFX = 'v292DfixHEROVOICE1:';
 
   /* ---------------- モード（enum） ---------------- */
-  var DEFAULT = 'C';
-  var ORDER = ['C', 'A', 'B'];   /* 画面に並べる順（既定が先頭） */
+  /* ★HVA1（Owner 2026-11-27「主人公は勝手に喋ってる。設定をデフォルト喋る様にして制約外そうか」）: 既定を A に。C は「入力したときだけ」として残す。
+     kill v292DfixHVA1Off='1' … 既定だけ C に戻す（選んだ物語の設定はそのまま）。BASE＝何も書き換えないモード。 */
+  var BASE = 'C';
+  function defMode() { return ls('v292DfixHVA1Off') === '1' ? 'C' : 'A'; }
+  var ORDER = ['A', 'B', 'C'];   /* 画面に並べる順（既定が先頭） */
   var MODES = {
     A: { label: 'よく喋る・反応する', note: '主人公の台詞や、痛み・驚きの反応もAIが書く。大事な行動や決断はあなたが決める' },
     B: { label: '控えめに喋る', note: '主人公の台詞は主にあなたが入力する。短い声や呟き、痛み・驚きの反応はAIが書くことがある' },
-    C: { label: 'おまかせ', note: 'ふつうの設定（今までどおり）' }
+    C: { label: '入力したときだけ', note: '主人公の台詞はあなたが入力したときだけ。AIは表情や動作で描く' }
   };
   function valid(m) { return typeof m === 'string' && Object.prototype.hasOwnProperty.call(MODES, m); }
 
@@ -49,16 +53,16 @@
     try { var u = (String(G.location && G.location.search || '').match(/[?&]story=([A-Za-z0-9_-]{1,80})/) || [])[1]; if (u) return 'chr6_slot_' + u; } catch (e) {}
     return null;
   }
-  function stored(k) { if (!k) return null; var v = ls(KPFX + k); return (valid(v) && v !== DEFAULT) ? v : null; }
+  function stored(k) { if (!k) return null; var v = ls(KPFX + k); return valid(v) ? v : null; }
   function mode() {
-    if (killed()) return DEFAULT;
+    if (killed()) return BASE;
     var f = ls(FORCE); if (valid(f)) return f;
-    var s = stored(storyKey()); return s || DEFAULT;
+    var s = stored(storyKey()); return s || defMode();
   }
   function setMode(m) {
     if (!valid(m) || killed()) return false;
     var k = storyKey(); if (!k) return false;
-    try { if (m === DEFAULT) G.localStorage.removeItem(KPFX + k); else G.localStorage.setItem(KPFX + k, m); } catch (e) { return false; }
+    try { if (m === defMode()) G.localStorage.removeItem(KPFX + k); else G.localStorage.setItem(KPFX + k, m); } catch (e) { return false; }
     st.changes++; st.lastSet = m; return true;
   }
 
@@ -97,7 +101,7 @@
   function isStorySys(s) { return typeof s === 'string' && s.length > 1500 && s.indexOf('＜あなたの役割＞') >= 0 && s.indexOf('【出力の形式（これだけは形式として守る）】') >= 0; }
   function rewriteSys(sys, m) {
     var ops = [];
-    if (m === DEFAULT || !NEW[m] || !isStorySys(sys)) return { sys: sys, ops: ops };
+    if (m === BASE || !NEW[m] || !isStorySys(sys)) return { sys: sys, ops: ops };
     var s = sys;
     TABLE.forEach(function (row) {
       var id = row[0], old = row[1], nw = NEW[m][id];
@@ -121,7 +125,7 @@
   var LASTIN = null;   /* 出口の B 規則用（この回の入力。保存しない・status に出さない） */
   function rewriteBody(body, stringify, forceMode) {   /* forceMode: A/B 試験のタブだけ（ovHV.js）。出荷の経路は渡さない */
     var m = valid(forceMode) ? forceMode : mode();
-    if (m === DEFAULT) { st.sendC++; return body; }                 /* C: 読まない・触らない */
+    if (m === BASE) { st.sendC++; return body; }                 /* C: 読まない・触らない */
     if (typeof body !== 'string' || body.length < 2000 || body.indexOf('＜あなたの役割＞') < 0) return body;
     var b = JSON.parse(body);
     if (!b || !Array.isArray(b.messages) || !b.messages.length) return body;
