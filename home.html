@@ -260,8 +260,9 @@
    ホームを ?s1=on / ?s1=off で開くと、この端末の 4 つの鍵を置く／外して、URL から印を消す。物語のデータには触れない。 */
 (function(){ try {
   var q = new URLSearchParams(location.search).get('s1'); if (q !== 'on' && q !== 'off') return;
-  var K = [['v292DfixLEAN1On','1'],['v292DfixLEAN1Add','1'],['v292DfixSTFILL1On','1'],['v292DfixSTFILL1Mode','all']];
-  K.forEach(function(k){ if (q === 'on') localStorage.setItem(k[0], k[1]); else localStorage.removeItem(k[0]); });
+  /* 2026-11-27 既定 ON になったので、off はこの端末に kill 鍵を置き、on は kill 鍵を外す */
+  var K = ['v292DfixLEAN1Off','v292DfixLEAN1AddOff','v292DfixSTFILL1Off'];
+  K.forEach(function(k){ if (q === 'off') localStorage.setItem(k, '1'); else localStorage.removeItem(k); });
   var u = new URL(location.href); u.searchParams.delete('s1'); history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
   setTimeout(function(){ try { alert(q === 'on' ? '新しい書き方を ON にしました（この端末だけ）' : '新しい書き方を OFF にしました（この端末だけ）'); } catch(_){} }, 600);
 } catch(e){} })();</script>
@@ -273,7 +274,7 @@
    → version.txt を no-store で見て、このHTMLの BUILT と違えば一度だけ ?vr=1&v=最新 で置換リロードする。
    ?vr=1 でループ防止。fetch 失敗時は現状維持（安全側）。 */
 (function(){
-  var HOME_BUILT = '20261127-s1url';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
+  var HOME_BUILT = '20261127-s1on';   /* ★ux3(2026-09-16): このHTMLのHOME_BUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */

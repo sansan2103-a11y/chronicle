@@ -14,7 +14,7 @@
   var DEF = ['良い1ターンの形', '展開を前に進める', '書き方の見本', '反応と身体', 'ダッシュ', '文体の基本ルール', '展開の推進ルール', '描写の作り方'];
   var st = { seen: 0, cut: 0, err: 0, last: null };
   function ls(k){ try { return G.localStorage.getItem(k); } catch(e){ return null; } }
-  function on(){ return ls('v292DfixLEAN1On') === '1'; }
+  function on(){ return ls('v292DfixLEAN1Off') !== '1'; }   /* 2026-11-27 Owner 判断で既定 ON（kill: v292DfixLEAN1Off='1'） */
   function list(){ var v = ls('v292DfixLEAN1Drop'); if (v) { var a = String(v).split('|').map(function(x){ return x.trim(); }).filter(Boolean); if (a.length) return a; } return DEF; }
   /* ★ADD（v292DfixLEAN1Add='1' のときだけ・LEAN1On と併用）: 外した決まりの代わりに置く、短い書き方の約束 5 行（Owner が良いと判断した見本から取り出した型）。
      演技の指示（苦しそうに 等）は書かない。誰が語るかの役割分担と、文の形だけ。 */
@@ -27,7 +27,7 @@
     /* r4: 実機 lean3 で、5 行を足した形だけ <state> の無い回が増えた（C 4・2 回／今の形 1 回）。欠けた回は出力が短く、本文だけでタグが 1 つも無かった＝小説として書き切ってやめている。
        そこで、書き方の約束は本文だけのもので、後ろのタグは省かないことを 1 行で言う（v292DfixLEAN1AddTag='0' でこの行だけ外せる）。 */
     + (ls('v292DfixLEAN1AddTag') === '0' ? '' : '・ここまでの約束は本文の書き方だけに当てる。本文が短くても、本文の後ろに置くタグ（下の【出力の形式】と【状態の出力】）は、どのターンでも省かない。');
-  function addOn(){ return ls('v292DfixLEAN1Add') === '1'; }
+  function addOn(){ return ls('v292DfixLEAN1AddOff') !== '1'; }   /* 既定 ON（kill: v292DfixLEAN1AddOff='1'） */
   function fromBody(body){
     if (typeof body !== 'string' || body.indexOf('"messages"') < 0) return body;
     var b = JSON.parse(body); if (!b || !Array.isArray(b.messages)) return body;
@@ -58,7 +58,7 @@
    *   ・取り直しは 1 回だけ。失敗・空・名前が表に無い行は足さない（＝その回は状態を更新しない。古い行を新しい状態として確定しない）。
    *   ・足すのは からだ／こころ だけ（r2。本能・目的は作文になるので書かせない）。傷・関係・未解決は取り直しでは書かせない（根拠なく増やさない・消さない）。 */
   var fs1 = { seen: 0, ok: 0, miss: 0, filled: 0, fail: 0, err: 0, last: null };
-  function fillOn(){ return ls('v292DfixSTFILL1On') === '1'; }
+  function fillOn(){ return ls('v292DfixSTFILL1Off') !== '1'; }   /* 既定 ON（kill: v292DfixSTFILL1Off='1'） */
   function sect(sys, head){ var i = sys.indexOf('【' + head); if (i < 0) return ''; var m = /\n+(?=【[^】\n]{1,90}】)/.exec(sys.slice(i + 1)); return sys.slice(i, m ? i + 1 + m.index : sys.length).slice(0, 1400); }
   var FILL_SYS = 'あなたは記録係。下の「本文」は物語の 1 ターン分で、すでに確定している。本文に書かれていることだけを根拠に、本文に出てきた人物の今の状態を書き出す。\n'
     + '・出力は次の形の行だけ。前置き・説明・本文の続きは書かない。\n<state who="名前" からだ="…" こころ="…"/>\n'
@@ -74,7 +74,7 @@
       fs1.seen++;
       /* r3 ★毎ターン（v292DfixSTFILL1Mode='all'）: 実機 fill2 では、今の形でも「気づけない記録の欠け」が 31/69（人物×ターン）あり、<state> が付いていても人物の行が抜ける・崩れる回が多かった。
          'all' では <state> の有無にかかわらず毎ターン本文から読み取り、AI 自身が書かなかった人物の行だけを足す（AI が書いた行は上書きしない）。 */
-      var all = ls('v292DfixSTFILL1Mode') === 'all', hasSt = /<state\b[^>]*\bwho\s*=/.test(c);
+      var all = ls('v292DfixSTFILL1Mode') !== 'miss',   /* 既定は毎ターン（'miss' で欠けた回だけ） */ hasSt = /<state\b[^>]*\bwho\s*=/.test(c);
       if (hasSt && !all) { fs1.ok++; return resp; }
       if (hasSt) fs1.ok++; else fs1.miss++;
       var have = {}; (c.match(/<state\b[^>]*>/g) || []).forEach(function(tg){ var w0 = /\bwho\s*=\s*"([^"]{1,24})"/.exec(tg); if (!w0) return; var hv = have[w0[1]] || (have[w0[1]] = {}); if (/(?:^|[\s"])からだ\s*=\s*"[^"…]{2,}/.test(tg)) hv['からだ'] = 1; if (/(?:^|[\s"])こころ\s*=\s*"[^"…]{2,}/.test(tg)) hv['こころ'] = 1; });   /* r4: 属性ごとに見る（実機: AI の行の からだ が崩れていたのに、行があるというだけで読み取りの行が捨てられた） */
@@ -134,5 +134,5 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-r11', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-on', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
 })();
