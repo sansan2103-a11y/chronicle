@@ -224,8 +224,8 @@
     r.code = code;
     if (x && x.ok) {
       if (kind === 'ef') { if (W.ptr) W.ptr[r.cid] = (W.ptr[r.cid] || 1); r.cand = false; try { window.__chronicleAv2Portrait && window.__chronicleAv2Portrait.refresh && window.__chronicleAv2Portrait.refresh(); } catch (e) {}
-        setRow(r, { phase: 'done', ok: true, fail: null, msg: EF_MSG[code] || '絵を作りました', tone: 'ok', prop: null }); return 'ok'; }
-      setRow(r, { phase: 'done', ok: true, fail: null, msg: '候補を1枚作りました（まだ採用していません。今の絵はそのままです）', tone: 'ok', prop: null, lastCand: x.candidate || null }); return 'ok';
+        setRow(r, { phase: 'done', ok: true, fail: null, msg: (EF_MSG[code] || '絵を作りました') + (r.stripNote ? '（' + r.stripNote + '）' : ''), tone: 'ok', prop: null }); r.stripNote = null; return 'ok'; }
+      setRow(r, { phase: 'done', ok: true, fail: null, msg: '候補を1枚作りました（まだ採用していません。今の絵はそのままです）' + (r.stripNote ? '（' + r.stripNote + '）' : ''), tone: 'ok', prop: null, lastCand: x.candidate || null }); r.stripNote = null; return 'ok';
     }
     if (code === 'CANDIDATES_PENDING') { setRow(r, { phase: 'idle', ok: null, cand: true, fail: null, msg: EF_MSG[code], tone: 'info', prop: null }); return 'cand'; }
     if (code === 'EXISTS') { if (W.ptr) W.ptr[r.cid] = 1; setRow(r, { phase: 'done', ok: true, fail: null, msg: EF_MSG.EXISTS, tone: 'ok' }); return 'ok'; }
@@ -303,11 +303,14 @@
   function pressGo(cid) {
     var r = W.rows[cid]; if (!r || r.phase !== 'proposed') return;
     syncInputs();
+    /* ★STRIP1: 露骨な語（だれでも）と、若く見える人物の性的な語・体を強調する語を、外見の文から外してから保存して作る。外した語は行に出す。 */
+    var st9 = null; try { var P9 = PR(); if (P9 && typeof P9.safeStrip === 'function') { st9 = P9.safeStrip(r.pa || '', derive(cid).desc || ''); if (st9 && st9.removed && st9.removed.length) { r.pa = st9.text; if (r.prop) r.prop.last = st9.text; stats.strip = (stats.strip || 0) + 1; } else st9 = null; } } catch (e9) { st9 = null; }
     var pv = preview(r.pg || '', r.pa || '');
-    if (!pv.appearance) { r.msg = '外見の文を入力してください（絵は作っていません）'; r.tone = 'ng'; renderSoon(true); return; }
+    if (!pv.appearance) { r.msg = (st9 ? '絵にできない語（' + st9.removed.join('・') + '）を外したら、外見の文が空になりました。' : '') + '外見の文を入力してください（絵は作っていません）'; r.tone = 'ng'; renderSoon(true); return; }
     if (W.busyOp) { r.msg = 'ほかの作成が終わるまで、少し待ってください'; r.tone = 'info'; renderSoon(true); return; }
     if (!av2Idle()) { r.msg = '保存の確認中です。少し待ってからお試しください'; r.tone = 'info'; renderSoon(true); return; }
     var d = derive(cid), kind = d.has ? 'nd' : 'ef';
+    if (st9) { r.stripNote = (st9.youth ? '若く見える人物なので、次の語を外して作りました：' : '絵にできない語を外して作りました：') + st9.removed.join('・'); } else r.stripNote = null;
     commitThenDraw(cid, kind, pv, null);
   }
   /* setProfile（本人が「この外見で作る」を押した）→ 確かめ直し → 1 回だけ生成。setProfile が失敗したら画像は 0 */

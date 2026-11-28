@@ -48,7 +48,7 @@
   'use strict';
   var W = root;
   if (!W || W.__v292DfixLC1prop) return;
-  var VERSION = 'LC1prop-r6-redo1b';
+  var VERSION = 'LC1prop-r7-strip1';
   function fx2b() { try { return !(W.localStorage && W.localStorage.getItem('v292DfixICONFIX2bOff') === '1'); } catch (e) { return true; } }   /* ★ICONFIX2 b */
   function NH() { var N = W.__v292DfixNH1; return (N && typeof N.draftX2 === 'function') ? N : null; }
   /* ---------- ★ICONFIX3 ---------- */
@@ -601,7 +601,34 @@
     } catch (e) { if (!done) { done = true; fallback('AI_THREW', { detail: String(e && e.message || e).slice(0, 80) }); } }
   }
 
-  var api = { var1: var1, appx1: appx1, propose: propose, nhPropose: nhPropose, compose: compose, slotsOf: slotsOf, missingOf: missingOf, visualPart: visualPart, genderGuess: genderGuess, buildPrompt: buildPrompt,
+  /* ---------- ★STRIP1（2026-11-28・Owner 判断「未成年＋18 禁なら、18 禁の方を除去する仕組みの方が合理的」「全裸・性器を見せるのはアウト」）----------
+   * 絵にする外見の文から、次の句だけを外す（外した句は返す。保存と絵は、外した後の文で進む）。Worker の判定（imgsafe）は変えない＝最後の関門はそのまま。
+   *   (1) だれでも: 露骨な語（全裸・性器など）の句
+   *   (2) 若く見える人物（学生・少女/少年・子ども・20 歳未満の年齢・セーラー服/制服の語などが、外見か説明文にある）: 露出・下着・性的な語、体を強調する語、はだけ・脱ぎかけ の句
+   * 制服・セーラー服・水着・髪・瞳などの普通の見た目は外さない。kill: localStorage v292DfixSTRIP1Off='1'（今までどおり Worker が断る）。 */
+  var STRIP_EXPLICIT = /全裸|裸体|丸裸|すっぽんぽん|性器|陰部|局部|秘部|乳首|乳輪|ペニス|男根|陰茎|女性器|股間を(?:見せ|晒|露出)|性行為|性交|精液|ノーパン|ノーブラ/;
+  var STRIP_YOUTH_X = /(?:^|[^A-Za-zＡ-Ｚａ-ｚ])(?:JK|JC|JS|ＪＫ|ＪＣ|ＪＳ|jk|ｊｋ)(?![A-Za-zＡ-Ｚａ-ｚ])|女児|男児|未成年|ロリ|ショタ|ティーン|あどけな|女の子|男の子|セーラー服|ランドセル|生徒|児童|幼女|童女|童顔|(?:高校|高等学校|中学|小学)[^、。]{0,4}年生?|学生服|園児/;
+  var STRIP_YOUTH_W = /はだけ|脱ぎかけ|半裸|半脱ぎ|肌着|素肌|胸元が開|胸元を開|ミニスカ|短すぎるスカート|きわどい|際どい|密着|食い込/;
+  var STRIP_AI_SEXY = /色っぽ|艶め?かし|艶っぽ|なまめかし|妖艶|むっちり|肉感|肢体|官能|悩ましげ|誘うよう|挑発的/;
+  function stripMinorAge(t) { var m, re = /([0-9０-９]{1,3})\s*(?:歳|才|さい)/g, s2 = String(t || ''); while ((m = re.exec(s2))) { var v = parseInt(m[1].replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }), 10); var pre = s2.charAt(m.index - 1); if (/[0-9０-９]/.test(pre)) continue; if (v < 20) return true; } return /(?:十[一二三四五六七八九]?|[一二三四五六七八九])\s*(?:歳|才)/.test(s2) && !/[二三四五六七八九]十[一二三四五六七八九]?\s*(?:歳|才)/.test(s2); }
+  function stripYouth(app, desc) { var t = String(app || '') + ' ' + String(desc || ''); return YOUTH.test(t) || STRIP_YOUTH_X.test(t) || stripMinorAge(t); }
+  function safeStrip(app, desc) {
+    var a = String(app || ''), out = { text: a, removed: [], youth: false };
+    try {
+      if (W.localStorage && W.localStorage.getItem('v292DfixSTRIP1Off') === '1') return out;
+      var youth = stripYouth(a, desc); out.youth = youth;
+      var parts = a.split(/([、，,。\n]+)/), keep = [];
+      for (var i = 0; i < parts.length; i += 2) {
+        var c = parts[i], sep = parts[i + 1] || '';
+        var bad = STRIP_EXPLICIT.test(c) || (youth && (BAD_SEX.test(c) || BAD_BODY_YOUTH.test(c) || STRIP_YOUTH_W.test(c) || STRIP_AI_SEXY.test(c)));
+        if (bad && c.trim()) { out.removed.push(c.trim().slice(0, 30)); continue; }
+        if (c.trim()) keep.push(c.trim());
+      }
+      if (out.removed.length) out.text = keep.join('、');
+    } catch (e) {}
+    return out;
+  }
+  var api = { safeStrip: safeStrip, var1: var1, appx1: appx1, propose: propose, nhPropose: nhPropose, compose: compose, slotsOf: slotsOf, missingOf: missingOf, visualPart: visualPart, genderGuess: genderGuess, buildPrompt: buildPrompt,
               version: VERSION, stats: function () { return { calls: calls, fx1a: fxA() ? 'fx1a' : 0, fx2b: fx2b() ? 'fx2b' : 0 }; }, SLOT_LABEL: SLOT_LABEL, fxSupported: fxSupported, fxGender: fxGender,
               factsOf: factsOf, enforceFacts: enforceFacts, fx2b: fx2b, fx3: fx3, fx3Fill: fx3Fill, fx3Defaults: fx3Defaults, fx3Thing: fx3Thing, fx3Unbroken: fx3Unbroken, fx3Hidden: fx3Hidden, fx3HumanLooking: fx3HumanLooking };   /* ★ICONFIX3 */   /* ★ICONFIX2 b */
   W.__v292DfixLC1prop = api;
