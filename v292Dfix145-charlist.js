@@ -495,6 +495,7 @@
         try { if (localStorage.getItem('v292DfixQUIET1Off') !== '1') __anchorName = name; } catch(_q){}
         renderModal();
       }
+      try { var UX = window.__v292DfixICONUX2; if (localStorage.getItem('v292DfixQUIET1Off') !== '1' && UX && typeof UX.drawWhenReady === 'function' && window.__v292DfixLC1 && typeof window.__v292DfixLC1.ready === 'function' && UX.drawWhenReady(name)) return true; } catch(_u){}   /* ★QUIET1 r2: 絵の状態の確認と保存が済むのを待ってから始める（早すぎるクリックは「少し待ってください」で止まり、絵ができなかった＝実機） */
       var t0 = Date.now(), tries = 0;
       (function wait(){
         tries++;
@@ -574,6 +575,7 @@
       try { if (localStorage.getItem('v292DfixCLKEEP1Off') !== '1') __keepTop = prevModal.scrollTop || 0; } catch(_k){}
       /* ★QUIET1: 押した人物の札が「登録済み」の段へ移るときは、札が画面の同じ高さに残るように合わせる（絶対位置に戻すと札が視界から消える） */
       try { if (__anchorName && __keepTop >= 0) { var __pc = prevModal.querySelectorAll('.v292Dfix145-card'); for (var __i = 0; __i < __pc.length; __i++) if (__pc[__i].getAttribute('data-name') === __anchorName) { __anchorOff = __pc[__i].getBoundingClientRect().top - prevModal.getBoundingClientRect().top; __anchorUse = __anchorName; break; } } } catch(_a){}
+      try { if (!__anchorUse && __keepTop > 0 && localStorage.getItem('v292DfixQUIET1Off') !== '1') { var __pm = prevModal.getBoundingClientRect().top, __pv = prevModal.querySelectorAll('.v292Dfix145-card'); for (var __j = 0; __j < __pv.length; __j++) { var __t = __pv[__j].getBoundingClientRect().top - __pm; if (__t >= 0 && __pv[__j].getAttribute('data-name')) { __anchorUse = __pv[__j].getAttribute('data-name'); __anchorOff = __t; break; } } } } catch(_a2){}
       __anchorName = null;
     }
     closeModal();
@@ -779,8 +781,9 @@
     if (__anchorUse) { try {
       var __movedA = false, __markA = function(){ __movedA = true; };
       mo.addEventListener('wheel', __markA, { passive: true }); mo.addEventListener('touchmove', __markA, { passive: true });
-      var __putA = function(){ if (__movedA || !mo.parentNode) return; var cs = mo.querySelectorAll('.v292Dfix145-card'); for (var i = 0; i < cs.length; i++) if (cs[i].getAttribute('data-name') === __anchorUse) { var d = (cs[i].getBoundingClientRect().top - mo.getBoundingClientRect().top) - __anchorOff; if (Math.abs(d) > 2) mo.scrollTop += d; return; } };
+      var __putA = function(){ if (__movedA || !mo.parentNode) return; var cs = mo.querySelectorAll('.v292Dfix145-card'); for (var i = 0; i < cs.length; i++) if (cs[i].getAttribute('data-name') === __anchorUse) { var d = (cs[i].getBoundingClientRect().top - mo.getBoundingClientRect().top) - __anchorOff; if (Math.abs(d) > 2) mo.scrollTop += d; return; } if (__keepTop > 0 && Math.abs(mo.scrollTop - __keepTop) > 2) mo.scrollTop = __keepTop; };
       __putA(); [60, 250, 700, 1300].forEach(function(ms){ setTimeout(__putA, ms); });
+      try { var __moA = new MutationObserver(__putA); __moA.observe(mo, { childList: true, subtree: true, characterData: true }); setTimeout(function(){ try { __moA.disconnect(); } catch(_d){} }, 3000); } catch(_m){}   /* 後から差し込まれる操作欄で札がずれるのを、描画の前に戻す（実機: 0.8 秒に 3 回跳んだ） */
     } catch(_k3){} }
     else if (__keepTop > 0) { try {
       var __moved = false, __mark = function(){ __moved = true; };

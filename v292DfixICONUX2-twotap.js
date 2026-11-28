@@ -42,7 +42,7 @@
   if (typeof window === 'undefined' || window.__v292DfixICONUX2) return;
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   if (lsg('v292DfixICONUXOff') === '1') { window.__v292DfixICONUX2 = { on: false, status: function () { return { on: false }; } }; return; }
-  var VERSION = 'ICONUX2-r3e-quiet1';
+  var VERSION = 'ICONUX2-r3f-quiet1b';
   var st = { passes: 0, taps: {}, direct: 0, aiPass: 0, wrapped: false, log: [] };
   function tap(k) { st.taps[k] = (st.taps[k] || 0) + 1; }
   function note(o) { try { o.t = Date.now(); st.log.push(o); if (st.log.length > 80) st.log.shift(); } catch (e) {} }
@@ -216,6 +216,13 @@
   /* ★QUIET1（2026-11-28・Owner「絵を作る押すと画面が凄く早くいろいろ動くのがちょっと目が疲れる」）: 1 回押しで進んでいる間は、途中の表示（案を作っています → 下書きの欄 → 保存 → 確認 → 作成中）を出さず、
      同じ高さの落ち着いた 1 行だけを出す。下書きで止まる・失敗・完了のときは今までの表示に戻る。kill: localStorage v292DfixQUIET1Off='1'（今までの表示）。 */
   var quiet = {};
+  var pend = {}, sameNote = {};   /* ★QUIET1 r2: pend＝自動抽出から登録した直後の人物（名前で持つ）。絵の状態の確認と保存が済むまで待ってから、自分で始める */
+  function startMain(id, autoOnly) {   /* 「🎨 絵を作る」を押したのと同じ */
+    delete checked[id]; delete sameNote[id];
+    if (oneTapOn()) { try { var rs9 = rowsById(lc1())[id]; if (rs9 && !rs9.conf && !(rs9.cand && !rs9.has)) autoGo[id] = Date.now(); } catch (eA) {} }
+    if (quietOn()) { quiet[id] = { t: Date.now(), went: autoGo[id] ? 0 : Date.now() }; tap('quiet'); }
+    return press(id, 'main');
+  }
   function quietOn() { return oneTapOn() && lsg('v292DfixQUIET1Off') !== '1'; }
   function oneTapOn() { return lsg('v292DfixONETAP1Off') !== '1'; }
   function redo1Ok() { try { var L = window.__v292DfixLC1; return !!(L && typeof L.rethink === 'function' && (!L.redo1On || L.redo1On())); } catch (e) { return false; } }   /* ★REDO1 */
@@ -226,7 +233,8 @@
       else if (rs.phase === 'proposed') {
         delete autoGo[cid];
         var re0 = rowEl(cid), la0 = re0 && re0.querySelector('[data-lc1-a="' + cid + '"]'), v0 = la0 ? la0.value : (rs.pa || ''), m0 = re0 && re0.querySelector('[data-lc1-msg="' + cid + '"]');
-        if (String(v0 || '').trim().length >= 2 && !(m0 && /同じ下書き|できませんでした|失敗/.test(m0.textContent || ''))) { tap('autogo'); note({ kind: 'AUTOGO', cid: cid }); if (quiet[cid]) quiet[cid].went = Date.now(); setTimeout(function () { press(cid, 'go'); }, 0); }
+        if (m0 && /同じ下書き/.test(m0.textContent || '') && quietOn()) sameNote[cid] = 1;   /* r2: 同じ下書きでも止めずに新しい候補を作る（押した人は絵を待っている）。知らせは結果の行に足す */
+        if (String(v0 || '').trim().length >= 2 && !(m0 && /できませんでした|失敗/.test(m0.textContent || '')) && !(m0 && /同じ下書き/.test(m0.textContent || '') && !quietOn())) { tap('autogo'); note({ kind: 'AUTOGO', cid: cid }); if (quiet[cid]) quiet[cid].went = Date.now(); setTimeout(function () { press(cid, 'go'); }, 0); }
         else delete quiet[cid];   /* 下書きの欄で止まる（空・同じ下書き・失敗）→ 今までの表示 */
       } else if (rs.phase === 'failed' || rs.phase === 'done') delete autoGo[cid];
     }
@@ -243,6 +251,16 @@
     }
     var tg0 = card.querySelector('.lc1-detail-tg');                 /* 主ボタンは「その他の操作」の上に置く（後から付いた「その他」の位置に合わせ直す） */
     if (tg0 && tg0.parentNode && slot.nextElementSibling !== tg0) { try { tg0.parentNode.insertBefore(slot, tg0); } catch (e) {} }
+    var nmP = card.getAttribute('data-name') || '';
+    if (!qz && pend[nmP]) {
+      var L0 = window.__v292DfixLC1, okP = false;
+      if (!quietOn() || bulk || Date.now() - pend[nmP] > 25000) delete pend[nmP];
+      else {
+        try { okP = !!(L0 && typeof L0.ready === 'function' && L0.ready(cid) && lc1Btn(cid, 'main')); } catch (eP) {}
+        if (okP) { delete pend[nmP]; tap('adraw'); note({ kind: 'ADRAW_START', cid: cid }); startMain(cid); qz = quiet[cid] || null; setTimeout(pass, 30); }
+        else qz = { t: pend[nmP], wait: 1 };
+      }
+    }
     if (qz) {
       if (slot.__sig === 'quiet') return;
       try { var h0 = slot.offsetHeight; if (h0 > 0) slot.style.minHeight = h0 + 'px'; } catch (eQ) {}
@@ -258,6 +276,7 @@
     var msg = msgEl ? msgEl.textContent : '', tone = msgEl ? (msgEl.className.replace('lc1-msg', '').trim()) : '';
     var nm0 = card.getAttribute('data-name') || '';
     if (adopted[nm0] && /候補を1枚作りました/.test(msg)) { msg = 'この絵にしました'; tone = 'ok'; }
+    if (sameNote[cid] && /候補を1枚作りました|絵を作りました/.test(msg)) msg += '（説明文に見た目が書かれているので、外見は同じです。変えたいときは「その他の操作」の「外見を編集」で）';
     var stTxt = re ? ((re.querySelector('.lc1-st') || {}).textContent || '') : '';
     var fixActs = ['retry', 'check', 'fix'].filter(function (k) { return !!lc1Btn(cid, k); });
     var proposed = !!(re && re.querySelector('[data-lc1-prop]')) && !bulk;
@@ -318,7 +337,8 @@
         if (b.disabled) return;
         if (act === 'go' || act === 'regen') syncToLc1(id, c);
         if (act === 'check') checked[id] = Date.now(); else if (act === 'main' || act === 'retry' || act === 'go') delete checked[id];
-        if (oneTapOn() && (act === 'main' || act === 'rethink')) { try { var rs9 = rowsById(lc1())[id]; if (rs9 && (act === 'rethink' || (!rs9.conf && !(rs9.cand && !rs9.has)))) autoGo[id] = Date.now(); } catch (eA) {} }
+        delete sameNote[id];
+        if (oneTapOn() && (act === 'main' || act === 'rethink')) { try { var rs9 = rowsById(lc1())[id]; if (rs9 && (act === 'rethink' || (!rs9.conf && !(rs9.cand && !rs9.has)))) autoGo[id] = Date.now(); } catch (eA) {} }   /* ★ONETAP1 */
         if (quietOn() && (act === 'rethink' || (act === 'main' && /絵を(?:作る|変える)/.test(b.textContent || '')))) { quiet[id] = { t: Date.now(), went: (act === 'main' && !autoGo[id]) ? Date.now() : 0 }; tap('quiet'); }   /* ★QUIET1 */   /* ★ONETAP1: 下書きができたら、そのまま「この外見で作る」まで進む */
         if (act === 'rethink') { try { tap('rethink'); note({ kind: 'RETHINK', cid: id }); var L9 = window.__v292DfixLC1; if (L9 && typeof L9.rethink === 'function') L9.rethink(id); } catch (e9) {} slot.__sig = null; setTimeout(pass, 30); return; }   /* ★REDO1 */
         press(id, act); slot.__sig = null; setTimeout(pass, 30);
@@ -385,6 +405,7 @@
     setInterval(pass, 1500); pass();
   }
   window.__v292DfixICONUX2 = { on: true, version: VERSION, directDraft: directDraft, directCheck: directCheck,
+    drawWhenReady: function (name) { if (!quietOn() || !name) return false; pend[String(name)] = Date.now(); var n = 0, iv = setInterval(function () { n++; try { pass(); } catch (e) {} if (!pend[String(name)] || n > 90) clearInterval(iv); }, 300); return true; },
     status: function () { return JSON.parse(JSON.stringify({ version: VERSION, passes: st.passes, taps: st.taps, direct: st.direct, aiPass: st.aiPass, regenAi: st.regenAi || 0, refused: st.refused || {}, wrapped: st.wrapped, log: st.log.slice(-30) })); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();
