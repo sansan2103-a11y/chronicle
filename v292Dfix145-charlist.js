@@ -392,7 +392,9 @@
     });
     // v292Dfix487: 直近ターンの未登録話者を即時表示（ロスター待ちしない・表示のみ／モデルには渡さない）
     try {
-      if (localStorage.getItem('v292Dfix487OnV1') === '1' && localStorage.getItem('v292Dfix487ListOff') !== '1'){
+      /* ★CLSPK1（2026-11-28・Owner の iPhone 実機「この女はキャラ一覧に出てないね」）: 会話ログに出たばかりの未登録の話者を、長期記憶の名簿を待たずに一覧へ出す部分を、全端末の既定にする
+         （これまでは鍵 v292Dfix487OnV1 を入れた Owner の PC だけ。表示だけ・記録や AI への送信は変えない）。kill: v292DfixCLSPK1Off='1'（鍵のある端末だけに戻る） */
+      if ((localStorage.getItem('v292Dfix487OnV1') === '1' || localStorage.getItem('v292DfixCLSPK1Off') !== '1') && localStorage.getItem('v292Dfix487ListOff') !== '1'){
         var __f487gen = (window.__v292Dfix487 && window.__v292Dfix487.isGeneric) ? window.__v292Dfix487.isGeneric
           : function(x){ x=String(x==null?'':x).trim(); return !x || /^[?\uFF1F]+$/.test(x) || /^(\u5F7C|\u5F7C\u5973|\u305D\u308C|\u81EA\u5206|\u79C1|\u50D5|\u4FFA|\u5974|\u3084\u3064|\u8B0E\u306E.*|\u6B63\u4F53\u4E0D\u660E.*|\u8AB0\u304B|\u4F55\u8005\u304B|\u4F55\u304B|\u4EBA\u5F71|\u7570\u5F62|\u5316\u3051?\u7269|\u602A\u7269|\u5996\u602A|\u4EA1\u970A)$/.test(x); };
         var __f487nh = (window.__v292Dfix487 && window.__v292Dfix487.isNonhumanGeneric) ? window.__v292Dfix487.isNonhumanGeneric
