@@ -48,7 +48,7 @@
   'use strict';
   var W = root;
   if (!W || W.__v292DfixLC1prop) return;
-  var VERSION = 'LC1prop-r5-var1b';
+  var VERSION = 'LC1prop-r5-var1c';
   function fx2b() { try { return !(W.localStorage && W.localStorage.getItem('v292DfixICONFIX2bOff') === '1'); } catch (e) { return true; } }   /* ★ICONFIX2 b */
   function NH() { var N = W.__v292DfixNH1; return (N && typeof N.draftX2 === 'function') ? N : null; }
   /* ---------- ★ICONFIX3 ---------- */
@@ -65,6 +65,7 @@
   var VAR1_HAIR_W = ['茶髪のロングヘア', '金髪のショートヘア', '栗色の三つ編み', '赤髪のポニーテール', '短い茶髪', '銀髪のロングヘア', '黒髪のショートヘア', '金髪のセミロング'];
   var VAR1_WEAR = ['白いシャツ', '紺のカーディガン', '灰色のパーカー', '黒いジャケット', 'ベージュのコート', '緑のセーター', '青いシャツ', '茶色のジャケット'];
   var VAR1_WEAR_W = ['旅装のマント', '革のベスト', '生成りのシャツ', '深緑の外套', '茶色のチュニック', '紺のローブ', '灰色のマント', '白いブラウス'];
+  var VAR1_CLOTH = /カーディガン|ニット|パーカー|セーター|ジャケット|シャツ|ブラウス|ワンピース|スカート|ジーンズ|ズボン|スラックス|ベスト|エプロン|作業着|つなぎ|ジャージ|浴衣|袴|外套|チュニック|革鎧|鎧|スーツ|コート|マント|ローブ|ドレス|着物|制服/;
   var var1Name = '', var1Gender = '';
   function var1Hash(t) { var h = 2166136261, x = String(t || ''); for (var i = 0; i < x.length; i++) { h ^= x.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } h ^= h >>> 16; h = Math.imul(h, 2246822507) >>> 0; h ^= h >>> 13; h = Math.imul(h, 3266489909) >>> 0; h ^= h >>> 16; return h >>> 0; }
   function var1Pick(list, salt) { return list[var1Hash(var1Name + '|' + salt) % list.length]; }
@@ -117,14 +118,15 @@
     return { marked: marked, plain: plain || String(t || ''), notes: notes };
   }
   function fx3FillOk(c, fill) { var sl = slotsOf(c), ks = Object.keys(sl);
-    if (fill && fill.var1 && fill.expr && VAR1_EXPR.test(c) && c.length <= 12 && !FX2_SEXW.test(c)) return true;   /* ★VAR1: 表情 1 句 */ return ks.length > 0 && ks.every(function (k) { return (k === 'hair' || k === 'eyes' || k === 'clothes') && fill[k]; }) && !FX2_SEXW.test(c) && !PERS_RE.test(c); }
+    if (fill && fill.var1 && fill.expr && VAR1_EXPR.test(c) && c.length <= 12 && !FX2_SEXW.test(c)) return true;   /* ★VAR1: 表情 1 句 */
+    if (fill && fill.var1 && fill.clothes && VAR1_CLOTH.test(c) && !sl.hair && !sl.eyes && !sl.feature && !sl.age && !sl.build && !FX2_SEXW.test(c) && !PERS_RE.test(c)) return true;   /* ★VAR1: 枠の表に無い服の語（カーディガン・ニット など） */ return ks.length > 0 && ks.every(function (k) { return (k === 'hair' || k === 'eyes' || k === 'clothes') && fill[k]; }) && !FX2_SEXW.test(c) && !PERS_RE.test(c); }
   /* AI の後もまだ足りない枠を決まった語で埋める（服 → 髪の順・2 種類になるまで） */
   function fx3Defaults(app, desc, context) {
     var a = String(app || ''), t = a + ' ' + String(desc || ''), out = [], sl = slotsOf(a);
     if (fx3Hidden(desc)) { FX3_SPECIES.lastIndex = 0; t = t.replace(FX3_SPECIES, ''); }   /* 隠している正体の語から服を決めない（魔法使い → ローブ にしない） */
     if (var1()) {   /* ★VAR1: 役割の服はそのまま（「元軍人」など元の役割は使わない）。無ければ名前ごとに違う服・髪 */
       var west = FX3_WEST.test(t + ' ' + String(context || '')), male = var1Gender === '男性', dsc = String(desc || '');
-      if (!fx3Clothes(a, sl)) { var w1 = ''; for (var i1 = 0; i1 < FX3_WEAR.length; i1++) { var m1 = FX3_WEAR[i1][0].exec(t); if (m1 && dsc.indexOf('元' + m1[0]) < 0) { w1 = FX3_WEAR[i1][1]; break; } } out.push(w1 || var1Pick(west ? VAR1_WEAR_W : VAR1_WEAR, 'wear')); }
+      if (!fx3Clothes(a, sl) && !VAR1_CLOTH.test(a)) { var w1 = ''; for (var i1 = 0; i1 < FX3_WEAR.length; i1++) { var m1 = FX3_WEAR[i1][0].exec(t); if (m1 && dsc.indexOf('元' + m1[0]) < 0) { w1 = FX3_WEAR[i1][1]; break; } } out.push(w1 || var1Pick(west ? VAR1_WEAR_W : VAR1_WEAR, 'wear')); }
       if (!sl.hair) out.push(FX3_OLD.test(t) ? '白髪' : var1Pick(west ? VAR1_HAIR_W : (male ? VAR1_HAIR_M : VAR1_HAIR_F), 'hair'));
       return out;
     }
@@ -351,6 +353,10 @@
       if (filled3 && fill3 && fill3.var1 && fill3.expr && VAR1_EXPR.test(c)) {   /* ★VAR1: 表情は 1 句だけ（枠の判定には掛けない） */
         if (exprUsed || total + c.length + 1 > MAX_ADD_TOTAL) { res.rejected.push({ clause: c, why: 'EXPR_TWICE' }); return; }
         exprUsed = true; total += c.length + 1; res.added.push(c); res.filled.push(c); return;
+      }
+      if (filled3 && fill3 && fill3.var1 && fill3.clothes && VAR1_CLOTH.test(c) && !slotsOf(c).clothes) {   /* ★VAR1: 枠の表に無い服の語。服は合わせて 2 句まで */
+        if ((filled.clothes || 0) >= 2 || total + c.length + 1 > MAX_ADD_TOTAL) { res.rejected.push({ clause: c, why: 'SLOT_TWICE:clothes' }); return; }
+        filled.clothes = (filled.clothes || 0) + 1; if (!firstClothes) firstClothes = c; total += c.length + 1; res.added.push(c); res.filled.push(c); return;
       }
       var sl = slotsOf(c), ks = Object.keys(sl);
       if (!ks.length && !lookUsed && c.length <= 12 && !PERS_RE.test(c) && total + c.length + 1 <= MAX_ADD_TOTAL) { lookUsed = true; total += c.length + 1; res.added.push(c); return; }   /* ★88-c: 表に無い種族・役割の見た目を 1 句だけ（性的な語は上で捨て済み） */
