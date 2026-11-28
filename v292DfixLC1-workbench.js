@@ -321,10 +321,10 @@
     stats.set++;
     /* ★SYNCWAIT1（2026-11-28・Owner の iPhone 実機「外見作ろうとしてもここに戻る」＝登録した直後は、この端末の保存がサーバーに届く前に外見の保存へ進み、LOCAL_NOT_SYNCED で断られていた）:
        1 人ずつの作成では、断られたら保存が届くのを待って（最長 30 秒）もう一度だけ確かめ直す（2 回まで）。外見の保存の決まり（サーバーと一致しないと書かない）は変えない。kill: v292DfixSYNCWAIT1Off='1' */
-    var tries = 0;
+    var tries = 0, SYNCWAIT_DEFAULT = false;   /* GPT #127-YM（2026-11-28）: HOLD → 既定 OFF。実機で 待ち・時間切れ・読み込み直し・二重操作 を確かめてから ON（試験: v292DfixSYNCWAIT1On='1'） */
     var doSet = function () { A().setProfile(cid, { gender: pv.gender, appearance: pv.appearance, ownerConfirmed: true }, function (res) {
       note({ kind: 'SET', cid: cid, ok: !!(res && res.ok), code: res && res.code, mirror: res && res.mirror, tries: tries });
-      if (!(res && res.ok) && !bulkCb && res && res.code === 'LOCAL_NOT_SYNCED' && tries < 2 && lsg('v292DfixSYNCWAIT1Off') !== '1' && W.rows[cid] === r && r.phase === 'saving') {
+      if (!(res && res.ok) && !bulkCb && res && res.code === 'LOCAL_NOT_SYNCED' && tries < 2 && lsg('v292DfixSYNCWAIT1Off') !== '1' && (SYNCWAIT_DEFAULT || lsg('v292DfixSYNCWAIT1On') === '1') && W.rows[cid] === r && r.phase === 'saving') {
         tries++; stats.syncWait = (stats.syncWait || 0) + 1;
         r.msg = 'この端末の保存がサーバーに届くのを待っています…'; r.tone = 'info'; renderSoon(true);
         var t9 = Date.now();
@@ -332,7 +332,7 @@
       }
       if (!(res && res.ok)) {
         var code = (res && res.code) || 'UNKNOWN';
-        setRow(r, { phase: bulkCb ? 'failed' : 'proposed', ok: false, code: code, msg: '外見を保存できませんでした（' + (SET_MSG[code] || 'できませんでした') + '）。絵は作っていません', tone: 'ng',
+        setRow(r, { phase: bulkCb ? 'failed' : 'proposed', ok: false, code: code, msg: (!bulkCb && code === 'LOCAL_NOT_SYNCED') ? '外見を保存できませんでした（この端末の保存がまだサーバーに届いていません）。絵は作っていません。10 秒ほど待って、もう一度「この外見で作る」を押してください' : '外見を保存できませんでした（' + (SET_MSG[code] || 'できませんでした') + '）。絵は作っていません', tone: 'ng',
           fail: bulkCb ? { code: code, kind: kind, stage: 'set', retry: true } : null });
         if (code === 'APPLIED_SERVER_MOVED') W.needReload = true;
         if (!bulkCb) unlock(); else bulkCb({ stop: !!STOP_SET[code], code: code });
