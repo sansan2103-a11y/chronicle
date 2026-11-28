@@ -806,7 +806,7 @@
           if (adraw1On()) { var __ab = mkBtn('🎨 絵を作る', '#2f5d4f', function(){ promoteAndDraw(c.name, c.desc); }); __ab.title = '登録人物にして、外見の下書きを出します（絵を作るのは「この外見で作る」を押したとき）'; __ab.setAttribute('data-adraw1', '1'); btnRow.appendChild(__ab); }   /* ★ADRAW1 */
         }
       } else if (kind === 'npc'){
-        btnRow.appendChild(mkBtn('✏️ 編集', '#5a5a8a', function(){ editNpc(c.npcIdx, c.name, c.desc); }));
+        btnRow.appendChild(mkBtn(rename2On() ? '✏️ 説明を編集' : '✏️ 編集', '#5a5a8a', function(){ editNpc(c.npcIdx, c.name, c.desc); }));   /* ym12: 「✏️ 名前を変える」と並ぶので、何を編集するかを書く（Owner の iPhone の画面で鉛筆のボタンが 2 つ並んでいた） */
         if (rename2On()) btnRow.appendChild(mkBtn('✏️ 名前を変える', '#5a5a8a', function(){ rn2Open(col, c, 'npc'); }));   /* ★RENAME2 */
       }
       btnRow.appendChild(mkBtn('→ 入力に追加', '#4a4a6a', function(){ addToInput(c.name); }));
@@ -876,7 +876,7 @@
        一覧のどこを読んでいても押せる「✕ 閉じる」を、一覧の下の端に貼り付けて出す（上の ✕ はそのまま）。kill: v292DfixCLCLOSE1Off='1' */
     try { if (localStorage.getItem('v292DfixCLCLOSE1Off') !== '1') {
       var __cf = document.createElement('div'); __cf.setAttribute('data-clclose1', '1');
-      __cf.style.cssText = 'position:sticky; bottom:-18px; margin:10px -22px -18px; padding:10px 14px 12px; display:flex; justify-content:flex-end; pointer-events:none; background:linear-gradient(to top, rgba(26,26,42,0.96) 55%, rgba(26,26,42,0)); z-index:6;';
+      __cf.style.cssText = 'position:sticky; bottom:-18px; margin:22px -22px -18px; padding:10px 14px 12px; display:flex; justify-content:flex-end; pointer-events:none; background:linear-gradient(to top, rgba(26,26,42,0.96) 55%, rgba(26,26,42,0)); z-index:6;';
       var __cb = document.createElement('button'); __cb.type = 'button'; __cb.textContent = '✕ 閉じる';
       __cb.style.cssText = 'pointer-events:auto; background:#3a3a55; border:1px solid #8a8aff; color:#fff; padding:8px 18px; border-radius:22px; cursor:pointer; font-size:14px; font-weight:bold; min-height:44px; box-shadow:0 2px 10px rgba(0,0,0,.6);';
       __cb.onclick = function(e){ e.preventDefault(); e.stopPropagation(); closeModal(); };
