@@ -42,7 +42,7 @@
   if (typeof window === 'undefined' || window.__v292DfixICONUX2) return;
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   if (lsg('v292DfixICONUXOff') === '1') { window.__v292DfixICONUX2 = { on: false, status: function () { return { on: false }; } }; return; }
-  var VERSION = 'ICONUX2-r3f-quiet1b';
+  var VERSION = 'ICONUX2-r3g-quiet1c';
   var st = { passes: 0, taps: {}, direct: 0, aiPass: 0, wrapped: false, log: [] };
   function tap(k) { st.taps[k] = (st.taps[k] || 0) + 1; }
   function note(o) { try { o.t = Date.now(); st.log.push(o); if (st.log.length > 80) st.log.shift(); } catch (e) {} }
@@ -216,6 +216,8 @@
   /* ★QUIET1（2026-11-28・Owner「絵を作る押すと画面が凄く早くいろいろ動くのがちょっと目が疲れる」）: 1 回押しで進んでいる間は、途中の表示（案を作っています → 下書きの欄 → 保存 → 確認 → 作成中）を出さず、
      同じ高さの落ち着いた 1 行だけを出す。下書きで止まる・失敗・完了のときは今までの表示に戻る。kill: localStorage v292DfixQUIET1Off='1'（今までの表示）。 */
   var quiet = {};
+  var QUIET_HTML = '<div data-iconux2="quiet"><div class="iconux2-quiet-t">🎨 絵を作っています…</div><div class="iconux2-cost">外見を考えて、絵を 1 枚描きます。20〜40 秒ほどかかります。このまま待っていて大丈夫です</div></div>';
+  var PEND_MS = 45000;   /* r3: 登録（保存の周期）に約 20 秒かかる実測 → 待ちの上限を 25 → 45 秒 */
   var pend = {}, sameNote = {};   /* ★QUIET1 r2: pend＝自動抽出から登録した直後の人物（名前で持つ）。絵の状態の確認と保存が済むまで待ってから、自分で始める */
   function startMain(id, autoOnly) {   /* 「🎨 絵を作る」を押したのと同じ */
     delete checked[id]; delete sameNote[id];
@@ -254,7 +256,7 @@
     var nmP = card.getAttribute('data-name') || '';
     if (!qz && pend[nmP]) {
       var L0 = window.__v292DfixLC1, okP = false;
-      if (!quietOn() || bulk || Date.now() - pend[nmP] > 25000) delete pend[nmP];
+      if (!quietOn() || bulk || Date.now() - pend[nmP] > PEND_MS) delete pend[nmP];
       else {
         try { okP = !!(L0 && typeof L0.ready === 'function' && L0.ready(cid) && lc1Btn(cid, 'main')); } catch (eP) {}
         if (okP) { delete pend[nmP]; tap('adraw'); note({ kind: 'ADRAW_START', cid: cid }); startMain(cid); qz = quiet[cid] || null; setTimeout(pass, 30); }
@@ -265,7 +267,7 @@
       if (slot.__sig === 'quiet') return;
       try { var h0 = slot.offsetHeight; if (h0 > 0) slot.style.minHeight = h0 + 'px'; } catch (eQ) {}
       slot.__sig = 'quiet'; slot.__proposed = false;
-      slot.innerHTML = '<div data-iconux2="quiet"><div class="iconux2-quiet-t">🎨 絵を作っています…</div><div class="iconux2-cost">外見を考えて、絵を 1 枚描きます。20〜40 秒ほどかかります。このまま待っていて大丈夫です</div></div>';
+      slot.innerHTML = QUIET_HTML; slot.removeAttribute('data-iconux2-pend');
       return;
     }
     if (slot.style.minHeight) slot.style.minHeight = '';
@@ -394,9 +396,22 @@
     for (var j = 0; j < cards.length; j++) {
       var c = cards[j], cid = c.getAttribute('data-av2-cid'), rs = rows[cid];
       try { declutter(c, !!rs); } catch (e) {}
-      if (!rs) { var old = c.querySelector('[data-iconux2="slot"]'); if (old && old.parentNode) old.parentNode.removeChild(old); continue; }   /* LOW-d: 行が無くなったキャラ → 2 タップの欄も外す */
+      if (!rs) { var old = c.querySelector('[data-iconux2="slot"]'); if (old && old.parentNode && !pend[c.getAttribute('data-name') || '']) { if (!c.__noRowAt) c.__noRowAt = Date.now(); if (lsg('v292DfixQUIET1Off') === '1' || Date.now() - c.__noRowAt > 2500) old.parentNode.removeChild(old); } continue; }
+      c.__noRowAt = 0;   /* LOW-d: 行が無くなったキャラ → 2 タップの欄も外す */
       try { renderSlot(c, cid, rs, bulk); } catch (e) { note({ kind: 'SLOT_THREW', e: String(e).slice(0, 80) }); }
     }
+    /* ★QUIET1 r3: 登録した直後（絵の行がまだ無い約 20 秒）も、その札に「🎨 絵を作っています…」を出しておく（実機 r2: 20 秒間なにも出なかった） */
+    try { Object.keys(pend).forEach(function (nm) {
+      var live = quietOn() && !bulk && Date.now() - pend[nm] <= PEND_MS;
+      if (!live) delete pend[nm];
+      var all = document.querySelectorAll('.v292Dfix145-card');
+      for (var k = 0; k < all.length; k++) { var cc = all[k]; if ((cc.getAttribute('data-name') || '') !== nm) continue;
+        var sl = cc.querySelector('[data-iconux2="slot"]');
+        if (!live) { if (sl && sl.getAttribute('data-iconux2-pend') === '1' && sl.parentNode) sl.parentNode.removeChild(sl); continue; }
+        if (sl) continue;
+        sl = document.createElement('div'); sl.setAttribute('data-iconux2', 'slot'); sl.setAttribute('data-iconux2-pend', '1'); sl.__sig = 'quiet'; sl.innerHTML = QUIET_HTML;
+        (cc.children[1] || cc).appendChild(sl); }
+    }); } catch (eP2) {}
   }
   var timer = null;
   function soon() { if (timer) return; timer = setTimeout(function () { timer = null; pass(); }, 80); }
@@ -405,7 +420,7 @@
     setInterval(pass, 1500); pass();
   }
   window.__v292DfixICONUX2 = { on: true, version: VERSION, directDraft: directDraft, directCheck: directCheck,
-    drawWhenReady: function (name) { if (!quietOn() || !name) return false; pend[String(name)] = Date.now(); var n = 0, iv = setInterval(function () { n++; try { pass(); } catch (e) {} if (!pend[String(name)] || n > 90) clearInterval(iv); }, 300); return true; },
+    drawWhenReady: function (name) { if (!quietOn() || !name) return false; pend[String(name)] = Date.now(); var n = 0, iv = setInterval(function () { n++; try { pass(); } catch (e) {} if (!pend[String(name)] || n > 160) clearInterval(iv); }, 300); return true; },
     status: function () { return JSON.parse(JSON.stringify({ version: VERSION, passes: st.passes, taps: st.taps, direct: st.direct, aiPass: st.aiPass, regenAi: st.regenAi || 0, refused: st.refused || {}, wrapped: st.wrapped, log: st.log.slice(-30) })); } };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();
