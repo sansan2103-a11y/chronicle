@@ -2,12 +2,12 @@
  * 展開の描写の段落を押すと、その段落に枠と「✎ ここを直す」の小さなボタンが出る。ボタンを押すと、今までの「本文を編集」の画面が
  * その段落を選んだ状態で開く（保存・取り消しは今までの UI.saveEdit / EDIT01 のまま。新しい保存の経路は作らない）。
  * 本文の DOM（.narr-block の中）には何も足さない・書き換えない（枠とボタンは body の直下に重ねて置く）。
- * 文字を選択している最中・ボタンやリンクの上では何もしない。スクロール・6 秒・ほかの場所を押すと消える。
+ * 文字を選択している最中・ボタンやリンクの上では何もしない。スクロール・10 秒・ほかの場所を押すと消える。
  * kill: localStorage v292DfixPTAP1Off='1'（毎回評価・読み込み直し不要）。診断: window.__v292DfixPTAP1.stats() */
 (function () {
   'use strict';
   var G = window; if (G.__v292DfixPTAP1) return;
-  var VER = 'ptap1-20261128-a', LABEL = '✎ ここを直す';
+  var VER = 'ptap1-20261128-b', LABEL = '✎ ここを直す';
   var st = { taps: 0, opens: 0, found: 0, miss: 0, err: 0 };
   function off() { try { return G.localStorage.getItem('v292DfixPTAP1Off') === '1'; } catch (e) { return false; } }
   var box = null, chip = null, cur = null, timer = null;
@@ -33,7 +33,7 @@
     var left = Math.min(Math.max(8, r.right + sx - cw), sx + vw - cw - 8), top = r.bottom + sy + 4;
     if (r.bottom + ch + 8 > (G.innerHeight || 600)) top = r.top + sy - ch - 4;   /* 画面の下端なら段落の上に出す */
     chip.style.left = left + 'px'; chip.style.top = top + 'px';
-    timer = setTimeout(hide, 6000);
+    timer = setTimeout(hide, 10000);
   }
   function plain(p) { return String(p.textContent || '').replace(/\s+/g, ' ').trim(); }
   function locate(v, txt) {   /* 編集欄の本文の中で、その段落の始まりと終わりを探す（見つからなければ null） */
