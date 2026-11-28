@@ -155,6 +155,27 @@
   var WOUND_SYS = '\n・本文の中で、その人がけがをした・けがを負っていることがはっきり書かれているときだけ、同じ行に 傷="部位と状態" を足す（例: 傷="右足首の打撲・腫れ"）。書かれていなければ 傷 は書かない。治った・無傷 は書かない。からだ に 血・切り傷・腫れ・折れ を書いた人には、必ず 傷 も書く。';
   /* ---- ★CLEAN1（2026-11-28・既定 ON・kill v292DfixCLEAN1Off='1'）: 本文に混ざった表示用の記号だけを外す（実機 slim1・Q1: <ruby>…<rt>…</rt></ruby>、<br>、漢字(よみ)、「(以下本文続き)」）。<say>・<react>・<state> には触れない。 */
   var cl1 = { seen: 0, fixed: 0 };
+  /* ★DUP1（2026-11-28・実機 Q2 C T7: 本文に「……痛えな」「それで終わりか」と書いたうえで、末尾の記録の並びに同じ台詞の <say> を重ねて出し、画面で台詞が二重になった）:
+     記録の並び（最初の <react>／<state> より後ろ）にある <say> が、本文の印の無い「」と同じ台詞なら、その印を本文の「」へ移す（末尾のほうは消す）。本文で既に印の付いた同じ台詞があるなら、末尾のほうだけ消す。
+     同じかどうかは、かぎ括弧・句読点・…・空白を除いて完全に一致するときだけ。既定 ON（CLEAN1 と同じ所で動く）。kill: v292DfixDUP1Off='1' */
+  function dupFix(c){
+    try {
+      var m0 = /<(?:react|state)\b/.exec(c); if (!m0 || m0.index < 40) return c;
+      var head = c.slice(0, m0.index), tail = c.slice(m0.index);
+      var norm = function(t){ return String(t).replace(/[「」『』。、，,．.…‥！？!?\s　・―—─ー〜~-]/g, ''); };
+      var bq = bareQuotes(head), used = {}, changed = false;
+      tail = tail.replace(/<say\b[^>]*\bwho\s*=\s*"([^"<>]{1,24})"[^>]*>([^<]{1,200})<\/say>[ \t]*\n?/g, function(all, who, txt, off, whole){
+        if (off > 0 && /[="']/.test(whole.charAt(off - 1))) return all;   /* 属性の値の中に入れ子になった印は触らない */
+        var n = norm(txt); if (n.length < 2 || /^[?？]+$|不明/.test(who)) return all;
+        for (var i = 0; i < bq.length; i++) if (!used[i] && norm(bq[i].q) === n) { used[i] = who; changed = true; return ''; }
+        var re = /<say\b[^>]*>([^<]{1,200})<\/say>/g, mm; while ((mm = re.exec(head))) if (norm(mm[1]) === n) { changed = true; return ''; }
+        return all;
+      });
+      if (!changed) return c;
+      for (var k = bq.length - 1; k >= 0; k--) if (used[k]) head = head.slice(0, bq[k].s) + '<say who="' + used[k] + '">' + bq[k].q + '</say>' + head.slice(bq[k].e);
+      return head + tail;
+    } catch (e) { return c; }
+  }
   function cleanText(c){
     var t = c;
     t = t.replace(/<rp>[\s\S]*?<\/rp>/g, '').replace(/<rt>[\s\S]*?<\/rt>/g, '').replace(/<\/?(?:ruby|rb)>/g, '');
@@ -251,6 +272,7 @@
           var j = JSON.parse(txt), msg = j && j.choices && j.choices[0] && j.choices[0].message, c = msg && msg.content;
           if (typeof c !== 'string' || c.length < 20) return resp;
           var c0 = c; if (clOn) { cl1.seen++; c = cleanText(c); if (c !== c0) cl1.fixed++; }
+          if (clOn && ls('v292DfixDUP1Off') !== '1') { var cD = dupFix(c); if (cD !== c) { c = cD; cl1.dup = (cl1.dup || 0) + 1; } }   /* ★DUP1 */
           var nc = skOn() ? sayKeepText(c, sent) : null; if (!nc && c === c0) return resp;
           msg.content = nc || c; var h = {}; try { var ct = resp.headers && resp.headers.get && resp.headers.get('content-type'); if (ct) h['content-type'] = ct; } catch(_){}
           return new G.Response(JSON.stringify(j), { status: resp.status, statusText: resp.statusText, headers: h });
@@ -261,6 +283,6 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-rec4', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
-    sayKeep: { on: skOn, stats: function(){ return sk1; }, text: sayKeepText }, wound: { on: woundOn, stats: function(){ return wf1; } }, clean: { stats: function(){ return cl1; }, text: cleanText }, spk: { on: spkOn, stats: function(){ return sp1; }, bare: bareQuotes } };
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-dup1', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
+    sayKeep: { on: skOn, stats: function(){ return sk1; }, text: sayKeepText }, wound: { on: woundOn, stats: function(){ return wf1; } }, clean: { stats: function(){ return cl1; }, text: cleanText, dup: dupFix }, spk: { on: spkOn, stats: function(){ return sp1; }, bare: bareQuotes } };
 })();
