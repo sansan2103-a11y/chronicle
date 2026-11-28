@@ -285,7 +285,8 @@
       var g = d.castG || genderOf(prevPg) || genderOf(res.gender);
       r.prop = { ok: !!res.ok, code: res.code || null, appearance: res.appearance || '', original: res.base || '', last: res.appearance || '', gender: g, genderFixed: !!d.castG, added: res.added || [], dropped: res.dropped || [], droppedVisual: res.droppedVisual || [], aiCalled: !!res.aiCalled };
       r.pg = g; r.pa = r.prop.appearance;
-      setRow(r, { phase: 'proposed', msg: '', tone: '' });
+      var same9 = false; try { same9 = !!rethink && !res.aiCalled && String(res.appearance || '').replace(/\s+/g, '') === String(d.confApp || '').replace(/\s+/g, ''); } catch (e9) {}   /* ★REDO1 c: 説明文に見た目が書かれている人物は同じ下書きになる → その理由を一言出す */
+      setRow(r, same9 ? { phase: 'proposed', msg: '設定の説明文に見た目が書かれているので、同じ下書きになりました。変えたいときは、上の文を直してから「この外見で作る」を押してください', tone: 'info' } : { phase: 'proposed', msg: '', tone: '' });
     };
     if (P && typeof P.propose === 'function') { stats.ai++; P.propose(input, done); }
     else done({ ok: false, code: 'NO_MODULE', appearance: '', base: '', gender: d.castG });
