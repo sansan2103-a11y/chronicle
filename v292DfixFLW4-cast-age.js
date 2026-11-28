@@ -25,7 +25,7 @@
   'use strict';
   var W = root || {};
   if (W.__v292DfixFLW4) return;
-  var VERSION = 'FLW4-r2';
+  var VERSION = 'FLW4-r3';
   var stats = { calls: 0, added: 0, structured: 0, fromDesc: 0, ambiguous: 0, none: 0, off: 0 };
   function off(){ try { return !!(W.localStorage && W.localStorage.getItem('v292DfixFLW4Off') === '1'); } catch(e){ return false; } }
   function nfkc(s){ s = String(s == null ? '' : s); try { return s.normalize('NFKC'); } catch(e){ return s; } }
@@ -57,6 +57,7 @@
     post = post.replace(/^\s+/, '');
     if (post === '' || /^[。、，,．\n！？!?）)]/.test(post)) return true;
     if (/^(?:です|である|であり|だ(?![っろと]))/.test(post)) return true;
+    try { if (!(W.localStorage && W.localStorage.getItem('v292DfixFLW4GOff') === '1') && /^の?(?:女性|男性|女|男)(?:$|[。、，,．\n！？!?）)\s])/.test(post)) return true; } catch (eG) {}   /* ★r3（2026-11-28）: 「25歳女性。」「三十歳の男。」も本人の年齢（実機: 裏京の登録人物がこの形で、年齢が届いていなかった） */
     if (post.charAt(0) !== 'の') return false;
     var seg = post.slice(1).split(/[。、，,．\n！？!?]/)[0];
     var m = seg.match(/^([^をにとからへよりがはもでだのやけ\s]{1,12}?)(?:で|だ|です|である|であり)?$/);

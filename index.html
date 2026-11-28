@@ -6,7 +6,7 @@
 <script src="v292DfixNDI1-no-direct-image.js?cb=20261103-bundle91-b"></script><!-- ★NDI1 (GPT #127-QK): 画像サービスへブラウザから直接つながない。最初に読む（ほかのラッパより内側）。kill なし -->
 <script src="v292Dvault2-sendgate.js?cb=20261122-vaultsend1r2"></script>
 <script src="v292Dvault2-copygate.js?cb=20261011-ab8"></script>
-<script src="v292DfixLEAN1-lean-sys.js?cb=20261127-slim1"></script><!-- ★LEAN1 r2（試験専用・既定 OFF）: 送信の最も内側で、表現の制限に当たる system の見出しを外す（GPT #127-YJ） -->
+<script src="v292DfixLEAN1-lean-sys.js?cb=20261128-q1"></script><!-- ★LEAN1 r2（試験専用・既定 OFF）: 送信の最も内側で、表現の制限に当たる system の見出しを外す（GPT #127-YJ） -->
 <script src="v292DfixCP1-final-tap.js?cb=20261023-bundle43a-r5"></script><!-- CP1 tap r43e (GPT #127-JY/#127-KA/#127-KK/#127-LA/#127-LC): 送信直前の body を CP1 に見せる観測口（送る中身は不変）。読み込み時に v292DfixCP1On='1'（かつ v292DfixCP1Off≠'1'）のときだけ fetch を包む。OFF/kill は何もしない。CP1 を使ったターンの途中でアカウント・物語・Owner 権限が変わった・kill されたときは、その送信を出さない／送信後に変わったら応答を捨てる。止めたターンは自動で送り直さない -->
 <script src="v292DfixHEROVOICE1-hero-voice.js?cb=20261127-hva1"></script><!-- ★HEROVOICE1（laneHV2・2026-11-14）: 物語ごとの「主人公はどれくらい喋る？」（おまかせ＝既定・今までの動き／よく喋る・反応する／自分からは喋らない）。送信直前に sys の決まった文だけ置き換える（おまかせは触らない＝送信バイト同一）。出口は parsePlan の主人公ロックが lockMode() を聞く。保存は この端末の localStorage v292DfixHEROVOICE1:<物語キー>（物語本体・クラウドには書かない）。kill: v292DfixHEROVOICE1Off='1'。ACTOR1 の内側・CP1-final-tap の外側に置く（CP1 tap は置き換え後を見る）。 -->
 <script src="v292DfixCONTRACT1-scene-contract.js?cb=20261126-lean1r2"></script><!-- ★CONTRACT1（laneCONTRACT1・2026-11-15・GPT #127-UP）: 送信直前に user へ「今回の場面の契約」（直前の台詞・まだ返事が出ていない相手・断った／引き受けた・設定で確定した関係）を数行足す。既定 OFF・v292DfixCONTRACT1On=1 で ON・kill v292DfixCONTRACT1Off -->
@@ -360,7 +360,7 @@
    (無駄な再読込なし)。?vr=1 でループ防止。fetch失敗時は現状維持(安全)。
    デプロイ毎に BUILT と version.txt の両方を同じ値へ更新すること。 */
 (function(){
-  var BUILT = '20261128-redo1c';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
+  var BUILT = '20261128-q1';   /* ★ux3(2026-09-16): このHTMLのBUILTとversion.txtが食い違うと
                                         読み込みのたびに1回だけ余分な置換リロードが走る。更新漏れで
                                         **常時誤検知**していた（index=rr3on以降・home=2026-09-04以降）ため同期する。
                                         ★デプロイ毎に version.txt と同じ値へ更新すること。 */
@@ -5034,7 +5034,7 @@ if (window.__chrBootDefer !== true) window.__chrEngineBoot();
 <script src="v292DfixFLW3-opening-mode.js?cb=20261101-bundle82-iconux-b"></script>
 <!-- ★FLW2/FLW4/FLW5 (laneFLOWFIX2・GPT #127-PC FLOWFIX 2-A / 4 / 5-C・Local): 外見の確定の読み直しの表示と結果の持ち越し（表示だけ）／【キャラ属性】へはっきりした年齢だけ／🏠 の何も変えない保存で未保存の印を立てない。kill: v292DfixFLW2Off / v292DfixFLW4Off / v292DfixFLW5Off -->
 <script src="v292DfixFLW2-reload-notice.js?cb=20261102-bundle86-lc1ox-d"></script>
-<script src="v292DfixFLW4-cast-age.js?cb=20261101-bundle83-flow-c"></script>
+<script src="v292DfixFLW4-cast-age.js?cb=20261128-q1"></script>
 <script src="v292DfixFLW5-home-noop-save.js?cb=20261101-bundle83-flow-c"></script>
 <!-- ★SETUI1 (laneSETUI1・Owner 2026-11-07 iPhone 実機): 設定画面の下の固定フッターを「保存／閉じる」の 1 行だけにし、🎲 の塊は🌍世界タブの先頭へ、リセットと利用規約の行は⚙システムタブへ移す（要素の移動だけ・通信 0・保存 0・id/onclick/確認画面は不変）。電話幅は画面いっぱい（100dvh）。kill: localStorage v292DfixSETUI1Off=1 -->
 <script src="v292DfixSETUI1-settings-layout.js?cb=20261108-bundle93-g"></script>

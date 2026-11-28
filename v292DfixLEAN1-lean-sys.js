@@ -30,16 +30,28 @@
   /* ★SLIM1（2026-11-27・試験専用・既定 OFF: localStorage v292DfixSLIM1On='1'。Owner「制約になってそうなところ」→ 毎ターンの記録の仕事を AI から減らす）
      <state> の からだ・こころ・本能 を AI に書かせない（からだ・こころは STFILL1 が本文から毎ターン読み取る）。目的・傷・関係・未解決は今までどおり AI が書く。
      【状態の出力（…）】の節（からだ／こころ／本能 の指示）も外す。<react>・<say> は変えない。STFILL1 が切れているときは何もしない。 */
-  function slimOn(){ return ls('v292DfixSLIM1On') === '1' && fillOn(); }
+  function slimMode(){ var v = ls('v292DfixSLIM1On'); return (v === '1' || v === '2') && fillOn() ? v : ''; }   /* '2'（2026-11-28）: こころ は AI に残し、からだ・本能 だけ外す（実機 slim1: こころ の更新が抜けやすかった） */
+  function slimOn(){ return !!slimMode(); }
   var SLIM_LINE = '・「からだ」は今この瞬間の様子（毎ターン変わる）、傷/関係/未解決は消えない記録。混同しない。';
   var SLIM_NEW = '・<state> は、目的・傷・関係・未解決のどれかに書くことがある人物だけ置く。からだ・こころ・本能は書かない（本文から別に読み取る）。';
+  var SLIM_NEW2 = '・<state> の「こころ」は今の気持ち（毎ターン変わる）。からだ・本能は書かない（本文から別に読み取る）。目的・傷・関係・未解決は、書くことがあるときだけ。';
   function slim(t){
-    var ops = [], m = /<state who="名前" からだ="[^"\n]*" こころ="[^"\n]*" 本能="[^"\n]*"/.exec(t);
-    if (m) { t = t.slice(0, m.index) + '<state who="名前"' + t.slice(m.index + m[0].length); ops.push('attr'); }
-    if (t.split(SLIM_LINE).length === 2) { t = t.replace(SLIM_LINE, function(){ return SLIM_NEW; }); ops.push('line'); }
-    else if (m) { var e = t.indexOf('\n', m.index); if (e > 0) { t = t.slice(0, e) + '\n' + SLIM_NEW + t.slice(e); ops.push('line+'); } }
+    var ops = [], two = slimMode() === '2', m = /<state who="名前" からだ="[^"\n]*" (こころ="[^"\n]*") 本能="[^"\n]*"/.exec(t);
+    if (m) { t = t.slice(0, m.index) + '<state who="名前"' + (two ? ' ' + m[1] : '') + t.slice(m.index + m[0].length); ops.push(two ? 'attr2' : 'attr'); }
+    var nw = two ? SLIM_NEW2 : SLIM_NEW;
+    if (t.split(SLIM_LINE).length === 2) { t = t.replace(SLIM_LINE, function(){ return nw; }); ops.push('line'); }
+    else if (m) { var e = t.indexOf('\n', m.index); if (e > 0) { t = t.slice(0, e) + '\n' + nw + t.slice(e); ops.push('line+'); } }
     return { text: t, ops: ops };
   }
+  /* ★ADD v2（2026-11-28・試験専用: localStorage v292DfixLEAN1AddV='2'）: Owner の見本（11-27 の 13 枚）から。4 行目に「追い詰められた側にも手がある・同席者が先に気づく」、
+     5 行目に「前に出た物や出来事が別の意味で戻る・短い台詞か 1 動作で終える」、6 行目に「入力の数字は体や景色の変化に置き換える」。 */
+  var ADD_V2 = [
+    ['・その場にいる人物は、それぞれ自分の目的で小さく動く。全員が同じ反応をしない。言うだけで終わらせず、何かをしようとする。\n',
+     '・その場にいる人物は、それぞれ自分の目的で小さく動く。全員が同じ反応をしない。言うだけで終わらせず、何かをしようとする。追い詰められた側にも、その人なりの手（取引・言い逃れ・時間かせぎ・逃げ道さがし）がある。異変には、主人公より先に同席者が気づいてよい。\n'],
+    ['・前の場面で起きたこと（物・傷・見られたこと・約束）は消えない。次の場面の出発点にする。場面は、次が気になるところで終える。\n',
+     '・前の場面で起きたこと（物・傷・見られたこと・約束）は消えない。次の場面の出発点にする。前に出た物や出来事が、あとの場面で別の意味を持って戻ってきてよい。場面は、短い台詞か 1 つの動作で、次が気になるところで終える。\n・入力に数字や割合があれば、数字のまま並べず、体・物・景色の変化に置き換えて書く。\n']
+  ];
+  function addText(){ var a = ADD; if (ls('v292DfixLEAN1AddV') === '2') ADD_V2.forEach(function(r){ if (a.split(r[0]).length === 2) a = a.replace(r[0], function(){ return r[1]; }); }); return a; }
   function addOn(){ return ls('v292DfixLEAN1AddOff') !== '1'; }   /* 既定 ON（kill: v292DfixLEAN1AddOff='1'） */
   function fromBody(body){
     if (typeof body !== 'string' || body.indexOf('"messages"') < 0) return body;
@@ -52,7 +64,7 @@
       var sep = parts[k], p = parts[k + 1], h = /^【([^】\n]{1,90})】/.exec(p), name = h ? h[1] : '';
       if (name && (drop.some(function(d){ return name.indexOf(d) === 0; }) || (slimOn() && name.indexOf('状態の出力') === 0 && name.indexOf('状態の出力・拡張') !== 0))) cut.push(name.slice(0, 20)); else { out += sep + p; kept.push(name.slice(0, 12)); }
     }
-    var add = addOn() ? ADD : '';
+    var add = addOn() ? addText() : '';
     var sl = slimOn() ? slim(out) : null; if (sl) { out = sl.text; if (add) add = add.replace('（下の【出力の形式】と【状態の出力】）', '（下の【出力の形式】）'); }
     st.last = { cut: cut, kept: kept, before: src.length, after: out.length + add.length, add: !!add };
     if (sl) st.last.slim = sl.ops;
@@ -82,6 +94,46 @@
     + '・からだ＝本文に書かれた姿勢・位置・息・けがの様子。こころ＝本文ではっきり示された気持ちだけ（怯え・安堵・苛立ち 等）。台詞や動作をそのまま写さない。はっきりしなければ こころ は書かない。各 30 字まで。本能は書かない。\n'
     + '・本文の言葉をなるべくそのまま使う。本文に無い動作・意図・事情を足さない。\n'
     + '・本文から分からない項目は、その属性ごと省く。推測で埋めない。新しい出来事・台詞・けが・回復を作らない。\n';
+  /* ---- ★SAYKEEP1（2026-11-28・試験専用: localStorage v292DfixSAYKEEP1On='1'／kill v292DfixSAYKEEP1Off='1'）----
+   * SAY の回に、入力した台詞が返事のどこにも無いとき（実機: 今の形で 3 回中 1 回・8 回中 3 回）、本文の先頭に主人公の台詞として入力のままの文を置く。
+   * 「ある」とみなす: 入力の文（記号・空白を除く）の頭 8 字か末尾 8 字が返事にある／主人公の <say> に、入力と半分以上同じ字の台詞がある（言い換え）。主人公の名前が無い物語では何もしない。 */
+  var sk1 = { seen: 0, kept: 0, add: 0, err: 0, last: null };
+  function skOn(){ return ls('v292DfixSAYKEEP1Off') !== '1' && (SAYKEEP_DEFAULT || ls('v292DfixSAYKEEP1On') === '1'); }
+  var SAYKEEP_DEFAULT = false, SPKFILL_DEFAULT = false;
+  function nrm(t){ return String(t || '').replace(/[\s　、。，．,.!！?？…‥・「」『』（）()ー―—\-〜~]/g, ''); }
+  function sayKeepText(c, reqBody){
+    try {
+      var rb = JSON.parse(reqBody), um = null; for (var i = rb.messages.length - 1; i >= 0; i--) if (rb.messages[i] && rb.messages[i].role === 'user' && typeof rb.messages[i].content === 'string') { um = rb.messages[i].content; break; }
+      if (!um) return null; var k = um.indexOf('\n\n━'), j = JSON.parse(k < 0 ? um : um.slice(0, k));
+      var ci = j && j.currentInput, hero = j && j.cast && j.cast.protagonist && j.cast.protagonist.name;
+      if (!ci || ci.type !== 'SAY' || typeof ci.text !== 'string' || typeof hero !== 'string' || !hero.trim()) return null;
+      var raw = ci.text.trim(), q = /「([^「」]{1,200})」/.exec(raw), txt = (q ? q[1] : raw).trim();
+      if (!txt || txt.length > 200 || /[<>]/.test(txt)) return null;
+      sk1.seen++;
+      var n = nrm(txt), nc = nrm(c.replace(/<(?:state|react)\b[^>]*>/g, ''));
+      if (n.length < 2) return null;
+      if (n.length <= 8 ? nc.indexOf(n) >= 0 : (nc.indexOf(n.slice(0, 8)) >= 0 || nc.indexOf(n.slice(-8)) >= 0)) { sk1.kept++; return null; }
+      var esc = hero.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), re = new RegExp('<say\\b[^>]*\\bwho\\s*=\\s*"' + esc + '"[^>]*>([\\s\\S]*?)<\\/say>', 'g'), m, para = false;
+      while ((m = re.exec(c))) { var h = nrm(m[1]), same = 0; for (var x = 0; x < n.length; x++) if (h.indexOf(n.charAt(x)) >= 0) same++; if (h.length >= 2 && same / n.length >= 0.6 && Math.abs(h.length - n.length) <= Math.max(6, n.length * 0.6)) { para = true; break; } }
+      if (para) { sk1.kept++; return null; }
+      sk1.add++; sk1.last = { len: txt.length };
+      return '<say who="' + hero.trim() + '">' + txt.replace(/^[「『]|[」』]$/g, '') + '</say>\n' + c.replace(/^\s+/, '');
+    } catch (e) { sk1.err++; return null; }
+  }
+  /* ---- ★SPKFILL1（2026-11-28・試験専用: localStorage v292DfixSPKFILL1On='1'／kill v292DfixSPKFILL1Off='1'。STFILL1 の読み取りと同じ 1 回の呼び出しに相乗り）----
+   * 新しい書き方で、<say> の印が無い「」の台詞が増え、その札が別人になる取り違えが増えた（実機 fill3: 30 ターンで 7 → 11。名前のある未登録の人の台詞・短い息の声）。
+   * 読み取りの AI に、印の無い「」へ番号を付けて渡し、話者が本文からはっきり分かるものだけ <q n="番号" who="名前"/> で返してもらい、その台詞を <say who> で包む。
+   * 分からないもの・声に出していない「」（看板・題名・引用）は包まない（今までの話者推定に任せる）。名前は 名前の表・この回の印・本文に出てくる形だけ。 */
+  var sp1 = { seen: 0, bare: 0, wrapped: 0, none: 0, bad: 0 };
+  function spkOn(){ return ls('v292DfixSPKFILL1Off') !== '1' && (SPKFILL_DEFAULT || ls('v292DfixSPKFILL1On') === '1'); }
+  function bareQuotes(c){   /* [{s,e,q}] : <say>…</say> の外にある「…」 */
+    var out = [], re = /<say\b[^>]*>[\s\S]*?<\/say>|<(?:state|react)\b[^>]*>|「([^「」<>]{1,200})」/g, m;
+    while ((m = re.exec(c))) { if (m[1] != null) out.push({ s: m.index, e: m.index + m[0].length, q: m[1] }); }
+    return out.slice(0, 24);
+  }
+  var SPK_SYS = '\n\n【話者の印】本文の中で【番号】が付いている「」は、誰の台詞かの印がまだ無い。番号ごとに、その台詞を口に出した人を 1 行ずつ書く: <q n="番号" who="名前"/>\n'
+    + '・本文を読んで話者がはっきり分かるものだけ書く。どちらとも取れるものは書かない。\n・声に出した台詞ではない「」（看板や書類の文字・題名・呼び名の引用・心の中の言葉）は who="なし"。\n'
+    + '・名前は、名前の表か本文に出てくる形のまま書く（主人公の台詞は主人公の名前）。名前の分からない人は、本文での呼び方（「フードの男」など）で書く。';
   function fillOne(self, u, o, reqBody, resp){
     return resp.clone().text().then(function(txt){
       var j = JSON.parse(txt), msg = j && j.choices && j.choices[0] && j.choices[0].message, c = msg && msg.content;
@@ -94,19 +146,21 @@
       if (hasSt) fs1.ok++; else fs1.miss++;
       var have = {}; (c.match(/<state\b[^>]*>/g) || []).forEach(function(tg){ var w0 = /\bwho\s*=\s*"([^"]{1,24})"/.exec(tg); if (!w0) return; var hv = have[w0[1]] || (have[w0[1]] = {}); if (/(?:^|[\s"])からだ\s*=\s*"[^"…]{2,}/.test(tg)) hv['からだ'] = 1; if (/(?:^|[\s"])こころ\s*=\s*"[^"…]{2,}/.test(tg)) hv['こころ'] = 1; });   /* r4: 属性ごとに見る（実機: AI の行の からだ が崩れていたのに、行があるというだけで読み取りの行が捨てられた） */
       var sayWho = {}; (c.match(/<(?:say|react)\b[^>]*>/g) || []).forEach(function(tg){ var w1 = /\bwho\s*=\s*"([^"]{2,24})"/.exec(tg); if (w1 && !/^[?？]+$|不明/.test(w1[1])) sayWho[w1[1]] = 1; });
+      var bq = spkOn() ? bareQuotes(c) : []; if (spkOn()) { sp1.seen++; sp1.bare += bq.length; }
       var rb = JSON.parse(reqBody), sys = '';
       for (var i = 0; i < rb.messages.length; i++) if (rb.messages[i] && rb.messages[i].role === 'system' && typeof rb.messages[i].content === 'string') { sys = rb.messages[i].content; break; }
       var names = sect(sys, 'whoに使う名前') || sect(sys, 'キャラ属性'), prev = sect(sys, '各キャラの現在の状態');
       var body2 = {}; Object.keys(rb).forEach(function(k){ if (k !== 'messages') body2[k] = rb[k]; });
-      body2.max_tokens = 400; body2.temperature = 0.2;
+      body2.max_tokens = bq.length ? 400 + Math.min(300, bq.length * 24) : 400; body2.temperature = 0.2;
       /* r2（実機 fill1: 30 ターンで補完 7 回のうち 4 回が本文に無い内容。うち 2 回は参考に渡した前の状態の写し、2 回は本能の作文）→ 前の状態は渡さない。名前の表だけ渡す。 */
       /* r4: 「名前の表に無い」で判定する（実機 fill3: 宮下 誠は入力の文として system に出ていたため「登録済み」と誤って扱われ、読み取りの対象に入らなかった） */
       var extra = Object.keys(sayWho).filter(function(n){ return names.indexOf(n) < 0; });   /* 登録されていないが、この回に話した人（名前のある新しい人） */
-      body2.messages = [ { role: 'system', content: FILL_SYS + '\n' + names + (extra.length ? '\n（この回に話した人）' + extra.join('、') : '') + (prev ? '\n\n（この場面にいる人の名前）\n' + (prev.match(/^・[^｜\n]{1,24}(?=｜)/gm) || []).join('\n') : '') },
+      body2.messages = [ { role: 'system', content: FILL_SYS + (bq.length ? SPK_SYS : '') + '\n' + names + (extra.length ? '\n（この回に話した人）' + extra.join('、') : '') + (prev ? '\n\n（この場面にいる人の名前）\n' + (prev.match(/^・[^｜\n]{1,24}(?=｜)/gm) || []).join('\n') : '') },
                          { role: 'user', content: '本文:\n' + (function(){
                            /* r5: 台詞の印を消すと、誰が話したかが本文から消える（実機 fill3 r4: 宮下 誠は say の印で 2 回話したのに、読み取りに 1 行も出なかった。地の文では姓や役割でしか呼ばれない）。
                               印は「名前「台詞」」の形に直して渡す。<react> と <state> の行は渡さない。 */
-                           var t = c.replace(/<state\b[^>]*>/g, '').replace(/<react\b[^>]*>[\s\S]*?<\/react>/g, '').replace(/<react\b[^>]*\/?>/g, '');
+                           var c9 = c; if (bq.length) { for (var b9 = bq.length - 1; b9 >= 0; b9--) c9 = c9.slice(0, bq[b9].s) + '【' + (b9 + 1) + '】' + c9.slice(bq[b9].s); }   /* ★SPKFILL1: 印の無い「」に番号 */
+                           var t = c9.replace(/<state\b[^>]*>/g, '').replace(/<react\b[^>]*>[\s\S]*?<\/react>/g, '').replace(/<react\b[^>]*\/?>/g, '');
                            t = t.replace(/<say\b[^>]*\bwho\s*=\s*"([^"]{1,24})"[^>]*>\s*([\s\S]*?)\s*<\/say>/g, function(_, w, q){ q = String(q).trim(); return w + (/^[「『]/.test(q) ? q : '「' + q + '」'); });
                            return t.replace(/<\/?say\b[^>]*>/g, '').slice(0, 2600); })() } ];
       return of.apply(self, [u, Object.assign({}, o, { body: JSON.stringify(body2) })]).then(function(r2){
@@ -125,9 +179,23 @@
               var m = new RegExp(a + '\\s*=\\s*"([^"]{1,60})"').exec(tg); if (m && !/^[…\.。\s]*$/.test(m[1]) && !/^(?:不明|なし|無し|特になし|その場にいる|—|-)$/.test(m[1].trim()) && !(a === 'こころ' && /[「」『』]|と(?:言|答|告|呟|聞)/.test(m[1]))) {   /* r7: こころに台詞の写しは入れない（GPT #127-YL） */ out += ' ' + a + '="' + m[1] + '"'; n++; } });
             return n ? out + '/>' : '';
           }).filter(Boolean).slice(0, 5);
-          if (!tags.length) { if (!hasSt) fs1.fail++; fs1.last = { why: 'empty' }; return resp; }
-          msg.content = c.replace(/\s+$/, '') + '\n' + tags.join('\n');
-          fs1.filled++; fs1.last = { why: 'filled', n: tags.length };
+          /* ★SPKFILL1: <q n who> を読み、印の無い台詞を <say who> で包む（後ろから置き換える） */
+          var cW = c, nW = 0;
+          if (bq.length && typeof c2 === 'string') {
+            var qs = {}; (c2.match(/<q\b[^>]*\/?>/g) || []).forEach(function(tg){ var n1 = /\bn\s*=\s*"(\d{1,2})"/.exec(tg), w1 = /\bwho\s*=\s*"([^"<>]{1,24})"/.exec(tg); if (n1 && w1) qs[+n1[1]] = w1[1].trim(); });
+            var bodyTxt = c.replace(/<[^>]+>/g, '');
+            for (var q9 = bq.length - 1; q9 >= 0; q9--) {
+              var who9 = qs[q9 + 1]; if (!who9) continue;
+              if (/^(?:なし|無し|不明|[?？]+)$/.test(who9)) { sp1.none++; continue; }
+              try { var st9 = Object.keys(G.__v292Dfix77Store || {}).filter(function(k){ return k !== who9 && k.split(/[ 　]+/).indexOf(who9) >= 0; }); if (st9.length === 1) who9 = st9[0]; } catch(_){}
+              if (!(names.indexOf(who9) >= 0 || sayWho[who9] || bodyTxt.indexOf(who9) >= 0 || sys.indexOf(who9) >= 0)) { sp1.bad++; continue; }
+              cW = cW.slice(0, bq[q9].s) + '<say who="' + who9 + '">' + bq[q9].q + '</say>' + cW.slice(bq[q9].e); nW++;
+            }
+            sp1.wrapped += nW;
+          }
+          if (!tags.length && !nW) { if (!hasSt) fs1.fail++; fs1.last = { why: 'empty' }; return resp; }
+          msg.content = cW.replace(/\s+$/, '') + (tags.length ? '\n' + tags.join('\n') : '');
+          if (tags.length) fs1.filled++; fs1.last = { why: 'filled', n: tags.length, spk: nW };
           var h = {}; try { var ct = resp.headers && resp.headers.get && resp.headers.get('content-type'); if (ct) h['content-type'] = ct; } catch(_){}
           return new G.Response(JSON.stringify(j), { status: resp.status, statusText: resp.statusText, headers: h });
         });
@@ -142,12 +210,23 @@
       try { if (on() && story){ var nb = fromBody(o.body); if (nb !== o.body) o = Object.assign({}, o, { body: nb }); } }
       catch(e){ st.err++; try { console.warn(TAG, 'skipped:', e && e.message); } catch(_){} }
       var p = of.apply(this, [u, o]);
-      if (!story || !fillOn() || typeof G.Response !== 'function') return p;
+      if (!story || (!fillOn() && !skOn()) || typeof G.Response !== 'function') return p;
       var self = this, sent = o.body;
-      return p.then(function(resp){ try { if (!resp || !resp.ok) return resp; return fillOne(self, u, o, sent, resp); } catch(e){ fs1.err++; return resp; } });
+      return p.then(function(resp){
+        if (!resp || !resp.ok) return resp;
+        var p2 = !skOn() ? Promise.resolve(resp) : resp.clone().text().then(function(txt){   /* ★SAYKEEP1 */
+          var j = JSON.parse(txt), msg = j && j.choices && j.choices[0] && j.choices[0].message, c = msg && msg.content;
+          if (typeof c !== 'string' || c.length < 20) return resp;
+          var nc = sayKeepText(c, sent); if (!nc) return resp;
+          msg.content = nc; var h = {}; try { var ct = resp.headers && resp.headers.get && resp.headers.get('content-type'); if (ct) h['content-type'] = ct; } catch(_){}
+          return new G.Response(JSON.stringify(j), { status: resp.status, statusText: resp.statusText, headers: h });
+        }).catch(function(){ sk1.err++; return resp; });
+        return p2.then(function(r1){ try { return fillOn() ? fillOne(self, u, o, sent, r1) : r1; } catch(e){ fs1.err++; return r1; } });
+      });
     };
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261127-on', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } } };
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-q1', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
+    sayKeep: { on: skOn, stats: function(){ return sk1; }, text: sayKeepText }, spk: { on: spkOn, stats: function(){ return sp1; }, bare: bareQuotes } };
 })();
