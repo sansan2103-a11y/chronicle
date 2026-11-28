@@ -479,6 +479,35 @@
       return false;
     }
   }
+  /* ★ADRAW1（2026-11-28・Owner「とりあえず A でいこうか」）: 物語登場（自動抽出）の人物のカードに「🎨 絵を作る」。
+     押すと、名簿の説明のまま NPC に登録し（確認の入力欄は出さない）、登録後のカードの「絵を作る」（外見の下書き）まで進める。絵を作るのは、本人が「この外見で作る」を押したとき。
+     人でない存在は、今までの人外の下書き（NH1）がそのまま使われる。kill: localStorage v292DfixADRAW1Off='1'（ボタンを出さない）。 */
+  function adraw1On(){ try { if (localStorage.getItem('v292DfixADRAW1Off') === '1') return false; var L = window.__v292DfixLC1; return !!(L && typeof L.on === 'function' && L.on()); } catch(e){ return false; } }
+  function promoteAndDraw(name, desc){
+    try {
+      var st = getState(); if (!st || !st.cast) return false;
+      if (!Array.isArray(st.cast.npcs)) st.cast.npcs = [];
+      var dup = st.cast.npcs.some(function(n){ return n && n.name === name; });
+      if (!dup){
+        st.cast.npcs.push({ name: name, desc: String(desc || '').trim(), appeared: true });
+        if (typeof st.save === 'function') (typeof st.saveD==='function'?st.saveD('fix145.promoteAndDraw'):st.save());
+        try { console.log(TAG, 'promoted (ADRAW1):', name); } catch(_){}
+        renderModal();
+      }
+      var t0 = Date.now(), tries = 0;
+      (function wait(){
+        tries++;
+        try {
+          var cards = document.querySelectorAll('.v292Dfix145-card'), card = null;
+          for (var i = 0; i < cards.length; i++) if (cards[i].getAttribute('data-name') === name && cards[i].querySelector('[data-iconux2-act="main"]')) { card = cards[i]; break; }
+          var b = card ? card.querySelector('[data-iconux2-act="main"]') : null;
+          if (b && !b.disabled && /絵を作る/.test(b.textContent || '')) { try { card.scrollIntoView({ block: 'center' }); } catch(_s){} b.click(); return; }
+        } catch(_w){}
+        if (Date.now() - t0 < 15000) setTimeout(wait, 500);
+      })();
+      return true;
+    } catch(e){ try { console.warn(TAG, 'ADRAW1 failed:', e && e.message); } catch(_){ } return false; }
+  }
   function editNpc(npcIdx, currentName, currentDesc){
     var newDesc = prompt('「' + currentName + '」の説明を編集：', currentDesc || '');
     if (newDesc === null) return false;
@@ -671,6 +700,7 @@
           }));
         } else {
           btnRow.appendChild(mkBtn('⭐ NPCに昇格', '#5a5a9a', function(){ promoteToNpc(c.name, c.desc); }));
+          if (adraw1On()) { var __ab = mkBtn('🎨 絵を作る', '#2f5d4f', function(){ promoteAndDraw(c.name, c.desc); }); __ab.title = '登録人物にして、外見の下書きを出します（絵を作るのは「この外見で作る」を押したとき）'; __ab.setAttribute('data-adraw1', '1'); btnRow.appendChild(__ab); }   /* ★ADRAW1 */
         }
       } else if (kind === 'npc'){
         btnRow.appendChild(mkBtn('✏️ 編集', '#5a5a8a', function(){ editNpc(c.npcIdx, c.name, c.desc); }));
