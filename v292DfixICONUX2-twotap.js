@@ -106,6 +106,7 @@
     if (PERS_RE.test(text)) return { ok: false, why: 'PERSONALITY_OR_BIO' };
     if (BAD_SEX.test(text) || (youth && BAD_BODY_YOUTH.test(text))) return { ok: false, why: 'SENSITIVE_DRAFT' };
     if (!text.split('、').every(function (x) { return !x || d.indexOf(x) >= 0; })) return { ok: false, why: 'NOT_VERBATIM' };   /* 下書きの句はすべて説明文にそのままある語 */
+    try { if (typeof P.var1 === 'function' && P.var1() && typeof P.fx3Fill === 'function') { var f1 = P.fx3Fill(text, d); if (f1 && (f1.hair || f1.clothes)) return { ok: false, why: 'VAR1_FILL' }; } } catch (e9) {}   /* ★VAR1: 髪か服が書かれていない人物は、近道にせず AI に足してもらう */
     var g = genderOf(gender) || (typeof P.genderGuess === 'function' ? P.genderGuess(d) : '');
     var dropped = (vp.dropped || []).slice();
     return { ok: true, draft: { text: text, gender: g, dropped: dropped, droppedVisual: (vp.droppedVisual || []).slice(), kinds: n, age: age } };
