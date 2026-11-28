@@ -485,6 +485,88 @@
      押すと、名簿の説明のまま NPC に登録し（確認の入力欄は出さない）、登録後のカードの「絵を作る」（外見の下書き）まで進める。絵を作るのは、本人が「この外見で作る」を押したとき。
      人でない存在は、今までの人外の下書き（NH1）がそのまま使われる。kill: localStorage v292DfixADRAW1Off='1'（ボタンを出さない）。 */
   function adraw1On(){ try { if (localStorage.getItem('v292DfixADRAW1Off') === '1') return false; var L = window.__v292DfixLC1; return !!(L && typeof L.on === 'function' && L.on()); } catch(e){ return false; } }
+  /* ★RENAME2（2026-11-28・Owner「（女のような）名前をキャラ一覧から変えれるようにして欲しい。もちろんいろんなものには反映させてね」）:
+     キャラ一覧の中で名前を付ける・変える。prompt() は使わず、札の中の入力欄で行う。
+     反映の仕方（新しい保存先は作らず、既存の別名の仕組みに乗せる）:
+       ・登録人物の名前を変える／未登録の人物を新しい名前で登録する（cast.npcs）。前の呼び名は説明文の「別名: …」の行に足す（12 字まで。物語と一緒に同期されるので PC でも iPhone でも効く）。
+       ・別名の台帳（fix277 addAlias）にも足し、過去の会話ログの札の話者を新しい名前へ付け替える（fix538 normalizeConvWho＝控えを取ってから書き換える既存の処理）。
+       ・体・心・傷の記録は、次のターンで既存の統合（mergeAliasStates）が新しい名前へ寄せる。絵は人物の ID に付いているのでそのまま（RENAME1）。
+     本文（過去の地の文）は書き換えない。主人公の名前は対象外（⚙ 設定）。
+     試験中: localStorage v292DfixRENAME2On='1'（実機の関門の後に全端末の既定へ）。kill: v292DfixRENAME2Off='1' */
+  var RENAME2_DEFAULT = false;
+  function rename2On(){ try { return localStorage.getItem('v292DfixRENAME2Off') !== '1' && (RENAME2_DEFAULT || localStorage.getItem('v292DfixRENAME2On') === '1'); } catch(e){ return false; } }
+  function rn2Norm(x){ x = String(x == null ? '' : x); try { x = x.normalize('NFC'); } catch(e){} return x.replace(/[​-‍﻿]/g, '').replace(/^[\s　]+|[\s　]+$/g, ''); }
+  function rn2AliasLine(desc, alias){
+    alias = rn2Norm(alias); var d = String(desc || '');
+    if (!alias || alias.length > 12 || /[、,，・\/／\n:：]/.test(alias)) return d;
+    var m = d.match(/(^|\n)([\s　]*別名[:：])([^\n]+)/);
+    if (m){ var have = m[3].split(/[、,，・\/／]/).map(function(a){ return a.trim(); }); if (have.indexOf(alias) >= 0) return d; return d.replace(m[0], m[1] + m[2] + m[3].replace(/\s+$/, '') + '、' + alias); }
+    return (d.replace(/\s+$/, '') ? d.replace(/\s+$/, '') + '\n' : '') + '別名: ' + alias;
+  }
+  function rn2Check(st, oldN, newN){
+    if (!newN) return 'EMPTY'; if (newN.length > 24) return 'LONG'; if (/[<>"'\n\\]/.test(newN)) return 'CHAR'; if (newN === oldN) return 'SAME';
+    if (/^(?:女|男|彼|彼女|声|人|誰か|何か|女性|男性|少女|少年|老人|子供|\?+|？+)$/.test(newN)) return 'GENERIC';
+    var names = []; if (st.cast.hero && st.cast.hero.name) names.push(st.cast.hero.name); (st.cast.npcs || []).forEach(function(n){ if (n && n.name) names.push(n.name); });
+    var key = function(x){ try { var N = window.__v292DfixNAMEWS1; if (N && typeof N.key === 'function') return N.key(x); } catch(e){} return String(x).replace(/[\s　・]/g, ''); };
+    for (var i = 0; i < names.length; i++) if (names[i] !== oldN && (names[i] === newN || key(names[i]) === key(newN))) return 'DUP';
+    return null;
+  }
+  var RN2_MSG = { EMPTY: '名前を入力してください', LONG: '名前は 24 字までにしてください', CHAR: '名前に使えない記号が入っています', SAME: '今の名前と同じです', GENERIC: '「女」「男」のような一般的な 1 語は名前にできません（本文の「彼女」などと混ざるため）。見分けのつく呼び名にしてください', DUP: '同じ名前の人物が既にいます', NO_STATE: '物語の状態を読めませんでした', NOT_FOUND: 'この人物が見つかりませんでした', ERR: '変更できませんでした' };
+  function renameChar(oldN, newN, kind, baseDesc, handle){
+    var res = { ok: false, code: null, cards: 0, alias: false };
+    try {
+      if (!rename2On()) { res.code = 'OFF'; return res; }
+      var st = getState(); if (!st || !st.cast) { res.code = 'NO_STATE'; return res; }
+      if (!Array.isArray(st.cast.npcs)) st.cast.npcs = [];
+      oldN = String(oldN || ''); newN = rn2Norm(newN);
+      var bad = rn2Check(st, kind === 'npc' ? oldN : '', newN); if (bad) { res.code = bad; return res; }
+      var prev = rn2Norm(handle || oldN).replace(/（未確認）\s*$/, '');
+      var aliasOk = !!(prev && prev !== newN && !/^[（(]/.test(prev) && !/^[?？]+$/.test(prev));
+      if (kind === 'npc'){
+        var idx = -1; for (var i = 0; i < st.cast.npcs.length; i++) if (st.cast.npcs[i] && st.cast.npcs[i].name === oldN) { idx = i; break; }
+        if (idx < 0) { res.code = 'NOT_FOUND'; return res; }
+        st.cast.npcs[idx].name = newN;
+        if (aliasOk) st.cast.npcs[idx].desc = rn2AliasLine(st.cast.npcs[idx].desc, prev);
+      } else {
+        st.cast.npcs.push({ name: newN, desc: aliasOk ? rn2AliasLine(String(baseDesc || '').trim(), prev) : String(baseDesc || '').trim(), appeared: true });
+      }
+      if (typeof st.save === 'function') (typeof st.saveD === 'function' ? st.saveD('fix145.rename2') : st.save());
+      var QP = window.__v292QuasiPack;
+      if (aliasOk && QP && typeof QP.addAlias === 'function') { try { res.alias = !!QP.addAlias(newN, prev); } catch(_a){} }
+      if (aliasOk && QP && typeof QP.normalizeConvWho === 'function') { try { res.cards = QP.normalizeConvWho('RENAME2:' + prev + '=' + newN) || 0; } catch(_n){} }
+      res.ok = true; res.code = 'OK'; res.prev = prev; res.name = newN;
+      try { console.log(TAG, 'RENAME2', kind, prev, '→', newN, 'cards', res.cards); } catch(_l){}
+      return res;
+    } catch(e){ res.code = 'ERR'; res.err = String(e && e.message || e).slice(0, 80); return res; }
+  }
+  var __rn2Note = null;
+  function rn2Open(col, c, kind){
+    try {
+      var old = col.querySelector('[data-rename2="row"]'); if (old) { old.parentNode.removeChild(old); return; }
+      var row = document.createElement('div'); row.setAttribute('data-rename2', 'row');
+      row.style.cssText = 'margin-top:8px; padding:10px; border:1px solid #7f93c9; border-radius:8px; background:#1c2136;';
+      var cur = (kind === 'npc') ? c.name : ((c.rawHandle && !/^[?？（(]/.test(c.rawHandle)) ? '' : '');
+      var lab = document.createElement('div'); lab.style.cssText = 'font-size:12px; color:#cfd6ee; margin-bottom:6px;';
+      lab.textContent = (kind === 'npc') ? '新しい名前（会話ログの札・状態の記録・絵は、この名前に引き継ぎます）' : '付ける名前（この名前で登録し、今までの「' + String(c.rawHandle || c.name).replace(/（未確認）\s*$/, '') + '」の札を付け替えます）';
+      var inp = document.createElement('input'); inp.type = 'text'; inp.maxLength = 24; inp.value = cur; inp.setAttribute('data-rename2', 'input');
+      inp.style.cssText = 'width:100%; box-sizing:border-box; font-size:16px; padding:8px 10px; border-radius:6px; border:1px solid #666; background:#101425; color:#fff;';
+      var msg = document.createElement('div'); msg.setAttribute('data-rename2', 'msg'); msg.style.cssText = 'font-size:12px; color:#f0b0a0; min-height:16px; margin-top:6px;';
+      var ok = document.createElement('button'); ok.type = 'button'; ok.textContent = 'この名前にする'; ok.setAttribute('data-rename2', 'ok');
+      ok.style.cssText = 'background:#2b3350; border:1px solid #7f93c9; color:#fff; font-weight:bold; border-radius:8px; padding:8px 14px; font-size:14px; min-height:44px; margin:8px 8px 0 0; cursor:pointer;';
+      var ng = document.createElement('button'); ng.type = 'button'; ng.textContent = 'やめる'; ng.setAttribute('data-rename2', 'cancel');
+      ng.style.cssText = 'background:none; border:1px solid #555; color:#ccc; border-radius:8px; padding:8px 14px; font-size:13px; min-height:44px; margin-top:8px; cursor:pointer;';
+      ng.onclick = function(e){ e.stopPropagation(); if (row.parentNode) row.parentNode.removeChild(row); };
+      ok.onclick = function(e){ e.stopPropagation(); if (ok.disabled) return; ok.disabled = true;
+        var r = renameChar(c.name, inp.value, kind, c.desc, c.rawHandle || c.name);
+        if (!r.ok) { ok.disabled = false; msg.textContent = RN2_MSG[r.code] || RN2_MSG.ERR; return; }
+        __rn2Note = { name: r.name, text: '✓ 「' + r.prev + '」を「' + r.name + '」にしました' + (r.cards ? '（会話ログの札 ' + r.cards + ' 枚を付け替え）' : '') };
+        __anchorName = null; renderModal();
+      };
+      row.addEventListener('click', function(e){ e.stopPropagation(); });
+      row.appendChild(lab); row.appendChild(inp); row.appendChild(ok); row.appendChild(ng); row.appendChild(msg);
+      col.appendChild(row); try { inp.focus(); } catch(_f){}
+    } catch(e){}
+  }
   function promoteAndDraw(name, desc){
     try {
       var st = getState(); if (!st || !st.cast) return false;
@@ -708,16 +790,19 @@
       if (kind === 'story'){
         if (c.provisional){
           btnRow.appendChild(mkBtn('⭐ 名前を付けて登録', '#5a5a9a', function(){
+            if (rename2On()) { rn2Open(col, c, 'story'); return; }   /* ★RENAME2: 札の中の入力欄で（prompt を使わない） */
             var __nm = prompt('この人物に名前を付けて登録します\n名前を入力：', (c.rawHandle && !/^[?？]/.test(c.rawHandle) && !/^[（(]/.test(c.rawHandle)) ? c.rawHandle : '');
             if (__nm === null) return; __nm = String(__nm).trim(); if (!__nm) return;
             promoteToNpc(__nm, '');
           }));
         } else {
           btnRow.appendChild(mkBtn('⭐ NPCに昇格', '#5a5a9a', function(){ promoteToNpc(c.name, c.desc); }));
+          if (rename2On()) btnRow.appendChild(mkBtn('✏️ 名前を付けて登録', '#5a5a9a', function(){ rn2Open(col, c, 'story'); }));   /* ★RENAME2 */
           if (adraw1On()) { var __ab = mkBtn('🎨 絵を作る', '#2f5d4f', function(){ promoteAndDraw(c.name, c.desc); }); __ab.title = '登録人物にして、外見の下書きを出します（絵を作るのは「この外見で作る」を押したとき）'; __ab.setAttribute('data-adraw1', '1'); btnRow.appendChild(__ab); }   /* ★ADRAW1 */
         }
       } else if (kind === 'npc'){
         btnRow.appendChild(mkBtn('✏️ 編集', '#5a5a8a', function(){ editNpc(c.npcIdx, c.name, c.desc); }));
+        if (rename2On()) btnRow.appendChild(mkBtn('✏️ 名前を変える', '#5a5a8a', function(){ rn2Open(col, c, 'npc'); }));   /* ★RENAME2 */
       }
       btnRow.appendChild(mkBtn('→ 入力に追加', '#4a4a6a', function(){ addToInput(c.name); }));
       // v292Dfix151: ↻ アイコン再生成 — invalidates AI avatar cache + regenerates from
@@ -752,6 +837,7 @@
         }
       } catch (e) {}
       col.appendChild(btnRow);
+      try { if (__rn2Note && __rn2Note.name === c.name && kind === 'npc') { var __nn = document.createElement('div'); __nn.setAttribute('data-rename2', 'note'); __nn.style.cssText = 'font-size:12px; color:#9fe0b0; margin-top:6px;'; __nn.textContent = __rn2Note.text; col.appendChild(__nn); __anchorName = null; var __nt = __rn2Note; setTimeout(function(){ try { if (__rn2Note === __nt) __rn2Note = null; card.scrollIntoView({ block: 'center' }); } catch(_s){} }, 0); } } catch(_rn){}
       card.appendChild(col);
       return card;
     }
@@ -910,7 +996,7 @@
   setInterval(injectHeaderButton, 4000);
 
   // ---------- public API ----------
-  window.__charlist = { open: renderModal, close: closeModal, diceUrlSafe: diceUrlSafe, diceHardFallback: diceHardFallback };
+  window.__charlist = { open: renderModal, close: closeModal, diceUrlSafe: diceUrlSafe, diceHardFallback: diceHardFallback, rename2: { on: rename2On, rename: renameChar, aliasLine: rn2AliasLine } };
   /* ★fix529: 検証口(node/実機どちらからでも一覧の中身をアサートできるようにする。表示には影響しない) */
   window.__v292Dfix145x = { collectChars: collectChars, findLastTurnForName: findLastTurnForName };
 
