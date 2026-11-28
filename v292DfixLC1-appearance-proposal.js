@@ -48,7 +48,7 @@
   'use strict';
   var W = root;
   if (!W || W.__v292DfixLC1prop) return;
-  var VERSION = 'LC1prop-r6-redo1';
+  var VERSION = 'LC1prop-r6-redo1b';
   function fx2b() { try { return !(W.localStorage && W.localStorage.getItem('v292DfixICONFIX2bOff') === '1'); } catch (e) { return true; } }   /* ★ICONFIX2 b */
   function NH() { var N = W.__v292DfixNH1; return (N && typeof N.draftX2 === 'function') ? N : null; }
   /* ---------- ★ICONFIX3 ---------- */
@@ -66,6 +66,14 @@
   var VAR1_WEAR = ['白いシャツ', '紺のカーディガン', '灰色のパーカー', '黒いジャケット', 'ベージュのコート', '緑のセーター', '青いシャツ', '茶色のジャケット'];
   var VAR1_WEAR_W = ['旅装のマント', '革のベスト', '生成りのシャツ', '深緑の外套', '茶色のチュニック', '紺のローブ', '灰色のマント', '白いブラウス'];
   var VAR1_CLOTH = /カーディガン|ニット|パーカー|セーター|ジャケット|シャツ|ブラウス|ワンピース|スカート|ジーンズ|ズボン|スラックス|ベスト|エプロン|作業着|つなぎ|ジャージ|浴衣|袴|外套|チュニック|革鎧|鎧|スーツ|コート|マント|ローブ|ドレス|着物|制服/;
+  /* ★VAR1 年齢: 説明文に本人の大人の年齢（20〜99 歳）がはっきり書かれていて、下書きに年代の語が無いとき、「N歳」を下書きの先頭に足す。
+     読み方は FLW4（他人の年齢・過去の年齢を拾わない）＋「25歳女性。」の形だけ。20 歳未満は足さない（年少者の扱いは今のまま）。 */
+  function var1Age(desc) {
+    var d = String(desc || ''), y = null;
+    try { var FW = W.__v292DfixFLW4, a = (FW && typeof FW.ageFromText === 'function') ? FW.ageFromText(d) : null; if (a && typeof a.years === 'number') y = a.years; } catch (e) {}
+    if (y == null) { var m = /(?:^|[。．\n])\s*([2-9][0-9]|[２-９][０-９])\s*(?:歳|才)\s*の?(?:女性|男性|女|男)(?=[。、，,．\n\s]|$)/.exec(d); if (m) y = parseInt(m[1].replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }), 10); }
+    return (typeof y === 'number' && y >= 20 && y <= 99) ? y : null;
+  }
   var var1Name = '', var1Gender = '';
   function var1Hash(t) { var h = 2166136261, x = String(t || ''); for (var i = 0; i < x.length; i++) { h ^= x.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } h ^= h >>> 16; h = Math.imul(h, 2246822507) >>> 0; h ^= h >>> 13; h = Math.imul(h, 3266489909) >>> 0; h ^= h >>> 16; return h >>> 0; }
   function var1Pick(list, salt) { return list[var1Hash(var1Name + '|' + salt) % list.length]; }
@@ -327,7 +335,7 @@
     var fill3 = (ctx.fill && typeof ctx.fill === 'object') ? ctx.fill : null; if (fill3) res.filled = [];   /* ★ICONFIX3 ③ */
     if (fxOn && !g0) g0 = fxNormG(ctx.gender);
     var raw = ai && typeof ai.add === 'string' ? norm(ai.add) : '';
-    if (raw && fill3 && fill3.var1 && BAD_ASCII.test(raw)) raw = raw.split(/[、，,。\n・]+/).filter(function (c) { return c && !BAD_ASCII.test(c); }).join('、');   /* ★VAR1: 英字・数字の混じった句（T シャツ など）だけ捨て、残りの句は使う */
+    if (raw && fill3 && fill3.var1 && (BAD_ASCII.test(raw) || BAD_NEG.test(raw) || raw.length > MAX_RAW_ADD)) raw = raw.split(/[、，,。\n・]+/).filter(function (c) { return c && !BAD_ASCII.test(c) && !BAD_NEG.test(c); }).slice(0, 8).join('、').slice(0, MAX_RAW_ADD);   /* ★VAR1: 英字・数字の混じった句（T シャツ など）だけ捨て、残りの句は使う */
     var why = raw ? badAdd(raw) : null;
     if (why) { res.rejected.push({ clause: raw.slice(0, 40), why: why }); res.whole = why; raw = ''; }
     var AI_SEXY = /色っぽ|艶め?かし|艶っぽ|なまめかし|妖艶|むっちり|肉感|肢体|官能|悩ましげ/;   /* ★88-b: 年少者だけ */
@@ -563,6 +571,7 @@
         delete o.filled;
         o.fx3 = { v: 'fx3', added: ad, why: 'THIN', ai: fl.length, det: df.length, code: o.ok ? null : (o.code || null) };
       }
+      if (var1() && o.code !== 'OFF' && o.appearance && !input.confirmed && !slotsOf(o.appearance).age) { var ya = var1Age(input.desc); if (ya != null) { o.appearance = ya + '歳、' + o.appearance; o.added = [ya + '歳'].concat(o.added || []); } }   /* ★VAR1 年齢 */
       if (!o.ok && o.code !== 'OFF' && input.auto === true && o.appearance && fx3() && !input.confirmed) { o.autoFrom = o.code || 'FAIL'; o.ok = true; o.code = null; }   /* ★ICONFIX3: 自動では、AI の失敗を理由に見送らない（本人の語＋埋めた語の下書きで進む） */
       if (facts) o = enforceFacts(o, input); cb(o); };   /* ★ICONFIX2 b ③ */
     if (killed()) return out({ ok: false, code: 'OFF', appearance: base, aiCalled: false, gender: (ctx.gender === '女性' || ctx.gender === '男性') ? ctx.gender : genderGuess(base + ' ' + (input.desc || '')) });
