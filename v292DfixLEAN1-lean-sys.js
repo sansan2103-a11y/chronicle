@@ -58,10 +58,17 @@
   var ADD_V3B = '・場面は、主人公の目と耳を通して書いてよい（見えた、聞こえた気がした）。主人公の今の状態（怒り・変化・立場）で、見え方と言葉の選び方が変わる。主人公が黙っている回でも、声の調子か体の反応を一言書く。\n'
     + '・山場では、動きを一度止めて、その間に聞こえる音か見えるものを一文書く。弱った人物にも、まだ向けている意思を 1 つ残す（視線、手、一語）。弱い声は、ひらがなや途切れで書く。\n';
   var ADD_V3R = '・直前の回で使った言い回しや絵（同じ体の描写、同じ台詞）を、もう一度使わない。状態は一段進める。\n';
+  /* ★CONT1（2026-11-28・試験専用: localStorage v292DfixCONT1On='1'／kill v292DfixCONT1Off='1'・既定 OFF＝送信バイト同一）:
+     Owner の実プレイ「ひなたに肩を揉むよう命じる → 次のターンに別の人へ別のことを命じる → ひなたが揉んでいることが無くなっている」「少し前に使った物をまだ手に持っている文が出る」。
+     書き方の約束に 2 行足す（続けている動作は、やめる理由が出るまで続く／使い終えた物は 1 句で手放す）。まず文だけで効くかを測る。効かなければ記録（続けていること・手に持つ物）を持つ形へ進む。 */
+  var ADD_K1 = '・だれかが続けている動作（揉む・押さえる・支える・縛る・見張る・運ぶ など）は、やめる理由が書かれるまで続いている。別の人に別のことをさせても、前の人の動作は止めない。続けているなら「〜しながら」「手を止めずに」と 1 句入れ、やめるなら、やめた動きを 1 句書く。\n'
+             + '・手に持った物は、使い終えたら 置く・しまう・返す のどれかを 1 句書いて手放す。前の回で使い終えた物を、理由なく手に持ったままにしない。\n';
+  function contOn(){ return ls('v292DfixCONT1Off') !== '1' && ls('v292DfixCONT1On') === '1'; }
   function addText(){
     var a = ADD, v = ls('v292DfixLEAN1AddV');
     if (v === '2' || v === '3a' || v === '3b' || v === '3') ADD_V2.forEach(function(r){ if (a.split(r[0]).length === 2) a = a.replace(r[0], function(){ return r[1]; }); });
     if (v === '3a' || v === '3b' || v === '3') { var ex = (v !== '3b' ? ADD_V3A : '') + (v !== '3a' ? ADD_V3B : '') + ADD_V3R, k = a.indexOf('・ここまでの約束は本文の書き方だけに当てる'); a = k >= 0 ? a.slice(0, k) + ex + a.slice(k) : a + ex; }
+    if (contOn()) { var kc = a.indexOf('・ここまでの約束は本文の書き方だけに当てる'); a = kc >= 0 ? a.slice(0, kc) + ADD_K1 + a.slice(kc) : a + ADD_K1; }   /* ★CONT1 */
     return a;
   }
   function addOn(){ return ls('v292DfixLEAN1AddOff') !== '1'; }   /* 既定 ON（kill: v292DfixLEAN1AddOff='1'） */
@@ -283,6 +290,6 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-dup1', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-cont1', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
     sayKeep: { on: skOn, stats: function(){ return sk1; }, text: sayKeepText }, wound: { on: woundOn, stats: function(){ return wf1; } }, clean: { stats: function(){ return cl1; }, text: cleanText, dup: dupFix }, spk: { on: spkOn, stats: function(){ return sp1; }, bare: bareQuotes } };
 })();
