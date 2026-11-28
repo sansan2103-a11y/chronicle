@@ -42,7 +42,7 @@
   if (typeof window === 'undefined' || window.__v292DfixICONUX2) return;
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   if (lsg('v292DfixICONUXOff') === '1') { window.__v292DfixICONUX2 = { on: false, status: function () { return { on: false }; } }; return; }
-  var VERSION = 'ICONUX2-r3d-lc1ox';
+  var VERSION = 'ICONUX2-r3e-quiet1';
   var st = { passes: 0, taps: {}, direct: 0, aiPass: 0, wrapped: false, log: [] };
   function tap(k) { st.taps[k] = (st.taps[k] || 0) + 1; }
   function note(o) { try { o.t = Date.now(); st.log.push(o); if (st.log.length > 80) st.log.shift(); } catch (e) {} }
@@ -168,6 +168,7 @@
       '.iconux2-main{background:#2f5d4f;border:1px solid #6fb39a;color:#fff;font-weight:bold;border-radius:8px;padding:8px 16px;font-size:14px;cursor:pointer;min-height:44px}' +
       '.iconux2-main:disabled{opacity:.5}.iconux2-main.iconux2-wait{background:#2a2f2d;border-color:#555;font-weight:normal;font-size:13px;min-height:40px}' +
       '.iconux2-cost{font-size:11.5px;color:#a8b8b0;margin:4px 0 0;line-height:1.5}' +
+      '.iconux2-quiet-t{font-size:14px;font-weight:700;color:#e8f0ea;padding:9px 0 2px}' +
       '.iconux2-msg{font-size:12px;margin:4px 0 0;line-height:1.5;color:#c8c8d0}.iconux2-msg.ok{color:#9fd49f}.iconux2-msg.ng{color:#f0a0a0}.iconux2-msg.info{color:#e0c080}' +
       '.iconux2-panel{margin-top:6px;padding:8px;border:1px solid #6fb39a;border-radius:8px;background:#16201c}' +
       '.iconux2-panel .iconux2-lab{font-size:12px;color:#cfe6dc;font-weight:bold}' +
@@ -212,6 +213,10 @@
      下書きが空・同じ下書きの知らせ（説明文に見た目がある人物の「考え直す」）・失敗のときは進めず、今までどおり下書きの欄で止まる。外見はあとで「外見をAIに考え直してもらう」「外見を編集」で直せる。
      kill: localStorage v292DfixONETAP1Off='1'（今までの 2 回押し）。 */
   var autoGo = {};
+  /* ★QUIET1（2026-11-28・Owner「絵を作る押すと画面が凄く早くいろいろ動くのがちょっと目が疲れる」）: 1 回押しで進んでいる間は、途中の表示（案を作っています → 下書きの欄 → 保存 → 確認 → 作成中）を出さず、
+     同じ高さの落ち着いた 1 行だけを出す。下書きで止まる・失敗・完了のときは今までの表示に戻る。kill: localStorage v292DfixQUIET1Off='1'（今までの表示）。 */
+  var quiet = {};
+  function quietOn() { return oneTapOn() && lsg('v292DfixQUIET1Off') !== '1'; }
   function oneTapOn() { return lsg('v292DfixONETAP1Off') !== '1'; }
   function redo1Ok() { try { var L = window.__v292DfixLC1; return !!(L && typeof L.rethink === 'function' && (!L.redo1On || L.redo1On())); } catch (e) { return false; } }   /* ★REDO1 */
   /* ---------- カード 1 枚の操作欄 ---------- */
@@ -221,8 +226,14 @@
       else if (rs.phase === 'proposed') {
         delete autoGo[cid];
         var re0 = rowEl(cid), la0 = re0 && re0.querySelector('[data-lc1-a="' + cid + '"]'), v0 = la0 ? la0.value : (rs.pa || ''), m0 = re0 && re0.querySelector('[data-lc1-msg="' + cid + '"]');
-        if (String(v0 || '').trim().length >= 2 && !(m0 && /同じ下書き|できませんでした|失敗/.test(m0.textContent || ''))) { tap('autogo'); note({ kind: 'AUTOGO', cid: cid }); setTimeout(function () { press(cid, 'go'); }, 0); }
+        if (String(v0 || '').trim().length >= 2 && !(m0 && /同じ下書き|できませんでした|失敗/.test(m0.textContent || ''))) { tap('autogo'); note({ kind: 'AUTOGO', cid: cid }); if (quiet[cid]) quiet[cid].went = Date.now(); setTimeout(function () { press(cid, 'go'); }, 0); }
+        else delete quiet[cid];   /* 下書きの欄で止まる（空・同じ下書き・失敗）→ 今までの表示 */
       } else if (rs.phase === 'failed' || rs.phase === 'done') delete autoGo[cid];
+    }
+    var qz = quiet[cid];   /* ★QUIET1 */
+    if (qz) {
+      var qAge = Date.now() - qz.t;
+      if (!quietOn() || bulk || qAge > 120000 || ['retry', 'check', 'fix'].some(function (k) { return !!lc1Btn(cid, k); }) || rs.phase === 'failed' || rs.phase === 'done' || (rs.phase === 'idle' && ((qz.went && Date.now() - qz.went > 1500) || qAge > 3000)) || (rs.phase === 'proposed' && !autoGo[cid] && !(qz.went && Date.now() - qz.went < 4000))) { delete quiet[cid]; qz = null; }
     }
     var slot = card.querySelector('[data-iconux2="slot"]');
     if (!slot) {
@@ -232,6 +243,14 @@
     }
     var tg0 = card.querySelector('.lc1-detail-tg');                 /* 主ボタンは「その他の操作」の上に置く（後から付いた「その他」の位置に合わせ直す） */
     if (tg0 && tg0.parentNode && slot.nextElementSibling !== tg0) { try { tg0.parentNode.insertBefore(slot, tg0); } catch (e) {} }
+    if (qz) {
+      if (slot.__sig === 'quiet') return;
+      try { var h0 = slot.offsetHeight; if (h0 > 0) slot.style.minHeight = h0 + 'px'; } catch (eQ) {}
+      slot.__sig = 'quiet'; slot.__proposed = false;
+      slot.innerHTML = '<div data-iconux2="quiet"><div class="iconux2-quiet-t">🎨 絵を作っています…</div><div class="iconux2-cost">外見を考えて、絵を 1 枚描きます。20〜40 秒ほどかかります。このまま待っていて大丈夫です</div></div>';
+      return;
+    }
+    if (slot.style.minHeight) slot.style.minHeight = '';
     var re = rowEl(cid);
     var mainB = lc1Btn(cid, 'main');
     var mainLab = mainB ? mainB.textContent.trim() : '';
@@ -299,7 +318,8 @@
         if (b.disabled) return;
         if (act === 'go' || act === 'regen') syncToLc1(id, c);
         if (act === 'check') checked[id] = Date.now(); else if (act === 'main' || act === 'retry' || act === 'go') delete checked[id];
-        if (oneTapOn() && (act === 'main' || act === 'rethink')) { try { var rs9 = rowsById(lc1())[id]; if (rs9 && (act === 'rethink' || (!rs9.conf && !(rs9.cand && !rs9.has)))) autoGo[id] = Date.now(); } catch (eA) {} }   /* ★ONETAP1: 下書きができたら、そのまま「この外見で作る」まで進む */
+        if (oneTapOn() && (act === 'main' || act === 'rethink')) { try { var rs9 = rowsById(lc1())[id]; if (rs9 && (act === 'rethink' || (!rs9.conf && !(rs9.cand && !rs9.has)))) autoGo[id] = Date.now(); } catch (eA) {} }
+        if (quietOn() && (act === 'rethink' || (act === 'main' && /絵を(?:作る|変える)/.test(b.textContent || '')))) { quiet[id] = { t: Date.now(), went: (act === 'main' && !autoGo[id]) ? Date.now() : 0 }; tap('quiet'); }   /* ★QUIET1 */   /* ★ONETAP1: 下書きができたら、そのまま「この外見で作る」まで進む */
         if (act === 'rethink') { try { tap('rethink'); note({ kind: 'RETHINK', cid: id }); var L9 = window.__v292DfixLC1; if (L9 && typeof L9.rethink === 'function') L9.rethink(id); } catch (e9) {} slot.__sig = null; setTimeout(pass, 30); return; }   /* ★REDO1 */
         press(id, act); slot.__sig = null; setTimeout(pass, 30);
       });

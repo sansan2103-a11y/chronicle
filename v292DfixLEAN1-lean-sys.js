@@ -111,7 +111,7 @@
    * 「ある」とみなす: 入力の文（記号・空白を除く）の頭 8 字か末尾 8 字が返事にある／主人公の <say> に、入力と半分以上同じ字の台詞がある（言い換え）。主人公の名前が無い物語では何もしない。 */
   var sk1 = { seen: 0, kept: 0, add: 0, err: 0, last: null };
   function skOn(){ return ls('v292DfixSAYKEEP1Off') !== '1' && (SAYKEEP_DEFAULT || ls('v292DfixSAYKEEP1On') === '1'); }
-  var SAYKEEP_DEFAULT = false, SPKFILL_DEFAULT = false;
+  var SAYKEEP_DEFAULT = true /* rec4（2026-11-28）: 実機 Q2 で A/B/C とも 4/4（二重なし）→ 既定 ON。kill v292DfixSAYKEEP1Off='1' */, SPKFILL_DEFAULT = false;
   function nrm(t){ return String(t || '').replace(/[\s　、。，．,.!！?？…‥・「」『』（）()ー―—\-〜~]/g, ''); }
   function sayKeepText(c, reqBody){
     try {
@@ -152,7 +152,7 @@
   var wf1 = { add: 0, skip: 0 };
   function woundOn(){ return ls('v292DfixWOUNDFILL1Off') !== '1' && (WOUNDFILL_DEFAULT || ls('v292DfixWOUNDFILL1On') === '1'); }
   var WOUNDFILL_DEFAULT = false;
-  var WOUND_SYS = '\n・本文の中で、その人がけがをした・けがを負っていることがはっきり書かれているときだけ、同じ行に 傷="部位と状態" を足す（例: 傷="右足首の打撲・腫れ"）。書かれていなければ 傷 は書かない。治った・無傷 は書かない。';
+  var WOUND_SYS = '\n・本文の中で、その人がけがをした・けがを負っていることがはっきり書かれているときだけ、同じ行に 傷="部位と状態" を足す（例: 傷="右足首の打撲・腫れ"）。書かれていなければ 傷 は書かない。治った・無傷 は書かない。からだ に 血・切り傷・腫れ・折れ を書いた人には、必ず 傷 も書く。';
   /* ---- ★CLEAN1（2026-11-28・既定 ON・kill v292DfixCLEAN1Off='1'）: 本文に混ざった表示用の記号だけを外す（実機 slim1・Q1: <ruby>…<rt>…</rt></ruby>、<br>、漢字(よみ)、「(以下本文続き)」）。<say>・<react>・<state> には触れない。 */
   var cl1 = { seen: 0, fixed: 0 };
   function cleanText(c){
@@ -261,6 +261,6 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-q2', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-rec4', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
     sayKeep: { on: skOn, stats: function(){ return sk1; }, text: sayKeepText }, wound: { on: woundOn, stats: function(){ return wf1; } }, clean: { stats: function(){ return cl1; }, text: cleanText }, spk: { on: spkOn, stats: function(){ return sp1; }, bare: bareQuotes } };
 })();

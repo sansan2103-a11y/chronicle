@@ -492,6 +492,7 @@
         st.cast.npcs.push({ name: name, desc: String(desc || '').trim(), appeared: true });
         if (typeof st.save === 'function') (typeof st.saveD==='function'?st.saveD('fix145.promoteAndDraw'):st.save());
         try { console.log(TAG, 'promoted (ADRAW1):', name); } catch(_){}
+        try { if (localStorage.getItem('v292DfixQUIET1Off') !== '1') __anchorName = name; } catch(_q){}
         renderModal();
       }
       var t0 = Date.now(), tries = 0;
@@ -501,9 +502,9 @@
           var cards = document.querySelectorAll('.v292Dfix145-card'), card = null;
           for (var i = 0; i < cards.length; i++) if (cards[i].getAttribute('data-name') === name && cards[i].querySelector('[data-iconux2-act="main"]')) { card = cards[i]; break; }
           var b = card ? card.querySelector('[data-iconux2-act="main"]') : null;
-          if (b && !b.disabled && /絵を作る/.test(b.textContent || '')) { try { card.scrollIntoView({ block: 'center' }); } catch(_s){} b.click(); return; }
+          if (b && !b.disabled && /絵を作る/.test(b.textContent || '')) { try { if (localStorage.getItem('v292DfixQUIET1Off') === '1') card.scrollIntoView({ block: 'center' }); } catch(_s){} b.click(); return; }
         } catch(_w){}
-        if (Date.now() - t0 < 15000) setTimeout(wait, 500);
+        if (Date.now() - t0 < 15000) setTimeout(wait, 150);
       })();
       return true;
     } catch(e){ try { console.warn(TAG, 'ADRAW1 failed:', e && e.message); } catch(_){ } return false; }
@@ -560,15 +561,20 @@
   }
 
   // ---------- render ----------
+  var __anchorName = null;   /* ★QUIET1 */
   function renderModal(){
     var data = collectChars();
     var search = '';
     var prevModal = document.querySelector('.v292Dfix145-modal');
+    var __anchorUse = null, __anchorOff = 0;
     var __keepTop = 0;   /* ★CLKEEP1（2026-11-28・Owner「絵を作る押すと一回 1 番上に戻る…改善したい」）: 一覧を作り直しても、読んでいた位置に戻す。kill: v292DfixCLKEEP1Off='1' */
     if (prevModal){
       var prevSearch = prevModal.querySelector('.v292Dfix145-search');
       if (prevSearch) search = prevSearch.value || '';
       try { if (localStorage.getItem('v292DfixCLKEEP1Off') !== '1') __keepTop = prevModal.scrollTop || 0; } catch(_k){}
+      /* ★QUIET1: 押した人物の札が「登録済み」の段へ移るときは、札が画面の同じ高さに残るように合わせる（絶対位置に戻すと札が視界から消える） */
+      try { if (__anchorName && __keepTop >= 0) { var __pc = prevModal.querySelectorAll('.v292Dfix145-card'); for (var __i = 0; __i < __pc.length; __i++) if (__pc[__i].getAttribute('data-name') === __anchorName) { __anchorOff = __pc[__i].getBoundingClientRect().top - prevModal.getBoundingClientRect().top; __anchorUse = __anchorName; break; } } } catch(_a){}
+      __anchorName = null;
     }
     closeModal();
     // backdrop
@@ -770,7 +776,13 @@
       body.appendChild(empty);
     }
     document.body.appendChild(mo);
-    if (__keepTop > 0) { try {
+    if (__anchorUse) { try {
+      var __movedA = false, __markA = function(){ __movedA = true; };
+      mo.addEventListener('wheel', __markA, { passive: true }); mo.addEventListener('touchmove', __markA, { passive: true });
+      var __putA = function(){ if (__movedA || !mo.parentNode) return; var cs = mo.querySelectorAll('.v292Dfix145-card'); for (var i = 0; i < cs.length; i++) if (cs[i].getAttribute('data-name') === __anchorUse) { var d = (cs[i].getBoundingClientRect().top - mo.getBoundingClientRect().top) - __anchorOff; if (Math.abs(d) > 2) mo.scrollTop += d; return; } };
+      __putA(); [60, 250, 700, 1300].forEach(function(ms){ setTimeout(__putA, ms); });
+    } catch(_k3){} }
+    else if (__keepTop > 0) { try {
       var __moved = false, __mark = function(){ __moved = true; };
       mo.addEventListener('wheel', __mark, { passive: true }); mo.addEventListener('touchmove', __mark, { passive: true });
       var __put = function(){ if (!__moved && mo.parentNode && Math.abs(mo.scrollTop - __keepTop) > 2) mo.scrollTop = __keepTop; };

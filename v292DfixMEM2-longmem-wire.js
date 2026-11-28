@@ -21,7 +21,7 @@
 (function(){
   'use strict';
   if (typeof window === 'undefined' || window.__v292DfixMEM2) return;
-  var VER = 'mem2r3-20261117';
+  var VER = 'mem2r4-20261128-rec4';
   var RULE = 'これまでの出来事の覚え書き（参考。プレイヤーの入力・確定した設定・直近の本文と食い違う場合はそちらを優先）';
   var MAX = 800, SUM_MIN = 60;
   function lsg(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
@@ -56,7 +56,8 @@
   function acct1(n){ try { var A = window.__v292DfixACCT1; return !!(A && typeof A.want === 'function' && A.want(n) === true); } catch(e){ return false; } }   /* ★ACCT1: Owner のアカウントなら端末の鍵が無くても（項目 mem・kill v292DfixACCT1Off / v292DfixACCT1MemOff） */
   function aKey(){ return lsg('v292DfixMEM2aOff') !== '1' && (lsg('v292DfixMEM2aOn') === '1' || acct1('mem')); }
   function aOn(){ return aKey() && trialOk(); }   /* ★MEMTRIAL: 鍵に加えて Owner の確認（腕 A・MEM3b・MEM4 はここを通る） */
-  function cOn(){ return lsg('v292DfixMEM2cOff') !== '1' && lsg('v292DfixMEM2cOn') === '1'; }
+  var C_DEFAULT = true;   /* rec4（2026-11-28）: 直近の本文 2 → 4 ターンを既定 ON（実機 Q2 の B 腕。kill v292DfixMEM2cOff='1'） */
+  function cOn(){ return lsg('v292DfixMEM2cOff') !== '1' && (C_DEFAULT || lsg('v292DfixMEM2cOn') === '1'); }
   function m3bOn(){ return lsg('v292DfixMEM3bOff') !== '1' && (lsg('v292DfixMEM3bOn') === '1' || acct1('mem')) && trialOk(); }   /* ★ACCT1 */   /* ★MEM3b（既定 OFF・腕 A が ON のときだけ効く） */
   var st = { a: { calls: 0, applied: 0, chars: 0, skip: {} }, c: { calls: 0, applied: 0, turns: 0 } };
   var lastA = null, lastC = null;
