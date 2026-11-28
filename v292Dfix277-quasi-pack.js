@@ -1037,6 +1037,13 @@
     return false;
   }
   /* 本文（地の文）で W が人として出るか */
+  function nm1SeenBefore(S, turnIdx, W){
+    try { if (localStorage.getItem('v292DfixNAMING1r4Off') === '1') return false; } catch(e){ return false; }
+    try { for (var i = 0; i < turnIdx - 1 && i < S.turns.length; i++){ var t = S.turns[i]; if (!t) continue;
+        if (String(t.narrative || '').indexOf(W) >= 0 || String(t.playerText || '').indexOf(W) >= 0) return true;
+        var cs = t._convSays || []; for (var j = 0; j < cs.length; j++) if (cs[j] && String(cs[j].say || '').indexOf(W) >= 0) return true; } } catch(e){}
+    return false;
+  }
   function nm1InNarr(W, plain){ return new RegExp('(?:^|[^ぁ-んァ-ヶー一-龥々])' + nm1Esc(W) + '(?:は|が|の|も|と名乗|と言った|ちゃん|さん)').test(plain) || new RegExp('^' + nm1Esc(W) + '(?:は|が|の|も)').test(plain); }
   /* 台詞の中身から名乗りの名前の候補を取り出す（地の文に出ることは呼び出し側で確かめる） */
   function nm1Names(body){
@@ -1099,6 +1106,10 @@
             var W = o.w;
             if (!nm1NameOk(W, cast)){ nm1Drop('invalid-or-cast-name'); return; }
             if (!nm1InNarr(W, plain)){ nm1Drop('name-not-in-narration'); return; }
+            /* ★NAMING1 r4（2026-11-28・kill v292DfixNAMING1r4Off）: 実機 Q3 の R3 T14 — 呼び名の人物「黒上着の男」が、主人公の言った物の名前をくり返して「鍵束」とだけ言った札が名乗りと読まれ
+               （地の文に「鍵束が揺れる」＝「W が」の形があった）、その人物と大男の札が「鍵束」になった。名乗る名前は、その場で初めて出る言葉のはず。
+               このターンと直前のターンより前の本文・入力・札に W がもう出ているなら、名乗りにしない（結ばない側へ倒す）。 */
+            if (nm1SeenBefore(S, turnIdx, W)){ nm1Drop('name-is-old-word'); return; }
             if (who === W){
               /* B: 札が W（AI の札か SPKCHK1 が替えた後）。fix537 と同じく直近 3 ターンの仮の呼称がちょうど 1 つ */
               if (done[W]) return;

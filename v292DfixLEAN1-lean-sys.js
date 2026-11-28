@@ -82,14 +82,14 @@
   function cont2On(){ return ls('v292DfixCONT2Off') !== '1' && ls('v292DfixCONT2On') === '1'; }
   var ct2 = { take: 0, set: 0, clear: 0, expire: 0, inject: 0, lines: 0, last: null };
   var CONT2_SYS = '\n・同じ行に、本文に書かれているときだけ次も足す（書かれていない・分からないものは書かない。推測で埋めない）:'
-    + '\n　続き="…"：その回の終わりの時点で、その人がまだ続けている最中の動作と相手（例: 続き="律の肩を揉んでいる"）。その回でやめた・終わったと書かれていれば 続き="終わり"。'
+    + '\n　続き="…"：だれかに命じられた・自分で決めて、しばらく続ける動作（揉む・見張る・支える・運ぶ・押さえる・縛られている など）を、その回の終わりの時点でまだ続けているときの動作と相手（例: 続き="律の肩を揉んでいる"）。その回でやめた・終わったと書かれていれば 続き="終わり"。書く・握る・見る・振り向く のような一瞬の動作は書かない。'
     + '\n　手="…"：その回の終わりに手に持っている物（例: 手="鍵束"）。置いた・しまった・渡した・落としたと書かれていれば 手="なし"。'
     + '\n　服="…"：脱いだ・着た・はだけた・濡れた・破れた など、服の状態が変わったと書かれているときの今の状態（例: 服="上着を脱いでシャツ姿"）。元どおりに着直したと書かれていれば 服="元どおり"。';
   function cont2Sid(){ try { var F = G.__v292Dfix697, x = F && typeof F.status === 'function' ? F.status() : null; var id = x && x.storyId; return (typeof id === 'string' && /^[A-Za-z0-9_-]{4,40}$/.test(id)) ? id : null; } catch(e){ return null; } }
   function cont2Turns(){ try { var S = typeof G.__chronicleGetState === 'function' ? G.__chronicleGetState() : null; return (S && Array.isArray(S.turns)) ? S.turns.length : null; } catch(e){ return null; } }
   function cont2Load(id){ try { var j = JSON.parse(G.localStorage.getItem('v292DfixCONT2_' + id) || '{}'); return (j && typeof j === 'object') ? j : {}; } catch(e){ return {}; } }
   function cont2Save(id, L){ try { var ks = Object.keys(L); if (!ks.length) G.localStorage.removeItem('v292DfixCONT2_' + id); else G.localStorage.setItem('v292DfixCONT2_' + id, JSON.stringify(L)); } catch(e){} }
-  var CONT2_TTL = { c: 8, h: 3, w: 9999 }, CONT2_END = { c: /^(?:終わり|終了|なし|無し|やめた|止めた|不明)$/, h: /^(?:なし|無し|何も持っていない|不明|空)$/, w: /^(?:元どおり|元通り|着直した|着た|なし|無し|不明|普段どおり)$/ };
+  var CONT2_TTL = { c: 6, h: 3, w: 9999 }, CONT2_END = { c: /^(?:終わり|終了|なし|無し|やめた|止めた|不明)$/, h: /^(?:なし|無し|何も持っていない|不明|空)$/, w: /^(?:元どおり|元通り|着直した|着た|なし|無し|不明|普段どおり)$/ };
   function cont2Prune(L, now){   /* 取り消しで戻った先の控え・期限切れを外す */
     Object.keys(L).forEach(function(n){ var e = L[n]; if (!e || typeof e !== 'object') { delete L[n]; return; }
       ['c', 'h', 'w'].forEach(function(k){ var x = e[k]; if (!x) return; if (typeof x.t !== 'number' || x.t > now || now - x.t > CONT2_TTL[k])   /* r2: 読み取りは本文が積まれる前に走る（その回の番号＝本数＋1）。取り消し・生成し直しで捨てた回の控え（番号が今の本数より大きい）は使わない */ { delete e[k]; ct2.expire++; } });
@@ -118,7 +118,7 @@
         return '・' + n + '｜' + p.join('／'); });
       ct2.inject++; ct2.lines += lines.length; ct2.last = { n: lines.length, turn: now };
       return '\n\n【いま続いていること（やめる・変える出来事が本文に出るまで、そのまま続いている）】\n' + lines.join('\n')
-        + '\n・続けている動作は、1 句で触れて続けるか、やめる動きを 1 句書く。別の人に別のことをさせても、前の人の動作は止まらない。'
+        + '\n・続けている動作を、書き手の判断で終わらせない。終わるのは、プレイヤーの入力がやめさせたとき・その人が場を離れたとき・体が続けられなくなったときだけ。別の指示が重なったら、両方を同時に続ける形で書く（例: 揉む手を止めずに、自分も揉まれる）。続けていることは 1 句で触れる。'
         + '\n・服は、着る・脱ぐ動作を書かずに変えない（その暇が無い場面では変えられない）。手に無い物を、理由なく持たせない。使い終えた物は 置く・しまう・返す の 1 句で手放す。';
     } catch(e){ return ''; }
   }
@@ -346,6 +346,6 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-cont2b', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-cont2c', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
     sayKeep: { on: skOn, stats: function(){ return sk1; }, text: sayKeepText }, wound: { on: woundOn, stats: function(){ return wf1; } }, clean: { stats: function(){ return cl1; }, text: cleanText, dup: dupFix }, cont2: { on: cont2On, stats: function(){ return ct2; }, block: cont2Block, take: cont2Take, prune: cont2Prune, ledger: function(){ var id = cont2Sid(); return id ? cont2Load(id) : null; } }, spk: { on: spkOn, stats: function(){ return sp1; }, bare: bareQuotes } };
 })();

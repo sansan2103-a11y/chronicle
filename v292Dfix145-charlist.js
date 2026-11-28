@@ -297,6 +297,8 @@
           if (!n || !n.name) return;
           registered[n.name] = true;
           var lt = findLastTurnForName(n.name, turns);
+          /* ★RENAME2 r2（実機: 名前を変えた人物が「最終: 未登場」になった）: 説明文の「別名: …」の呼び名で出ていた回も、登場として数える */
+          try { var __am = String(n.desc || '').match(/(^|\n)[\s\u3000]*別名[:：]([^\n]+)/); if (__am) __am[2].split(/[、,，・\/／]/).forEach(function(al){ al = al.trim(); if (al && al.length <= 12 && al !== n.name) { var l2 = findLastTurnForName(al, turns); if (l2 > lt) lt = l2; } }); } catch(_al){}
           out.npcs.push({
             name: n.name,
             desc: n.desc || '',
@@ -534,6 +536,9 @@
       var QP = window.__v292QuasiPack;
       if (aliasOk && QP && typeof QP.addAlias === 'function') { try { res.alias = !!QP.addAlias(newN, prev); } catch(_a){} }
       if (aliasOk && QP && typeof QP.normalizeConvWho === 'function') { try { res.cards = QP.normalizeConvWho('RENAME2:' + prev + '=' + newN) || 0; } catch(_n){} }
+      /* r2（実機: 登録済みの人物の改名で、別名の仕組み経由の付け替えが 0 枚だった・原因は未特定）: 前の呼び名と完全に同じ話者の札が残っていたら、ここで直接付け替える */
+      if (aliasOk) { try { var n2 = 0; (st.turns || []).forEach(function(t){ ((t && t._convSays) || []).forEach(function(cc){ if (cc && cc.who === prev) { cc.who = newN; n2++; } }); });
+        if (n2) { res.cards2 = n2; res.cards += n2; if (typeof st.save === 'function') (typeof st.saveC === 'function' ? st.saveC('fix145.rename2.cards') : st.save()); try { if (window.__v292Dfix66 && typeof window.__v292Dfix66.repair === 'function') window.__v292Dfix66.repair(); } catch(_r66){} } } catch(_d){} }
       res.ok = true; res.code = 'OK'; res.prev = prev; res.name = newN;
       try { console.log(TAG, 'RENAME2', kind, prev, '→', newN, 'cards', res.cards); } catch(_l){}
       return res;

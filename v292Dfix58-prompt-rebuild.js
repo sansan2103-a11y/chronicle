@@ -329,7 +329,8 @@
      実機 Q2 の生の返事: 直近の本文を 4 ターン渡す腕（B・C）では、印（<say who>）の無い「」が 23% → 53〜60% に増えた。AI に見せている直近の本文が、印を外した表示用の文だから、と見ている。
      直近の本文の中の台詞を、会話カードで確定している話者の印つき（<say who="名前">台詞</say>）に戻して渡す。本文にその台詞がそのままの形で見つかるものだけ・話者が ??? や不明のものは包まない。
      話者を後から AI に推測させるのではなく、AI が書く時点で印を付け続けるようにする狙い（GPT #127-YM c）。 */
-  function rstagOn(){ try { return localStorage.getItem('v292DfixRSTAG1Off') !== '1' && localStorage.getItem('v292DfixRSTAG1On') === '1'; } catch(e){ return false; } }
+  var RSTAG_DEFAULT = true;   /* 20261128-ym10: 全端末の既定 ON（実機 Q3 の R3: 印の無い「」39〜46% → 0%・15 ターン全部。kill v292DfixRSTAG1Off='1'） */
+  function rstagOn(){ try { return localStorage.getItem('v292DfixRSTAG1Off') !== '1' && (RSTAG_DEFAULT || localStorage.getItem('v292DfixRSTAG1On') === '1'); } catch(e){ return false; } }
   var rstagStats = { turns: 0, wrapped: 0, miss: 0 };
   function rstag(t){
     try {
