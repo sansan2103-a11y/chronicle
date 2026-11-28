@@ -319,8 +319,17 @@
     if (!bulkCb) lock('op:' + cid);
     setRow(r, { phase: 'saving', msg: '外見を保存しています…', tone: 'info', fail: null, kind: kind });
     stats.set++;
-    A().setProfile(cid, { gender: pv.gender, appearance: pv.appearance, ownerConfirmed: true }, function (res) {
-      note({ kind: 'SET', cid: cid, ok: !!(res && res.ok), code: res && res.code, mirror: res && res.mirror });
+    /* ★SYNCWAIT1（2026-11-28・Owner の iPhone 実機「外見作ろうとしてもここに戻る」＝登録した直後は、この端末の保存がサーバーに届く前に外見の保存へ進み、LOCAL_NOT_SYNCED で断られていた）:
+       1 人ずつの作成では、断られたら保存が届くのを待って（最長 30 秒）もう一度だけ確かめ直す（2 回まで）。外見の保存の決まり（サーバーと一致しないと書かない）は変えない。kill: v292DfixSYNCWAIT1Off='1' */
+    var tries = 0;
+    var doSet = function () { A().setProfile(cid, { gender: pv.gender, appearance: pv.appearance, ownerConfirmed: true }, function (res) {
+      note({ kind: 'SET', cid: cid, ok: !!(res && res.ok), code: res && res.code, mirror: res && res.mirror, tries: tries });
+      if (!(res && res.ok) && !bulkCb && res && res.code === 'LOCAL_NOT_SYNCED' && tries < 2 && lsg('v292DfixSYNCWAIT1Off') !== '1' && W.rows[cid] === r && r.phase === 'saving') {
+        tries++; stats.syncWait = (stats.syncWait || 0) + 1;
+        r.msg = 'この端末の保存がサーバーに届くのを待っています…'; r.tone = 'info'; renderSoon(true);
+        var t9 = Date.now();
+        return waitClean(g.id, 30000, function () { setTimeout(function () { if (W.rows[cid] === r && r.phase === 'saving') doSet(); else unlock(); }, Math.max(0, 4000 - (Date.now() - t9))); });   /* すぐ CLEAN でも 4 秒は空ける */
+      }
       if (!(res && res.ok)) {
         var code = (res && res.code) || 'UNKNOWN';
         setRow(r, { phase: bulkCb ? 'failed' : 'proposed', ok: false, code: code, msg: '外見を保存できませんでした（' + (SET_MSG[code] || 'できませんでした') + '）。絵は作っていません', tone: 'ng',
@@ -339,7 +348,8 @@
           if (out === 'cand') openCandidates(cid);
         });
       }, 200);
-    });
+    }); };
+    doSet();
   }
   function pressRegen(cid) {
     var r = W.rows[cid]; if (!r || r.phase !== 'proposed') return; syncInputs();
