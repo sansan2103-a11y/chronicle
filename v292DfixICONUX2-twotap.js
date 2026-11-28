@@ -42,7 +42,7 @@
   if (typeof window === 'undefined' || window.__v292DfixICONUX2) return;
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   if (lsg('v292DfixICONUXOff') === '1') { window.__v292DfixICONUX2 = { on: false, status: function () { return { on: false }; } }; return; }
-  var VERSION = 'ICONUX2-r3h-write1';
+  var VERSION = 'ICONUX2-r3i-write1b';
   var st = { passes: 0, taps: {}, direct: 0, aiPass: 0, wrapped: false, log: [] };
   function tap(k) { st.taps[k] = (st.taps[k] || 0) + 1; }
   function note(o) { try { o.t = Date.now(); st.log.push(o); if (st.log.length > 80) st.log.shift(); } catch (e) {} }
@@ -166,6 +166,7 @@
       '#v292DfixLC1-wa .iconux2-wnote{font-size:11.5px;color:#9a9aae;margin:2px 0 0}' +
       '[data-iconux2="slot"]{margin-top:6px}' +
       '.iconux2-main{background:#2f5d4f;border:1px solid #6fb39a;color:#fff;font-weight:bold;border-radius:8px;padding:8px 16px;font-size:14px;cursor:pointer;min-height:44px}' +
+      '.iconux2-row{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}.iconux2-row2>button{flex:1 1 120px;padding-left:8px;padding-right:8px}.iconux2-write{background:#2b3350;border:1px solid #7f93c9;color:#fff;font-weight:bold;border-radius:8px;padding:8px 14px;font-size:14px;cursor:pointer;min-height:44px}' +
       '.iconux2-main:disabled{opacity:.5}.iconux2-main.iconux2-wait{background:#2a2f2d;border-color:#555;font-weight:normal;font-size:13px;min-height:40px}' +
       '.iconux2-cost{font-size:11.5px;color:#a8b8b0;margin:4px 0 0;line-height:1.5}' +
       '.iconux2-quiet-t{font-size:14px;font-weight:700;color:#e8f0ea;padding:9px 0 2px}' +
@@ -319,8 +320,10 @@
           '<div class="iconux2-cost" data-iconux2-cost="wait">先に「結果を確かめる」を押してください（同じ絵を二重に作らないため）</div>';
       } else {
         if (mainB) {
-          h += '<button type="button" class="iconux2-main" data-iconux2-act="main">🎨 ' + esc(mainLab) + '</button>';
-          h += '<div class="iconux2-cost" data-iconux2-cost="main">' + esc(costBefore(rs, direct)) + '</div>';
+          var wrOn = !(rs.cand && !rs.has) && (rs.conf || oneTapOn()) && lsg('v292DfixWRITE1Off') !== '1';   /* ★WRITE1 r2（Owner「絵を作るの隣に同じ様にわかりやすいボタンみたいなので」）: 主ボタンの隣に同じ大きさのボタンで出す */
+          h += '<div class="iconux2-row' + (wrOn ? ' iconux2-row2' : '') + '"><button type="button" class="iconux2-main" data-iconux2-act="main">🎨 ' + esc(mainLab) + '</button>' +
+            (wrOn ? '<button type="button" class="iconux2-write" data-iconux2-act="write">✏️ ' + (rs.conf ? '外見を直す' : '外見を書く') + '</button>' : '') + '</div>';
+          h += '<div class="iconux2-cost" data-iconux2-cost="main">' + esc(costBefore(rs, direct)) + (wrOn ? '。✏️ は外見の欄を開きます（「この外見で作る」を押すまで絵は作りません）' : '') + '</div>';
         } else {
           h += '<div class="iconux2-msg info">' + esc(stTxt || '…') + '</div>';
         }
@@ -328,7 +331,6 @@
         h += fixH;
         /* ★REDO1: 外見が確定済みの人物に「外見を AI に考え直してもらう」。押すと説明文から下書きを作り直す（文章 AI 1 回）。保存と絵は「この外見で作る」を押したとき */
         /* ★WRITE1（2026-11-28・Owner「絵を作る時に外見情報入力できなくなった？」）: 1 回押しにしても、外見を自分で書く・直す入口を主ボタンのすぐ下に残す。押すと下書きの欄が開き、「この外見で作る」を押すまで絵は作らない */
-        if (mainB && !(rs.cand && !rs.has) && (rs.conf || oneTapOn()) && lsg('v292DfixWRITE1Off') !== '1') h += '<div class="iconux2-links"><button type="button" data-iconux2-act="write">' + (rs.conf ? '外見を自分で直してから作る' : '外見を自分で書いてから作る') + '</button></div>';
         if (mainB && rs.conf && redo1Ok()) h += '<div class="iconux2-links"><button type="button" data-iconux2-act="rethink">' + (oneTapOn() ? '外見をAIに考え直して、新しい候補を 1 枚作る（文章AI 1 回・画像 1 回。選ぶまで今の絵は変わりません）' : '外見をAIに考え直してもらう（文章AI 1 回。絵はまだ作りません）') + '</button></div>';
       }
     }
