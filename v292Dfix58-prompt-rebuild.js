@@ -325,6 +325,33 @@
   /* ★MEM2（laneMEM2・GPT #127-VR 1）: 部品 v292DfixMEM2-longmem-wire.js を読むだけ。無い・例外のときは従来どおり */
   function mem2N(){ try { var M = window.__v292DfixMEM2; var n = (M && typeof M.recentN === 'function') ? M.recentN() : 2; return (n === 4) ? 4 : 2; } catch(e){ return 2; } }
   function mem2A(parsed, state){ try { var M = window.__v292DfixMEM2; return (M && typeof M.applyA === 'function') ? (M.applyA(parsed, state) || parsed) : parsed; } catch(e){ return parsed; } }
+  /* ★RSTAG1（2026-11-28・試験専用: localStorage v292DfixRSTAG1On='1'／kill v292DfixRSTAG1Off='1'・既定 OFF＝送信バイト同一）:
+     実機 Q2 の生の返事: 直近の本文を 4 ターン渡す腕（B・C）では、印（<say who>）の無い「」が 23% → 53〜60% に増えた。AI に見せている直近の本文が、印を外した表示用の文だから、と見ている。
+     直近の本文の中の台詞を、会話カードで確定している話者の印つき（<say who="名前">台詞</say>）に戻して渡す。本文にその台詞がそのままの形で見つかるものだけ・話者が ??? や不明のものは包まない。
+     話者を後から AI に推測させるのではなく、AI が書く時点で印を付け続けるようにする狙い（GPT #127-YM c）。 */
+  function rstagOn(){ try { return localStorage.getItem('v292DfixRSTAG1Off') !== '1' && localStorage.getItem('v292DfixRSTAG1On') === '1'; } catch(e){ return false; } }
+  var rstagStats = { turns: 0, wrapped: 0, miss: 0 };
+  function rstag(t){
+    try {
+      var nar = String((t && t.narrative) || ''); if (!nar) return t.narrative;
+      var ds = Array.isArray(t.dialogues) ? t.dialogues : null;
+      var extract = window.__v292 && window.__v292.dialogueLayout && window.__v292.dialogueLayout.extractDialogues;
+      if (!ds && typeof extract === 'function') { try { ds = extract(nar, t) || []; } catch(e){ ds = []; } }
+      ds = ds || []; rstagStats.turns++;
+      var out = nar, from = 0;
+      for (var i = 0; i < ds.length; i++){
+        var d = ds[i]; if (!d || !d.speaker || !d.text) continue;
+        var who = String(d.speaker).trim(); if (!who || who.length > 24 || /^[?？]+$|不明|[<>"]/.test(who)) continue;
+        var txt = String(d.text).replace(/^[「『]/, '').replace(/[」』]$/, ''); if (!txt || /[<>]/.test(txt)) continue;
+        var q = '「' + txt + '」', at = out.indexOf(q, from);
+        if (at < 0) { rstagStats.miss++; continue; }
+        var rep = '<say who="' + who + '">' + txt + '</say>';
+        out = out.slice(0, at) + rep + out.slice(at + q.length); from = at + rep.length; rstagStats.wrapped++;
+      }
+      return out;
+    } catch(e){ return t.narrative; }
+  }
+  try { window.__v292DfixRSTAG1 = { on: rstagOn, stats: function(){ return JSON.parse(JSON.stringify(rstagStats)); }, tag: rstag }; } catch(e){}
   function userExt(ctx){
     var user = ctx.user;
     try {
@@ -335,10 +362,11 @@
 
       var turns = state.turns || [];
       var recent = turns.slice(-mem2N());   /* ★MEM2 腕 C（v292DfixMEM2cOn='1'・kill v292DfixMEM2cOff='1'・既定 OFF）: 2 → 4 ターン。OFF・部品なしは 2（従来と同じ） */
+      var rsTag = rstagOn();
       parsed.recentScenes = recent.map(function(t){
         return {
           input: { type: t.inputType, text: t.playerText },
-          narrative: t.narrative
+          narrative: rsTag ? rstag(t) : t.narrative
         };
       });
 

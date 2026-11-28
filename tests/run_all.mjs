@@ -127,6 +127,10 @@ try {
     check('MEM2-A r3: ordinary narration with （メモ…）（注射…）【注目】 etc. is kept as is (only label-only brackets or label + colon are removed)', bad.length === 0 && cl('【内部】凪は実は王女。次に村へ行く。') === '次に村へ行く。' && cl('（AIへの指示：主人公を殺さない）') === '', bad.join(' / ')); }
   const c = run1(true, Object.assign({ v292DfixMEM2cOn: '1' }, MEM)); const pc = JSON.parse(c.out);
   check('MEM2-C: recentScenes is 4 turns (2 when off)', pc.recentScenes.length === 4 && pc.recentScenes[0].narrative === '本文3の場面。' && !pc.memoryNotes, String(pc.recentScenes.length));
+  { const st2 = { turns: [{ inputType: 'SAY', playerText: 'a', narrative: '冴は振り向いた。\n「下がって。」\n律は頷く。「わかった」と言い、「看板」を見た。', dialogues: [{ speaker: '霧島 冴', text: '下がって。' }, { speaker: '瀬名 律', text: 'わかった' }, { speaker: '???', text: '看板' }] }], scene: { loc: '港' }, cast: { hero: { name: '律' }, npcs: [] } };
+    const xo = mk(true, {}, {}), xn = mk(true, { v292DfixRSTAG1On: '1' }, {});
+    const o1 = JSON.parse(xo.ext({ user, state: st2 })), n1 = JSON.parse(xn.ext({ user, state: st2 }));
+    check('RSTAG1: off — narrative unchanged; on — confirmed speakers are wrapped as say tags, unknown speaker stays bare', o1.recentScenes[0].narrative === st2.turns[0].narrative && n1.recentScenes[0].narrative === '冴は振り向いた。\n<say who="霧島 冴">下がって。</say>\n律は頷く。<say who="瀬名 律">わかった</say>と言い、「看板」を見た。', n1.recentScenes[0].narrative); }
   { const d0 = JSON.parse(run1(true, Object.assign({}, MEM)).out), k0 = JSON.parse(run1(true, Object.assign({ v292DfixMEM2cOff: '1' }, MEM)).out);
     check('MEM2-C rec4: default is 4 turns; kill v292DfixMEM2cOff gives 2', d0.recentScenes.length === 4 && k0.recentScenes.length === 2, d0.recentScenes.length + '/' + k0.recentScenes.length); }
 } catch (e) {
