@@ -42,7 +42,7 @@
   if (typeof window === 'undefined' || window.__v292DfixICONUX2) return;
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   if (lsg('v292DfixICONUXOff') === '1') { window.__v292DfixICONUX2 = { on: false, status: function () { return { on: false }; } }; return; }
-  var VERSION = 'ICONUX2-r3i-write1b';
+  var VERSION = 'ICONUX2-r3j-undohint';
   var st = { passes: 0, taps: {}, direct: 0, aiPass: 0, wrapped: false, log: [] };
   function tap(k) { st.taps[k] = (st.taps[k] || 0) + 1; }
   function note(o) { try { o.t = Date.now(); st.log.push(o); if (st.log.length > 80) st.log.shift(); } catch (e) {} }
@@ -219,7 +219,7 @@
   var quiet = {};
   var QUIET_HTML = '<div data-iconux2="quiet"><div class="iconux2-quiet-t">🎨 絵を作っています…</div><div class="iconux2-cost">外見を考えて、絵を 1 枚描きます。20〜40 秒ほどかかります。このまま待っていて大丈夫です</div></div>';
   var PEND_MS = 45000;   /* r3: 登録（保存の周期）に約 20 秒かかる実測 → 待ちの上限を 25 → 45 秒 */
-  var pend = {}, sameNote = {};   /* ★QUIET1 r2: pend＝自動抽出から登録した直後の人物（名前で持つ）。絵の状態の確認と保存が済むまで待ってから、自分で始める */
+  var pend = {}, sameNote = {}, adrawNote = {};   /* adrawNote（GPT #127-YM: 登録の取り消しの入口を示す）: 自動抽出から登録して絵を作った人物の結果の行に、外し方を 1 回だけ添える */   /* ★QUIET1 r2: pend＝自動抽出から登録した直後の人物（名前で持つ）。絵の状態の確認と保存が済むまで待ってから、自分で始める */
   function startMain(id, autoOnly) {   /* 「🎨 絵を作る」を押したのと同じ */
     delete checked[id]; delete sameNote[id];
     if (oneTapOn()) { try { var rs9 = rowsById(lc1())[id]; if (rs9 && !rs9.conf && !(rs9.cand && !rs9.has)) autoGo[id] = Date.now(); } catch (eA) {} }
@@ -260,7 +260,7 @@
       if (!quietOn() || bulk || Date.now() - pend[nmP] > PEND_MS) delete pend[nmP];
       else {
         try { okP = !!(L0 && typeof L0.ready === 'function' && L0.ready(cid) && lc1Btn(cid, 'main')); } catch (eP) {}
-        if (okP) { delete pend[nmP]; tap('adraw'); note({ kind: 'ADRAW_START', cid: cid }); startMain(cid); qz = quiet[cid] || null; setTimeout(pass, 30); }
+        if (okP) { delete pend[nmP]; tap('adraw'); note({ kind: 'ADRAW_START', cid: cid }); startMain(cid); adrawNote[cid] = 1; qz = quiet[cid] || null; setTimeout(pass, 30); }
         else qz = { t: pend[nmP], wait: 1 };
       }
     }
@@ -279,6 +279,7 @@
     var msg = msgEl ? msgEl.textContent : '', tone = msgEl ? (msgEl.className.replace('lc1-msg', '').trim()) : '';
     var nm0 = card.getAttribute('data-name') || '';
     if (adopted[nm0] && /候補を1枚作りました/.test(msg)) { msg = 'この絵にしました'; tone = 'ok'; }
+    if (adrawNote[cid] && /絵を作りました/.test(msg)) msg += '（この人物を登録しました。まちがえたときは「その他の操作」の「削除」で外せます）';
     if (sameNote[cid] && /候補を1枚作りました|絵を作りました/.test(msg)) msg += '（説明文に見た目が書かれているので、外見は同じです。変えたいときは「その他の操作」の「外見を編集」で）';
     var stTxt = re ? ((re.querySelector('.lc1-st') || {}).textContent || '') : '';
     var fixActs = ['retry', 'check', 'fix'].filter(function (k) { return !!lc1Btn(cid, k); });
@@ -348,7 +349,7 @@
           try { var rsW = rowsById(lc1())[id], LW = window.__v292DfixLC1; if (rsW && rsW.conf && LW && typeof LW.edit === 'function') LW.edit(id); else press(id, 'main'); } catch (eW) {}
           slot.__sig = null; setTimeout(pass, 30); return;
         }
-        delete sameNote[id];
+        delete sameNote[id]; delete adrawNote[id];
         if (oneTapOn() && (act === 'main' || act === 'rethink')) { try { var rs9 = rowsById(lc1())[id]; if (rs9 && (act === 'rethink' || (!rs9.conf && !(rs9.cand && !rs9.has)))) autoGo[id] = Date.now(); } catch (eA) {} }   /* ★ONETAP1 */
         if (quietOn() && (act === 'rethink' || (act === 'main' && /絵を(?:作る|変える)/.test(b.textContent || '')))) { quiet[id] = { t: Date.now(), went: (act === 'main' && !autoGo[id]) ? Date.now() : 0 }; tap('quiet'); }   /* ★QUIET1 */   /* ★ONETAP1: 下書きができたら、そのまま「この外見で作る」まで進む */
         if (act === 'rethink') { try { tap('rethink'); note({ kind: 'RETHINK', cid: id }); var L9 = window.__v292DfixLC1; if (L9 && typeof L9.rethink === 'function') L9.rethink(id); } catch (e9) {} slot.__sig = null; setTimeout(pass, 30); return; }   /* ★REDO1 */
