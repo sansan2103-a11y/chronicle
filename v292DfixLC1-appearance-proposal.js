@@ -48,7 +48,7 @@
   'use strict';
   var W = root;
   if (!W || W.__v292DfixLC1prop) return;
-  var VERSION = 'LC1prop-r5-var1d';
+  var VERSION = 'LC1prop-r6-redo1';
   function fx2b() { try { return !(W.localStorage && W.localStorage.getItem('v292DfixICONFIX2bOff') === '1'); } catch (e) { return true; } }   /* ★ICONFIX2 b */
   function NH() { var N = W.__v292DfixNH1; return (N && typeof N.draftX2 === 'function') ? N : null; }
   /* ---------- ★ICONFIX3 ---------- */
@@ -411,6 +411,7 @@
       '\n## すでに書かれている外見（変更しない）\n' + (p.base ? '「' + p.base + '」' : '（まだありません）') + '\n' +
       (p.desc ? (p.fill && p.fill.var1 ? '\n## 設定の説明文（参考。書かれている見た目はそのまま使う。性格・役割は、足りない髪・服・表情を選ぶ手がかりにする。経歴や人間関係は句にしない）\n「' : '\n## 設定の説明文（参考。性格や経歴は外見に使わない。ここにある種族・服装などの見た目の手がかりだけ使ってよい）\n「') + norm(p.desc).slice(0, 300) + '」\n' : '') +
       (p.facts && fx2b() ? factsBlock(p.facts) : '') +
+      (p.fill && p.fill.var1 && p.others && p.others.length ? '\n## ほかの登場人物の見た目（資料。この人物はこれらと似すぎないように、髪の長さ・形、服、表情のどれかを変える。色は説明文と世界観に合う範囲で）\n' + p.others.map(function (x) { return '・' + norm(x).slice(0, 60); }).join('\n') + '\n' : '') +   /* ★REDO1 */
       '\n## 足りない枠\n' + miss.join('・') + '\n' +
       '\n足りない枠だけを埋める句を、次の形式の JSON 1 個で返してください。\n' +
       '例: {"add":"句、句","gender":""}';
@@ -575,7 +576,7 @@
       var o = { ok: false, code: code, appearance: c1.appearance, gender: c1.gender, genderFixed: c1.genderFixed, added: [], rejected: [], aiCalled: true }; if (extra) for (var k in extra) o[k] = extra[k]; out(o);
     };
     if (!F || typeof F.request !== 'function') return fallback('AI_UNAVAILABLE', { aiCalled: false });
-    var pr = buildPrompt({ name: input.name, gender: (ctx.gender === '女性' || ctx.gender === '男性') ? ctx.gender : '', context: input.context, base: base, desc: input.desc, missing: missing, facts: facts, fill: fill3 });   /* ★ICONFIX2 b ② ★ICONFIX3 ③ */
+    var pr = buildPrompt({ name: input.name, gender: (ctx.gender === '女性' || ctx.gender === '男性') ? ctx.gender : '', context: input.context, base: base, desc: input.desc, missing: missing, facts: facts, fill: fill3, others: Array.isArray(input.others) ? input.others.slice(0, 6) : null });   /* ★ICONFIX2 b ② ★ICONFIX3 ③ */
     var done = false; calls++;
     try {
       F.request({ sys: pr.sys, user: pr.user, purpose: 'img' }, function (err, txt) {   /* ★VAULTSEND1 */

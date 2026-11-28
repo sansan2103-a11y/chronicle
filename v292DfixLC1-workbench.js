@@ -254,12 +254,31 @@
       if (res === 'cand') openCandidates(cid);
     });
   }
-  function startPropose(cid, baseOverride) {
+  /* ★REDO1（2026-11-28・Owner「（外見を手で書き分けるのは）ちょっと面倒かな」）: ほかの登場人物の外見（確定済み・作りかけの案）を、案を作る AI に渡す材料。
+     名前は渡さない（見た目の文だけ・最大 6 人・各 60 字）。kill: localStorage v292DfixREDO1Off='1'。 */
+  function redo1On() { return lsg('v292DfixREDO1Off') !== '1'; }
+  function othersOf(cid) {
+    var out = []; if (!redo1On()) return out;
+    try { Object.keys(W.rows).forEach(function (k) { if (k === cid || out.length >= 6) return; var q = W.rows[k], t = ''; try { t = String(derive(k).confApp || q.pa || ''); } catch (e) {} t = t.replace(/\s+/g, ' ').trim(); if (t) out.push(t.slice(0, 60)); }); } catch (e2) {}
+    return out;
+  }
+  /* ★REDO1: 外見が確定済みの人物でも、説明文から外見の案を作り直す（確定済みの文は土台にしない）。保存と絵は、本人が「この外見で作る」を押したときだけ。 */
+  function pressRethink(cid) {
+    var r = W.rows[cid]; if (!r || isBusy(r) || !redo1On()) return false;
+    var d = derive(cid);
+    if (!d.known) { r.msg = '絵の状態を確かめています。少し待ってください'; r.tone = 'info'; renderSoon(true); loadPtr(true); return false; }
+    if (W.busyOp) { r.msg = 'ほかの作成が終わるまで、少し待ってください'; r.tone = 'info'; renderSoon(true); return false; }
+    if (!av2Idle()) { r.msg = '保存の確認中です。少し待ってからお試しください'; r.tone = 'info'; renderSoon(true); return false; }
+    stats.rethink = (stats.rethink || 0) + 1; r.pg = null; r.pa = null; r.prop = null;
+    startPropose(cid, null, true); return true;
+  }
+  function startPropose(cid, baseOverride, rethink) {
     var r = W.rows[cid]; if (!r) return;
     var d = derive(cid), P = PR();
     var prevPg = r.pg;
     setRow(r, { phase: 'proposing', msg: '外見の案を作っています…', tone: 'info', fail: null });
     var input = { name: r.name, gender: d.castG, desc: d.desc, confirmed: baseOverride != null ? String(baseOverride) : '', context: lore().slice(0, 120), hero: r.hero };
+    var oth = othersOf(cid); if (oth.length) input.others = oth; if (rethink) input.rethink = true;   /* ★REDO1 */
     var done = function (res) {
       if (!W.rows[cid] || r.phase !== 'proposing') return;
       res = res || {};
@@ -389,6 +408,7 @@
       var r = list[i++]; var d = derive(r.cid), P = PR();
       setRow(r, { phase: 'proposing', msg: '外見の案を作っています…', tone: 'info', fail: null });
       var input = { name: r.name, gender: d.castG, desc: d.desc, confirmed: '', context: lore().slice(0, 120), hero: r.hero };
+      { var oth2 = othersOf(r.cid); if (oth2.length) input.others = oth2; }   /* ★REDO1 */
       var fin = function (res) {
         res = res || {}; var g = genderOf(res.gender) || d.castG;
         r.prop = { ok: !!res.ok, code: res.code || null, appearance: res.appearance || '', original: res.base || '', last: res.appearance || '', gender: g, genderFixed: !!d.castG, added: res.added || [], dropped: res.dropped || [], droppedVisual: res.droppedVisual || [], aiCalled: !!res.aiCalled };
@@ -709,7 +729,7 @@
     return { ok: true };
   }
   window.__v292DfixLC1 = {
-    version: 'LC1-r1', on: function () { return true; }, holdReload: holdReload, openFromB37: openFromB37, refreshPtr: refreshPtr,
+    version: 'LC1-r1', on: function () { return true; }, holdReload: holdReload, openFromB37: openFromB37, refreshPtr: refreshPtr, rethink: pressRethink, redo1On: redo1On,
     genState: genState, useGenState: function (fn) { gsProvider = (typeof fn === 'function') ? fn : null; },
     openBulk: openBulk, openCandidates: openCandidates,
     status: function () {

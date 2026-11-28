@@ -206,6 +206,7 @@
     if (!pk || Date.now() - pendingAdopt.t > 30000) pendingAdopt = null;   /* 閉じた・失敗 → 何も言い換えない */
   }
 
+  function redo1Ok() { try { var L = window.__v292DfixLC1; return !!(L && typeof L.rethink === 'function' && (!L.redo1On || L.redo1On())); } catch (e) { return false; } }   /* ★REDO1 */
   /* ---------- カード 1 枚の操作欄 ---------- */
   function renderSlot(card, cid, rs, bulk) {
     var slot = card.querySelector('[data-iconux2="slot"]');
@@ -270,6 +271,8 @@
         }
         if (msg) h += '<div class="iconux2-msg ' + esc(tone) + '" data-iconux2-msg="1">' + esc(msg) + '</div>';
         h += fixH;
+        /* ★REDO1: 外見が確定済みの人物に「外見を AI に考え直してもらう」。押すと説明文から下書きを作り直す（文章 AI 1 回）。保存と絵は「この外見で作る」を押したとき */
+        if (mainB && rs.conf && redo1Ok()) h += '<div class="iconux2-links"><button type="button" data-iconux2-act="rethink">外見をAIに考え直してもらう（文章AI 1 回。絵はまだ作りません）</button></div>';
       }
     }
     slot.innerHTML = h;
@@ -281,6 +284,7 @@
         if (b.disabled) return;
         if (act === 'go' || act === 'regen') syncToLc1(id, c);
         if (act === 'check') checked[id] = Date.now(); else if (act === 'main' || act === 'retry' || act === 'go') delete checked[id];
+        if (act === 'rethink') { try { tap('rethink'); note({ kind: 'RETHINK', cid: id }); var L9 = window.__v292DfixLC1; if (L9 && typeof L9.rethink === 'function') L9.rethink(id); } catch (e9) {} slot.__sig = null; setTimeout(pass, 30); return; }   /* ★REDO1 */
         press(id, act); slot.__sig = null; setTimeout(pass, 30);
       });
       slot.addEventListener('input', function () { var c = slot.closest('.v292Dfix145-card'); var id = c && c.getAttribute('data-av2-cid'); if (id) syncToLc1(id, c); });
