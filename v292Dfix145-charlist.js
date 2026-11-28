@@ -781,6 +781,16 @@
       empty.textContent = '登場キャラがまだありません';
       body.appendChild(empty);
     }
+    /* ★CLCLOSE1（2026-11-28・Owner「キャラ一覧とか上にスクロールしないと戻れないの不便だから下でも真ん中でも戻れるようにして」）:
+       一覧のどこを読んでいても押せる「✕ 閉じる」を、一覧の下の端に貼り付けて出す（上の ✕ はそのまま）。kill: v292DfixCLCLOSE1Off='1' */
+    try { if (localStorage.getItem('v292DfixCLCLOSE1Off') !== '1') {
+      var __cf = document.createElement('div'); __cf.setAttribute('data-clclose1', '1');
+      __cf.style.cssText = 'position:sticky; bottom:-18px; margin:10px -22px -18px; padding:10px 14px 12px; display:flex; justify-content:flex-end; pointer-events:none; background:linear-gradient(to top, rgba(26,26,42,0.96) 55%, rgba(26,26,42,0)); z-index:6;';
+      var __cb = document.createElement('button'); __cb.type = 'button'; __cb.textContent = '✕ 閉じる';
+      __cb.style.cssText = 'pointer-events:auto; background:#3a3a55; border:1px solid #8a8aff; color:#fff; padding:8px 18px; border-radius:22px; cursor:pointer; font-size:14px; font-weight:bold; min-height:44px; box-shadow:0 2px 10px rgba(0,0,0,.6);';
+      __cb.onclick = function(e){ e.preventDefault(); e.stopPropagation(); closeModal(); };
+      __cf.appendChild(__cb); mo.appendChild(__cf);
+    } } catch(_cc){}
     document.body.appendChild(mo);
     if (__anchorUse) { try {
       var __movedA = false, __markA = function(){ __movedA = true; };
