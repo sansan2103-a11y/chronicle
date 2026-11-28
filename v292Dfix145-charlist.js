@@ -564,9 +564,11 @@
     var data = collectChars();
     var search = '';
     var prevModal = document.querySelector('.v292Dfix145-modal');
+    var __keepTop = 0;   /* ★CLKEEP1（2026-11-28・Owner「絵を作る押すと一回 1 番上に戻る…改善したい」）: 一覧を作り直しても、読んでいた位置に戻す。kill: v292DfixCLKEEP1Off='1' */
     if (prevModal){
       var prevSearch = prevModal.querySelector('.v292Dfix145-search');
       if (prevSearch) search = prevSearch.value || '';
+      try { if (localStorage.getItem('v292DfixCLKEEP1Off') !== '1') __keepTop = prevModal.scrollTop || 0; } catch(_k){}
     }
     closeModal();
     // backdrop
@@ -768,6 +770,12 @@
       body.appendChild(empty);
     }
     document.body.appendChild(mo);
+    if (__keepTop > 0) { try {
+      var __moved = false, __mark = function(){ __moved = true; };
+      mo.addEventListener('wheel', __mark, { passive: true }); mo.addEventListener('touchmove', __mark, { passive: true });
+      var __put = function(){ if (!__moved && mo.parentNode && Math.abs(mo.scrollTop - __keepTop) > 2) mo.scrollTop = __keepTop; };
+      __put(); [60, 250, 700].forEach(function(ms){ setTimeout(__put, ms); });   /* 後から操作欄が差し込まれて高さが変わるので、少し待ってもう一度 */
+    } catch(_k2){} }
     if (search) applyFilter(search);
     // focus search
     try { srInput.focus(); } catch(_){}

@@ -147,6 +147,8 @@
     if (rs.cand && !rs.has) return '作った候補から選びます（画像は使いません）';
     if (rs.conf) return rs.has ? '押すと、確定済みの外見で新しい候補を 1 枚作ります（画像 1 回）。選ぶまで今の絵は変わりません'
                                : '押すと、確定済みの外見で絵を 1 枚作ります（画像 1 回）';
+    if (oneTapOn()) return direct ? '押すと、説明文にある見た目で絵を 1 枚作ります（画像 1 回）。外見はあとで直せます'
+                                  : '押すと、AIが外見を補って絵を 1 枚作ります（文章AI 1 回・画像 1 回）。外見はあとで直せます';
     return direct ? '押すと、説明文にある見た目を外見の下書きにします（AI・画像は使いません）'
                   : '押すと、説明文からAIが外見の下書きを作ります（文章AI 1 回。絵はまだ作りません）';
   }
@@ -206,9 +208,22 @@
     if (!pk || Date.now() - pendingAdopt.t > 30000) pendingAdopt = null;   /* 閉じた・失敗 → 何も言い換えない */
   }
 
+  /* ★ONETAP1（2026-11-28・Owner「（絵を作る → この外見で作る の 2 段は）工程的に意味わからない」）: 「🎨 絵を作る」1 回で、外見の下書き → 保存 → 絵 まで進める。
+     下書きが空・同じ下書きの知らせ（説明文に見た目がある人物の「考え直す」）・失敗のときは進めず、今までどおり下書きの欄で止まる。外見はあとで「外見をAIに考え直してもらう」「外見を編集」で直せる。
+     kill: localStorage v292DfixONETAP1Off='1'（今までの 2 回押し）。 */
+  var autoGo = {};
+  function oneTapOn() { return lsg('v292DfixONETAP1Off') !== '1'; }
   function redo1Ok() { try { var L = window.__v292DfixLC1; return !!(L && typeof L.rethink === 'function' && (!L.redo1On || L.redo1On())); } catch (e) { return false; } }   /* ★REDO1 */
   /* ---------- カード 1 枚の操作欄 ---------- */
   function renderSlot(card, cid, rs, bulk) {
+    if (autoGo[cid]) {   /* ★ONETAP1 */
+      if (!oneTapOn() || bulk || Date.now() - autoGo[cid] > 90000) delete autoGo[cid];
+      else if (rs.phase === 'proposed') {
+        delete autoGo[cid];
+        var re0 = rowEl(cid), la0 = re0 && re0.querySelector('[data-lc1-a="' + cid + '"]'), v0 = la0 ? la0.value : (rs.pa || ''), m0 = re0 && re0.querySelector('[data-lc1-msg="' + cid + '"]');
+        if (String(v0 || '').trim().length >= 2 && !(m0 && /同じ下書き|できませんでした|失敗/.test(m0.textContent || ''))) { tap('autogo'); note({ kind: 'AUTOGO', cid: cid }); setTimeout(function () { press(cid, 'go'); }, 0); }
+      } else if (rs.phase === 'failed' || rs.phase === 'done') delete autoGo[cid];
+    }
     var slot = card.querySelector('[data-iconux2="slot"]');
     if (!slot) {
       slot = document.createElement('div'); slot.setAttribute('data-iconux2', 'slot');
@@ -272,7 +287,7 @@
         if (msg) h += '<div class="iconux2-msg ' + esc(tone) + '" data-iconux2-msg="1">' + esc(msg) + '</div>';
         h += fixH;
         /* ★REDO1: 外見が確定済みの人物に「外見を AI に考え直してもらう」。押すと説明文から下書きを作り直す（文章 AI 1 回）。保存と絵は「この外見で作る」を押したとき */
-        if (mainB && rs.conf && redo1Ok()) h += '<div class="iconux2-links"><button type="button" data-iconux2-act="rethink">外見をAIに考え直してもらう（文章AI 1 回。絵はまだ作りません）</button></div>';
+        if (mainB && rs.conf && redo1Ok()) h += '<div class="iconux2-links"><button type="button" data-iconux2-act="rethink">' + (oneTapOn() ? '外見をAIに考え直して、新しい候補を 1 枚作る（文章AI 1 回・画像 1 回。選ぶまで今の絵は変わりません）' : '外見をAIに考え直してもらう（文章AI 1 回。絵はまだ作りません）') + '</button></div>';
       }
     }
     slot.innerHTML = h;
@@ -284,6 +299,7 @@
         if (b.disabled) return;
         if (act === 'go' || act === 'regen') syncToLc1(id, c);
         if (act === 'check') checked[id] = Date.now(); else if (act === 'main' || act === 'retry' || act === 'go') delete checked[id];
+        if (oneTapOn() && (act === 'main' || act === 'rethink')) { try { var rs9 = rowsById(lc1())[id]; if (rs9 && (act === 'rethink' || (!rs9.conf && !(rs9.cand && !rs9.has)))) autoGo[id] = Date.now(); } catch (eA) {} }   /* ★ONETAP1: 下書きができたら、そのまま「この外見で作る」まで進む */
         if (act === 'rethink') { try { tap('rethink'); note({ kind: 'RETHINK', cid: id }); var L9 = window.__v292DfixLC1; if (L9 && typeof L9.rethink === 'function') L9.rethink(id); } catch (e9) {} slot.__sig = null; setTimeout(pass, 30); return; }   /* ★REDO1 */
         press(id, act); slot.__sig = null; setTimeout(pass, 30);
       });
