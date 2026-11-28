@@ -72,6 +72,56 @@
     return a;
   }
   function addOn(){ return ls('v292DfixLEAN1AddOff') !== '1'; }   /* 既定 ON（kill: v292DfixLEAN1AddOff='1'） */
+  /* ★CONT2（2026-11-28・試験専用: localStorage v292DfixCONT2On='1'／kill v292DfixCONT2Off='1'・既定 OFF＝送信バイト同一・記録もしない）:
+     Owner「（続けている動作が消える・使った物を持ったまま・脱いだ服を着ている）これは上手く直したい」。変わる出来事が本文に書かれるまで続くはずの状態を、人物ごとの短い控えとして持つ。
+       ・読み取り（毎ターンの記録係・追加の呼び出しなし）に、その回の本文から 続き／手／服 を書いてもらう。分からないものは書かない。
+       ・控えは、書かれなければそのまま残す（＝その回に触れられなくても続いている）。「終わり」「なし」と書かれたら消す。服は期限なし、続きは 8 ターン、手は 3 ターン触れられなければ消す。
+       ・毎ターン、本文を書く AI に【いま続いていること】として渡す（人物の状態の節の直後）。
+     前の回までの控えは読み取りの AI に渡さない（fill1 の実測: 渡すと写しを作る）。物語の ID が分からないときは何もしない。取り消しで戻ったターンより先の控えは使わない。
+     参考にした作り: 利用者作の状態トラッカー（人物ごとに 位置・していること・着ている物 を持ち、直近の発言の直前に今の状態をまるごと渡す）、SCORE（説明の無い状態の変化は前の状態を保つ）。 */
+  function cont2On(){ return ls('v292DfixCONT2Off') !== '1' && ls('v292DfixCONT2On') === '1'; }
+  var ct2 = { take: 0, set: 0, clear: 0, expire: 0, inject: 0, lines: 0, last: null };
+  var CONT2_SYS = '\n・同じ行に、本文に書かれているときだけ次も足す（書かれていない・分からないものは書かない。推測で埋めない）:'
+    + '\n　続き="…"：その回の終わりの時点で、その人がまだ続けている最中の動作と相手（例: 続き="律の肩を揉んでいる"）。その回でやめた・終わったと書かれていれば 続き="終わり"。'
+    + '\n　手="…"：その回の終わりに手に持っている物（例: 手="鍵束"）。置いた・しまった・渡した・落としたと書かれていれば 手="なし"。'
+    + '\n　服="…"：脱いだ・着た・はだけた・濡れた・破れた など、服の状態が変わったと書かれているときの今の状態（例: 服="上着を脱いでシャツ姿"）。元どおりに着直したと書かれていれば 服="元どおり"。';
+  function cont2Sid(){ try { var F = G.__v292Dfix697, x = F && typeof F.status === 'function' ? F.status() : null; var id = x && x.storyId; return (typeof id === 'string' && /^[A-Za-z0-9_-]{4,40}$/.test(id)) ? id : null; } catch(e){ return null; } }
+  function cont2Turns(){ try { var S = typeof G.__chronicleGetState === 'function' ? G.__chronicleGetState() : null; return (S && Array.isArray(S.turns)) ? S.turns.length : null; } catch(e){ return null; } }
+  function cont2Load(id){ try { var j = JSON.parse(G.localStorage.getItem('v292DfixCONT2_' + id) || '{}'); return (j && typeof j === 'object') ? j : {}; } catch(e){ return {}; } }
+  function cont2Save(id, L){ try { var ks = Object.keys(L); if (!ks.length) G.localStorage.removeItem('v292DfixCONT2_' + id); else G.localStorage.setItem('v292DfixCONT2_' + id, JSON.stringify(L)); } catch(e){} }
+  var CONT2_TTL = { c: 8, h: 3, w: 9999 }, CONT2_END = { c: /^(?:終わり|終了|なし|無し|やめた|止めた|不明)$/, h: /^(?:なし|無し|何も持っていない|不明|空)$/, w: /^(?:元どおり|元通り|着直した|着た|なし|無し|不明|普段どおり)$/ };
+  function cont2Prune(L, now){   /* 取り消しで戻った先の控え・期限切れを外す */
+    Object.keys(L).forEach(function(n){ var e = L[n]; if (!e || typeof e !== 'object') { delete L[n]; return; }
+      ['c', 'h', 'w'].forEach(function(k){ var x = e[k]; if (!x) return; if (typeof x.t !== 'number' || x.t > now + 1 || now - x.t > CONT2_TTL[k]) { delete e[k]; ct2.expire++; } });
+      if (!e.c && !e.h && !e.w) delete L[n]; });
+    return L;
+  }
+  function cont2Take(L, who, tg, turn){   /* 読み取りの 1 行から控えを直す */
+    var map = { c: '続き', h: '手', w: '服' }, ch = 0;
+    Object.keys(map).forEach(function(k){
+      var m = new RegExp('(?:^|[\\s"])' + map[k] + '\\s*=\\s*"([^"<>]{1,40})"').exec(tg); if (!m) return;
+      var v = m[1].replace(/[\r\n]/g, ' ').trim(); if (!v || /^[…\.。\s—-]*$/.test(v)) return;
+      var e = L[who] || (L[who] = {});
+      if (CONT2_END[k].test(v)) { if (e[k]) { delete e[k]; ct2.clear++; ch++; } }
+      else { e[k] = { v: v, t: turn }; ct2.set++; ch++; }
+      if (!e.c && !e.h && !e.w) delete L[who];
+    });
+    return ch;
+  }
+  function cont2Block(){   /* 本文を書く AI に渡す節（無ければ空文字） */
+    try {
+      if (!cont2On()) return '';
+      var id = cont2Sid(), now = cont2Turns(); if (!id || now == null) return '';
+      var L = cont2Prune(cont2Load(id), now), names = Object.keys(L); if (!names.length) return '';
+      var lines = names.slice(0, 6).map(function(n){ var e = L[n], p = [];
+        if (e.c) p.push('続けている: ' + e.c.v); if (e.h) p.push('手に: ' + e.h.v); if (e.w) p.push('服: ' + e.w.v);
+        return '・' + n + '｜' + p.join('／'); });
+      ct2.inject++; ct2.lines += lines.length; ct2.last = { n: lines.length, turn: now };
+      return '\n\n【いま続いていること（やめる・変える出来事が本文に出るまで、そのまま続いている）】\n' + lines.join('\n')
+        + '\n・続けている動作は、1 句で触れて続けるか、やめる動きを 1 句書く。別の人に別のことをさせても、前の人の動作は止まらない。'
+        + '\n・服は、着る・脱ぐ動作を書かずに変えない（その暇が無い場面では変えられない）。手に無い物を、理由なく持たせない。使い終えた物は 置く・しまう・返す の 1 句で手放す。';
+    } catch(e){ return ''; }
+  }
   function fromBody(body){
     if (typeof body !== 'string' || body.indexOf('"messages"') < 0) return body;
     var b = JSON.parse(body); if (!b || !Array.isArray(b.messages)) return body;
@@ -87,12 +137,14 @@
     var sl = slimOn() ? slim(out) : null; if (sl) { out = sl.text; if (add) add = add.replace('（下の【出力の形式】と【状態の出力】）', '（下の【出力の形式】）'); }
     st.last = { cut: cut, kept: kept, before: src.length, after: out.length + add.length, add: !!add };
     if (sl) st.last.slim = sl.ops;
-    if (!cut.length && !add && !(sl && sl.ops.length)) return body;
+    var cb2 = cont2Block();   /* ★CONT2 */
+    if (!cut.length && !add && !(sl && sl.ops.length) && !cb2) return body;
     /* r3: 足す 5 行は末尾ではなく、最初の見出しの前（役割の直後）に置く。実機 lean2: 末尾に置いた C だけ <state> の出力が 3 回欠けた
        （出力の形の決まりより後ろに書き方の約束が来て、最後に読む内容が変わったためと見ている）。v292DfixLEAN1AddPos='end' で元の位置に戻せる。 */
     if (add && ls('v292DfixLEAN1AddPos') !== 'end') { var m1 = /\n+(?=【[^】\n]{1,90}】)/.exec(out); if (m1) out = out.slice(0, m1.index) + add + out.slice(m1.index); else out += add; }
     else out += add;
     st.last.addPos = add ? (ls('v292DfixLEAN1AddPos') === 'end' ? 'end' : 'top') : null;
+    if (cb2) { var k2 = out.indexOf('【各キャラの現在の状態'), n2 = k2 >= 0 ? out.slice(k2 + 5).search(/\n+【[^】\n]{1,90}】/) : -1; if (n2 >= 0) { var at2 = k2 + 5 + n2; out = out.slice(0, at2) + cb2 + out.slice(at2); } else out += cb2; st.last.cont2 = true; }
     b.messages[si].content = out; st.cut++;
     return JSON.stringify(b);
   }
@@ -209,10 +261,11 @@
       var names = sect(sys, 'whoに使う名前') || sect(sys, 'キャラ属性'), prev = sect(sys, '各キャラの現在の状態');
       var body2 = {}; Object.keys(rb).forEach(function(k){ if (k !== 'messages') body2[k] = rb[k]; });
       body2.max_tokens = bq.length ? 400 + Math.min(300, bq.length * 24) : 400; body2.temperature = 0.2;
+      if (cont2On()) body2.max_tokens += 160;   /* ★CONT2 */
       /* r2（実機 fill1: 30 ターンで補完 7 回のうち 4 回が本文に無い内容。うち 2 回は参考に渡した前の状態の写し、2 回は本能の作文）→ 前の状態は渡さない。名前の表だけ渡す。 */
       /* r4: 「名前の表に無い」で判定する（実機 fill3: 宮下 誠は入力の文として system に出ていたため「登録済み」と誤って扱われ、読み取りの対象に入らなかった） */
       var extra = Object.keys(sayWho).filter(function(n){ return names.indexOf(n) < 0; });   /* 登録されていないが、この回に話した人（名前のある新しい人） */
-      body2.messages = [ { role: 'system', content: FILL_SYS + (woundOn() ? WOUND_SYS : '') + (bq.length ? SPK_SYS : '') + '\n' + names + (extra.length ? '\n（この回に話した人）' + extra.join('、') : '') + (prev ? '\n\n（この場面にいる人の名前）\n' + (prev.match(/^・[^｜\n]{1,24}(?=｜)/gm) || []).join('\n') : '') },
+      body2.messages = [ { role: 'system', content: FILL_SYS + (woundOn() ? WOUND_SYS : '') + (cont2On() ? CONT2_SYS : '') + (bq.length ? SPK_SYS : '') + '\n' + names + (extra.length ? '\n（この回に話した人）' + extra.join('、') : '') + (prev ? '\n\n（この場面にいる人の名前）\n' + (prev.match(/^・[^｜\n]{1,24}(?=｜)/gm) || []).join('\n') : '') },
                          { role: 'user', content: '本文:\n' + (function(){
                            /* r5: 台詞の印を消すと、誰が話したかが本文から消える（実機 fill3 r4: 宮下 誠は say の印で 2 回話したのに、読み取りに 1 行も出なかった。地の文では姓や役割でしか呼ばれない）。
                               印は「名前「台詞」」の形に直して渡す。<react> と <state> の行は渡さない。 */
@@ -224,11 +277,13 @@
         if (!r2 || !r2.ok) { fs1.fail++; fs1.last = { why: 'http' }; return resp; }
         return r2.text().then(function(t2){
           var j2 = JSON.parse(t2), c2 = j2 && j2.choices && j2.choices[0] && j2.choices[0].message && j2.choices[0].message.content;
+          var c2Id = cont2On() ? cont2Sid() : null, c2Now = c2Id ? cont2Turns() : null, c2T = c2Now == null ? 0 : c2Now + 1, c2L = (c2Id && c2Now != null) ? cont2Prune(cont2Load(c2Id), c2Now) : null, c2Ch = false;   /* ★CONT2: この回の番号＝今の本数＋1（本文はまだ積まれていない） */
           var tags = (typeof c2 === 'string' ? (c2.match(/<state\b[^>]*\/>/g) || []) : []).map(function(tg){
             var w = /\bwho\s*=\s*"([^"]{1,24})"/.exec(tg); if (!w) return '';
             /* r6: 姓だけ・名だけの who は、記録にあるフルネームがちょうど 1 人なら、その名前に直す（実機 fill3 r5: 「宮下」の行が「宮下 誠」と別の項目になり、宮下 誠 が古いまま残った） */
             try { var stn = Object.keys(G.__v292Dfix77Store || {}).filter(function(k){ return k !== w[1] && k.split(/[ 　]+/).indexOf(w[1]) >= 0; }); if (stn.length === 1) w[1] = stn[0]; } catch(_){}
             if (sys.indexOf(w[1]) < 0 && !sayWho[w[1]] && !(G.__v292Dfix77Store && G.__v292Dfix77Store[w[1]])) return ''; var hv2 = have[w[1]] || {};
+            if (c2L) { try { ct2.take++; if (cont2Take(c2L, w[1], tg, c2T)) c2Ch = true; } catch(_c2){} }   /* ★CONT2 */
             /* r2: 姓だけ・名だけの短い形は足さない（実機: 「宮下」の行が「宮下 誠」と別の項目に入り、一度も送られなかった） */
             try { var esc = w[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); if (new RegExp(esc + '[ 　][一-龠々ぁ-んァ-ヶー]').test(sys) || new RegExp('[一-龠々ぁ-んァ-ヶー][ 　]' + esc + '(?![一-龠々ぁ-んァ-ヶー])').test(sys)) return ''; } catch(_){}
             var out = '<state who="' + w[1] + '"', n = 0;
@@ -238,6 +293,7 @@
               if (mk && !hv2['傷'] && !(stw && stw.kizu) && !/^(?:不明|なし|無し|特になし|無傷|けがなし|—|-)$/.test(mk[1].trim()) && /切|裂|刺|折|打|腫|挫|捻|ひね|出血|血|傷|火傷|やけど|痣|あざ|擦|脱臼|骨|噛|咬|撃/.test(mk[1])) { out += ' 傷="' + mk[1].replace(/[<>]/g, '') + '"'; n++; wf1.add++; } else if (mk) wf1.skip++; } catch(_){} }
             return n ? out + '/>' : '';
           }).filter(Boolean).slice(0, 5);
+          if (c2L) { try { cont2Save(c2Id, c2L); } catch(_c3){} }   /* ★CONT2 */
           /* ★SPKFILL1: <q n who> を読み、印の無い台詞を <say who> で包む（後ろから置き換える） */
           var cW = c, nW = 0;
           if (bq.length && typeof c2 === 'string') {
@@ -290,6 +346,6 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-cont1', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
-    sayKeep: { on: skOn, stats: function(){ return sk1; }, text: sayKeepText }, wound: { on: woundOn, stats: function(){ return wf1; } }, clean: { stats: function(){ return cl1; }, text: cleanText, dup: dupFix }, spk: { on: spkOn, stats: function(){ return sp1; }, bare: bareQuotes } };
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-cont2', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
+    sayKeep: { on: skOn, stats: function(){ return sk1; }, text: sayKeepText }, wound: { on: woundOn, stats: function(){ return wf1; } }, clean: { stats: function(){ return cl1; }, text: cleanText, dup: dupFix }, cont2: { on: cont2On, stats: function(){ return ct2; }, block: cont2Block, take: cont2Take, prune: cont2Prune, ledger: function(){ var id = cont2Sid(); return id ? cont2Load(id) : null; } }, spk: { on: spkOn, stats: function(){ return sp1; }, bare: bareQuotes } };
 })();
