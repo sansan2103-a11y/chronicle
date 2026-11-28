@@ -92,7 +92,7 @@
   var CONT2_TTL = { c: 8, h: 3, w: 9999 }, CONT2_END = { c: /^(?:終わり|終了|なし|無し|やめた|止めた|不明)$/, h: /^(?:なし|無し|何も持っていない|不明|空)$/, w: /^(?:元どおり|元通り|着直した|着た|なし|無し|不明|普段どおり)$/ };
   function cont2Prune(L, now){   /* 取り消しで戻った先の控え・期限切れを外す */
     Object.keys(L).forEach(function(n){ var e = L[n]; if (!e || typeof e !== 'object') { delete L[n]; return; }
-      ['c', 'h', 'w'].forEach(function(k){ var x = e[k]; if (!x) return; if (typeof x.t !== 'number' || x.t > now + 1 || now - x.t > CONT2_TTL[k]) { delete e[k]; ct2.expire++; } });
+      ['c', 'h', 'w'].forEach(function(k){ var x = e[k]; if (!x) return; if (typeof x.t !== 'number' || x.t > now || now - x.t > CONT2_TTL[k])   /* r2: 読み取りは本文が積まれる前に走る（その回の番号＝本数＋1）。取り消し・生成し直しで捨てた回の控え（番号が今の本数より大きい）は使わない */ { delete e[k]; ct2.expire++; } });
       if (!e.c && !e.h && !e.w) delete L[n]; });
     return L;
   }
@@ -346,6 +346,6 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-cont2', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-cont2b', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
     sayKeep: { on: skOn, stats: function(){ return sk1; }, text: sayKeepText }, wound: { on: woundOn, stats: function(){ return wf1; } }, clean: { stats: function(){ return cl1; }, text: cleanText, dup: dupFix }, cont2: { on: cont2On, stats: function(){ return ct2; }, block: cont2Block, take: cont2Take, prune: cont2Prune, ledger: function(){ var id = cont2Sid(); return id ? cont2Load(id) : null; } }, spk: { on: spkOn, stats: function(){ return sp1; }, bare: bareQuotes } };
 })();
