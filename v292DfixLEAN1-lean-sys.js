@@ -108,6 +108,16 @@
     });
     return ch;
   }
+  /* r4（実機 recheck_ym10: 本文に「手が肩から離れた」と書かれた後も、控えの「続き」が 2 ターン残った。読み取りは前の回の控えを知らないので「終わり」と書けない）:
+     前の回から続いていること（続き・手）だけを、名前と数語で読み取りに見せ、「この回の本文でやめた・終わった・手放したと書かれているか」だけを答えてもらう（状態の文は渡さない＝写しを作らせない）。 */
+  function cont2Ask(){
+    try { var id = cont2Sid(), now = cont2Turns(); if (!id || now == null) return '';
+      var L = cont2Prune(cont2Load(id), now), ls2 = [];
+      Object.keys(L).slice(0, 6).forEach(function(n){ var e = L[n]; if (e.c) ls2.push('・' + n + '｜続き: ' + e.c.v); if (e.h) ls2.push('・' + n + '｜手: ' + e.h.v); });
+      if (!ls2.length) return '';
+      return '\n・（前の回から続いていること）次のうち、この回の本文で やめた・終わった・続けられなくなった・手放した と書かれているものだけ、<end who="名前" k="続き"/>（持ち物は k="手"）を 1 行ずつ書く。書かれていなければ何も書かない。下の文を state の行に写さない。\n' + ls2.join('\n');
+    } catch(e){ return ''; }
+  }
   function cont2Block(){   /* 本文を書く AI に渡す節（無ければ空文字） */
     try {
       if (!cont2On()) return '';
@@ -265,7 +275,7 @@
       /* r2（実機 fill1: 30 ターンで補完 7 回のうち 4 回が本文に無い内容。うち 2 回は参考に渡した前の状態の写し、2 回は本能の作文）→ 前の状態は渡さない。名前の表だけ渡す。 */
       /* r4: 「名前の表に無い」で判定する（実機 fill3: 宮下 誠は入力の文として system に出ていたため「登録済み」と誤って扱われ、読み取りの対象に入らなかった） */
       var extra = Object.keys(sayWho).filter(function(n){ return names.indexOf(n) < 0; });   /* 登録されていないが、この回に話した人（名前のある新しい人） */
-      body2.messages = [ { role: 'system', content: FILL_SYS + (woundOn() ? WOUND_SYS : '') + (cont2On() ? CONT2_SYS : '') + (bq.length ? SPK_SYS : '') + '\n' + names + (extra.length ? '\n（この回に話した人）' + extra.join('、') : '') + (prev ? '\n\n（この場面にいる人の名前）\n' + (prev.match(/^・[^｜\n]{1,24}(?=｜)/gm) || []).join('\n') : '') },
+      body2.messages = [ { role: 'system', content: FILL_SYS + (woundOn() ? WOUND_SYS : '') + (cont2On() ? CONT2_SYS + cont2Ask() : '') + (bq.length ? SPK_SYS : '') + '\n' + names + (extra.length ? '\n（この回に話した人）' + extra.join('、') : '') + (prev ? '\n\n（この場面にいる人の名前）\n' + (prev.match(/^・[^｜\n]{1,24}(?=｜)/gm) || []).join('\n') : '') },
                          { role: 'user', content: '本文:\n' + (function(){
                            /* r5: 台詞の印を消すと、誰が話したかが本文から消える（実機 fill3 r4: 宮下 誠は say の印で 2 回話したのに、読み取りに 1 行も出なかった。地の文では姓や役割でしか呼ばれない）。
                               印は「名前「台詞」」の形に直して渡す。<react> と <state> の行は渡さない。 */
@@ -293,6 +303,7 @@
               if (mk && !hv2['傷'] && !(stw && stw.kizu) && !/^(?:不明|なし|無し|特になし|無傷|けがなし|—|-)$/.test(mk[1].trim()) && /切|裂|刺|折|打|腫|挫|捻|ひね|出血|血|傷|火傷|やけど|痣|あざ|擦|脱臼|骨|噛|咬|撃/.test(mk[1])) { out += ' 傷="' + mk[1].replace(/[<>]/g, '') + '"'; n++; wf1.add++; } else if (mk) wf1.skip++; } catch(_){} }
             return n ? out + '/>' : '';
           }).filter(Boolean).slice(0, 5);
+          if (c2L && typeof c2 === 'string') { try { (c2.match(/<end\b[^>]*\/?>/g) || []).forEach(function(tg){ var w9 = /\bwho\s*=\s*"([^"<>]{1,24})"/.exec(tg), k9 = /\bk\s*=\s*"(続き|手)"/.exec(tg); if (!w9 || !k9) return; var e9 = c2L[w9[1]], kk = k9[1] === '続き' ? 'c' : 'h'; if (e9 && e9[kk] && e9[kk].t <= c2Now) { delete e9[kk]; ct2.clear++; ct2.ended = (ct2.ended || 0) + 1; if (!e9.c && !e9.h && !e9.w) delete c2L[w9[1]]; } }); } catch(_c4){} }   /* r4: 前の回からの控えだけを消す（この回に新しく書かれたものは消さない） */
           if (c2L) { try { cont2Save(c2Id, c2L); } catch(_c3){} }   /* ★CONT2 */
           /* ★SPKFILL1: <q n who> を読み、印の無い台詞を <say who> で包む（後ろから置き換える） */
           var cW = c, nW = 0;
@@ -346,6 +357,6 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-cont2c', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-cont2d', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
     sayKeep: { on: skOn, stats: function(){ return sk1; }, text: sayKeepText }, wound: { on: woundOn, stats: function(){ return wf1; } }, clean: { stats: function(){ return cl1; }, text: cleanText, dup: dupFix }, cont2: { on: cont2On, stats: function(){ return ct2; }, block: cont2Block, take: cont2Take, prune: cont2Prune, ledger: function(){ var id = cont2Sid(); return id ? cont2Load(id) : null; } }, spk: { on: spkOn, stats: function(){ return sp1; }, bare: bareQuotes } };
 })();

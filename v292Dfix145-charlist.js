@@ -495,7 +495,7 @@
        ・体・心・傷の記録は、次のターンで既存の統合（mergeAliasStates）が新しい名前へ寄せる。絵は人物の ID に付いているのでそのまま（RENAME1）。
      本文（過去の地の文）は書き換えない。主人公の名前は対象外（⚙ 設定）。
      試験中: localStorage v292DfixRENAME2On='1'（実機の関門の後に全端末の既定へ）。kill: v292DfixRENAME2Off='1' */
-  var RENAME2_DEFAULT = false;
+  var RENAME2_DEFAULT = true;   /* 20261128-ym11: 全端末の既定 ON（実機の関門: 未登録の人物に名前 ym8・登録済みの改名 r2 ym10・断る場合 ym8）。kill v292DfixRENAME2Off='1' */
   function rename2On(){ try { return localStorage.getItem('v292DfixRENAME2Off') !== '1' && (RENAME2_DEFAULT || localStorage.getItem('v292DfixRENAME2On') === '1'); } catch(e){ return false; } }
   function rn2Norm(x){ x = String(x == null ? '' : x); try { x = x.normalize('NFC'); } catch(e){} return x.replace(/[​-‍﻿]/g, '').replace(/^[\s　]+|[\s　]+$/g, ''); }
   function rn2AliasLine(desc, alias){
