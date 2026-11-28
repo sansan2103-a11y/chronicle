@@ -744,6 +744,7 @@
   }
   window.__v292DfixLC1 = {
     version: 'LC1-r1', on: function () { return true; }, holdReload: holdReload, openFromB37: openFromB37, refreshPtr: refreshPtr, rethink: pressRethink, redo1On: redo1On,
+    edit: function (cid) { var r = W.rows[cid]; if (!r || isBusy(r) || W.busyOp) return false; pressFix(cid); return true; },   /* ★WRITE1: 確定済みの外見を欄に入れて開く（保存と絵は「この外見で作る」を押したとき） */
     ready: function (cid) { try { var r = W.rows[cid]; if (!r) return false; if (isBusy(r)) return true; if (!derive(cid).known) { loadPtr(false); return false; } return !W.busyOp && av2Idle(); } catch (e) { return false; } },   /* ★QUIET1 r2: 主ボタンを押してすぐ始められる状態か（絵の状態が分かっている・保存の確認が済んでいる） */
     genState: genState, useGenState: function (fn) { gsProvider = (typeof fn === 'function') ? fn : null; },
     openBulk: openBulk, openCandidates: openCandidates,

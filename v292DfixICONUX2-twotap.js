@@ -42,7 +42,7 @@
   if (typeof window === 'undefined' || window.__v292DfixICONUX2) return;
   function lsg(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   if (lsg('v292DfixICONUXOff') === '1') { window.__v292DfixICONUX2 = { on: false, status: function () { return { on: false }; } }; return; }
-  var VERSION = 'ICONUX2-r3g-quiet1c';
+  var VERSION = 'ICONUX2-r3h-write1';
   var st = { passes: 0, taps: {}, direct: 0, aiPass: 0, wrapped: false, log: [] };
   function tap(k) { st.taps[k] = (st.taps[k] || 0) + 1; }
   function note(o) { try { o.t = Date.now(); st.log.push(o); if (st.log.length > 80) st.log.shift(); } catch (e) {} }
@@ -327,6 +327,8 @@
         if (msg) h += '<div class="iconux2-msg ' + esc(tone) + '" data-iconux2-msg="1">' + esc(msg) + '</div>';
         h += fixH;
         /* ★REDO1: 外見が確定済みの人物に「外見を AI に考え直してもらう」。押すと説明文から下書きを作り直す（文章 AI 1 回）。保存と絵は「この外見で作る」を押したとき */
+        /* ★WRITE1（2026-11-28・Owner「絵を作る時に外見情報入力できなくなった？」）: 1 回押しにしても、外見を自分で書く・直す入口を主ボタンのすぐ下に残す。押すと下書きの欄が開き、「この外見で作る」を押すまで絵は作らない */
+        if (mainB && !(rs.cand && !rs.has) && (rs.conf || oneTapOn()) && lsg('v292DfixWRITE1Off') !== '1') h += '<div class="iconux2-links"><button type="button" data-iconux2-act="write">' + (rs.conf ? '外見を自分で直してから作る' : '外見を自分で書いてから作る') + '</button></div>';
         if (mainB && rs.conf && redo1Ok()) h += '<div class="iconux2-links"><button type="button" data-iconux2-act="rethink">' + (oneTapOn() ? '外見をAIに考え直して、新しい候補を 1 枚作る（文章AI 1 回・画像 1 回。選ぶまで今の絵は変わりません）' : '外見をAIに考え直してもらう（文章AI 1 回。絵はまだ作りません）') + '</button></div>';
       }
     }
@@ -339,6 +341,11 @@
         if (b.disabled) return;
         if (act === 'go' || act === 'regen') syncToLc1(id, c);
         if (act === 'check') checked[id] = Date.now(); else if (act === 'main' || act === 'retry' || act === 'go') delete checked[id];
+        if (act === 'write') {   /* ★WRITE1 */
+          delete autoGo[id]; delete quiet[id]; delete sameNote[id]; tap('write'); note({ kind: 'WRITE', cid: id });
+          try { var rsW = rowsById(lc1())[id], LW = window.__v292DfixLC1; if (rsW && rsW.conf && LW && typeof LW.edit === 'function') LW.edit(id); else press(id, 'main'); } catch (eW) {}
+          slot.__sig = null; setTimeout(pass, 30); return;
+        }
         delete sameNote[id];
         if (oneTapOn() && (act === 'main' || act === 'rethink')) { try { var rs9 = rowsById(lc1())[id]; if (rs9 && (act === 'rethink' || (!rs9.conf && !(rs9.cand && !rs9.has)))) autoGo[id] = Date.now(); } catch (eA) {} }   /* ★ONETAP1 */
         if (quietOn() && (act === 'rethink' || (act === 'main' && /絵を(?:作る|変える)/.test(b.textContent || '')))) { quiet[id] = { t: Date.now(), went: (act === 'main' && !autoGo[id]) ? Date.now() : 0 }; tap('quiet'); }   /* ★QUIET1 */   /* ★ONETAP1: 下書きができたら、そのまま「この外見で作る」まで進む */
