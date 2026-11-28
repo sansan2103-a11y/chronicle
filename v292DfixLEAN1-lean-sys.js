@@ -70,13 +70,17 @@
   var ADD_D1 = '・台詞は、その人がその場で相手から何かを得るため・かわすための言葉にする。格言や詩のような決め台詞、状況や世界をきれいにまとめて語る台詞は書かない。言いたいことの全部は言わせない（はぐらかす・別の話で返す・答えずに動く）。\n'
              + '・話し言葉で書く。言いかけてやめる、聞き返す、相手の言葉の一部をくり返す、短い受け（「いや」「で？」「……そう」）、言い直しを、ときどき混ぜる。1 人が続けて話すのは 2 文まで。長い台詞と一語の返事を混ぜる。\n'
              + '・口調は人物ごとに変える（語尾・一人称・言葉の硬さ・口ぐせ）。丁寧に話す人物も、整いすぎた文にしない。目の前の物・相手の名前・数・時刻など、具体的な言葉で話す。\n';
-  function dlgOn(){ return ls('v292DfixDLG1Off') !== '1' && ls('v292DfixDLG1On') === '1'; }
+  /* DLG1 '2'（v292DfixDLG1On='2'）: 実機 D1 で「続けて話すのは 2 文まで」が守られず、3 文以上の台詞が 2 → 5・本文が 422 → 554 字に伸びた。長さの決まりを具体的にした形。 */
+  var ADD_D2 = ADD_D1.replace('1 人が続けて話すのは 2 文まで。長い台詞と一語の返事を混ぜる。', '1 つの台詞は 1〜2 文、長くても 40 字ほど。説明が長くなるときは 1 人に続けて話させず、相手の問い・相づち・動作を挟んで、2〜3 回のやりとりに割る。一語の返事も混ぜる。')
+             + '・台詞が増えても、本文全体は今までの長さのままにする（1 回の本文に台詞は多くて 6 つほど）。\n';
+  function dlgMode(){ if (ls('v292DfixDLG1Off') === '1') return ''; var v = ls('v292DfixDLG1On'); return (v === '1' || v === '2') ? v : ''; }
+  function dlgOn(){ return !!dlgMode(); }
   function contOn(){ return ls('v292DfixCONT1Off') !== '1' && ls('v292DfixCONT1On') === '1'; }
   function addText(){
     var a = ADD, v = ls('v292DfixLEAN1AddV');
     if (v === '2' || v === '3a' || v === '3b' || v === '3') ADD_V2.forEach(function(r){ if (a.split(r[0]).length === 2) a = a.replace(r[0], function(){ return r[1]; }); });
     if (v === '3a' || v === '3b' || v === '3') { var ex = (v !== '3b' ? ADD_V3A : '') + (v !== '3a' ? ADD_V3B : '') + ADD_V3R, k = a.indexOf('・ここまでの約束は本文の書き方だけに当てる'); a = k >= 0 ? a.slice(0, k) + ex + a.slice(k) : a + ex; }
-    if (dlgOn()) { var kd = a.indexOf('・ここまでの約束は本文の書き方だけに当てる'); a = kd >= 0 ? a.slice(0, kd) + ADD_D1 + a.slice(kd) : a + ADD_D1; }   /* ★DLG1 */
+    if (dlgOn()) { var kd = a.indexOf('・ここまでの約束は本文の書き方だけに当てる'); var dT = dlgMode() === '2' ? ADD_D2 : ADD_D1; a = kd >= 0 ? a.slice(0, kd) + dT + a.slice(kd) : a + dT; }   /* ★DLG1 */
     if (contOn()) { var kc = a.indexOf('・ここまでの約束は本文の書き方だけに当てる'); a = kc >= 0 ? a.slice(0, kc) + ADD_K1 + a.slice(kc) : a + ADD_K1; }   /* ★CONT1 */
     return a;
   }
@@ -366,6 +370,6 @@
     try { Object.keys(of).forEach(function(k){ w[k] = of[k]; }); } catch(e){}
     w.__fLEAN1 = true; G.fetch = w;
   }
-  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-dlg1', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
+  G.__v292DfixLEAN1 = { VER: 'lean1-20261128-dlg1b', on: on, addOn: addOn, list: list, stats: function(){ return st; }, fromBody: fromBody, fill: { on: fillOn, stats: function(){ return fs1; } }, slimMode: slimMode, addText: addText,
     sayKeep: { on: skOn, stats: function(){ return sk1; }, text: sayKeepText }, wound: { on: woundOn, stats: function(){ return wf1; } }, clean: { stats: function(){ return cl1; }, text: cleanText, dup: dupFix }, cont2: { on: cont2On, stats: function(){ return ct2; }, block: cont2Block, take: cont2Take, prune: cont2Prune, ledger: function(){ var id = cont2Sid(); return id ? cont2Load(id) : null; } }, spk: { on: spkOn, stats: function(){ return sp1; }, bare: bareQuotes } };
 })();
